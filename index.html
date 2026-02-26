@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stacks Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap');
+        body { font-family: 'Cairo', sans-serif; }
+        @media print { .no-print { display: none !important; } }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // مكون بسيط للأيقونات ليعمل بدون Import
+        const SimpleIcon = ({ name }) => {
+            const icons = {
+                dashboard: "🏠", calculator: "🔢", users: "👥", 
+                dollar: "💵", building: "🏢", briefcase: "💼", 
+                wallet: "👛", percent: "٪", share: "📤"
+            };
+            return <span className="ml-2">{icons[name] || "•"}</span>;
+        };
+
+        function App() {
+            const [activeTab, setActiveTab] = useState('dashboard');
+            const theme = { primary: '#67546A', primaryLight: '#847088', bg: '#FDF8F9', white: '#FFFFFF' };
+
+            // هنا نضع وظيفة الرواتب
+            const SalaryCalc = () => {
+                const [data, setData] = useState({ employeeName: '', basicSalary: '', totalSales: '', commissionRate: '', bonus: '' });
+                const commission = (parseFloat(data.totalSales) || 0) * (parseFloat(data.commissionRate) || 0) / 100;
+                const total = (parseFloat(data.basicSalary) || 0) + commission + (parseFloat(data.bonus) || 0);
+
+                return (
+                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                        <h2 className="text-xl font-bold mb-4" style={{color: theme.primary}}>حاسبة الرواتب</h2>
+                        <div className="space-y-4">
+                            <input type="text" placeholder="اسم الموظف" className="w-full p-3 border rounded-xl bg-gray-50" onChange={e => setData({...data, employeeName: e.target.value})} />
+                            <input type="number" placeholder="الراتب الأساسي" className="w-full p-3 border rounded-xl bg-gray-50" onChange={e => setData({...data, basicSalary: e.target.value})} />
+                            <div className="grid grid-cols-2 gap-2">
+                                <input type="number" placeholder="المبيعات" className="w-full p-3 border rounded-xl bg-gray-50" onChange={e => setData({...data, totalSales: e.target.value})} />
+                                <input type="number" placeholder="النسبة %" className="w-full p-3 border rounded-xl bg-gray-50" onChange={e => setData({...data, commissionRate: e.target.value})} />
+                            </div>
+                            <div className="p-4 rounded-xl text-white font-bold text-xl text-center" style={{backgroundColor: theme.primary}}>
+                                المجموع: {new Intl.NumberFormat().format(total)} د.ع
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            return (
+                <div className="min-h-screen flex flex-col md:flex-row">
+                    {/* Sidebar */}
+                    <div className="w-full md:w-64 bg-white shadow-lg p-6 space-y-4">
+                        <div className="text-center mb-8">
+                            <div className="w-12 h-12 bg-[#67546A] text-white rounded-full flex items-center justify-center mx-auto text-xl font-bold mb-2">S</div>
+                            <h1 className="font-bold tracking-widest" style={{color: theme.primary}}>STACKS</h1>
+                        </div>
+                        <button onClick={() => setActiveTab('dashboard')} className="w-full text-right p-3 rounded-xl hover:bg-gray-50 flex items-center"><SimpleIcon name="dashboard" /> الرئيسية</button>
+                        <button onClick={() => setActiveTab('salary')} className="w-full text-right p-3 rounded-xl hover:bg-gray-50 flex items-center"><SimpleIcon name="users" /> الرواتب</button>
+                    </div>
+
+                    {/* Main */}
+                    <div className="flex-1 p-4 md:p-8 bg-[#FDF8F9]">
+                        {activeTab === 'dashboard' ? (
+                            <div className="text-center mt-20">
+                                <h2 className="text-3xl font-bold mb-4" style={{color: theme.primary}}>أهلاً بك في STACKS</h2>
+                                <p className="text-gray-500 mb-8">اختر الأداة المطلوبة من القائمة الجانبية</p>
+                            </div>
+                        ) : <SalaryCalc />}
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
