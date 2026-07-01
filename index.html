@@ -147,10 +147,15 @@ function AuthScreen() {
   const login = async () => {
     if(!username.trim()||!pass){setErr('أدخل اسم المستخدم وكلمة المرور');return;}
     setBusy(true); setErr('');
-    const email=`${username.trim().toLowerCase()}@stacks-internal.app`;
-    const {error} = await sb.auth.signInWithPassword({email,password:pass});
-    if(error) setErr('اسم المستخدم أو كلمة المرور غير صحيحة');
-    setBusy(false);
+    try {
+      const email=`${username.trim().toLowerCase()}@stacks-internal.app`;
+      const {error} = await sb.auth.signInWithPassword({email,password:pass});
+      if(error) setErr('اسم المستخدم أو كلمة المرور غير صحيحة');
+    } catch(e) {
+      setErr('خطأ في الاتصال، حاول مجدداً');
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
