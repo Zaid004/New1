@@ -1,0 +1,15 @@
+{
+  "name": "Stacks Stationery",
+  "short_name": "Stacks",
+  "description": "نظام إدارة الحضور",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FBF1EC",
+  "theme_color": "#6B5876",
+  "orientation": "portrait-primary",
+  "lang": "ar",
+  "dir": "rtl",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

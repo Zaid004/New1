@@ -4,16 +4,34 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Stacks Stationery — نظام الحضور</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#6B5876">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Stacks">
+<link rel="apple-touch-icon" href="/icon.svg">
+<script>if(localStorage.getItem('dark')==='1')document.documentElement.classList.add('dark');</script>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;900&display=swap');
+:root{
+  --bg:#FBF1EC;--card:#FFFFFF;--soft:#F5EDE8;--border:#E8DDE5;
+  --primary:#6B5876;--e2:#A8825B;--ok:#7A8B6F;--err:#B0594F;--txt:#3A2F3D;
+  --err-bg:#FDECEA;--ok-bg:#EAF3EA;--edit-bg:#EEE8F5;--input-bg:#FAFAFA;--badge-bg:#F0EAF0;--muted:#BBB;
+}
+html.dark{
+  --bg:#0F0D12;--card:#1C1825;--soft:#231F2D;--border:#2A2535;
+  --primary:#9B8AB6;--e2:#C4A882;--ok:#8FA881;--err:#C97070;--txt:#E8DDE5;
+  --err-bg:#2E1A1A;--ok-bg:#1A2E1A;--edit-bg:#1E1B2E;--input-bg:#1A1720;--badge-bg:#2A2535;--muted:#666;
+}
 *{font-family:'Cairo',sans-serif;box-sizing:border-box}
-body{background:#FBF1EC;margin:0}
+body{background:var(--bg);margin:0;color:var(--txt)}
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
 .day-cell{border-radius:10px;position:relative;overflow:hidden;min-height:64px}
 input[type=month]::-webkit-calendar-picker-indicator{opacity:0.5;cursor:pointer}
@@ -23,7 +41,24 @@ select,input,textarea{-webkit-appearance:none}
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const {useState,useEffect,useRef} = React;
+const {useState,useEffect,useRef,useCallback} = React;
+
+// ── PWA: register service worker ─────────────────────────────────────────────
+if('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(()=>{}));
+}
+
+// ── NOTIFICATIONS helper ──────────────────────────────────────────────────────
+const requestNotifPermission = async () => {
+  if(!('Notification' in window)) return false;
+  if(Notification.permission === 'granted') return true;
+  const p = await Notification.requestPermission();
+  return p === 'granted';
+};
+const showNotif = (title, body) => {
+  if(Notification.permission === 'granted')
+    new Notification(title, {body, icon:'/icon.svg', dir:'rtl', lang:'ar', tag:'attendance'});
+};
 
 // ── CONFIG (replace with your Supabase credentials) ──────────────────────────
 const SUPA_URL = window.__SUPABASE_URL__ || 'https://djzvuuqgqsniabgibfnq.supabase.co';
@@ -43,9 +78,9 @@ const callFn = async (action, payload) => {
 
 // ── THEME ────────────────────────────────────────────────────────────────────
 const C = {
-  primary:'#6B5876', bg:'#FBF1EC', e1:'#6B5876', e2:'#A8825B',
-  ok:'#7A8B6F', err:'#B0594F', txt:'#3A2F3D',
-  card:'#FFFFFF', soft:'#F5EDE8', border:'#E8DDE5'
+  primary:'var(--primary)', bg:'var(--bg)', e1:'var(--primary)', e2:'var(--e2)',
+  ok:'var(--ok)', err:'var(--err)', txt:'var(--txt)',
+  card:'var(--card)', soft:'var(--soft)', border:'var(--border)'
 };
 
 // ── HELPERS ──────────────────────────────────────────────────────────────────
@@ -89,6 +124,12 @@ const PATHS = {
   pencil:'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z',
   user:'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
   palette:'M12 2a10 10 0 0 0 0 20c1.1 0 2-.9 2-2v-.5c0-.6.4-1 1-1h2.5a4.5 4.5 0 0 0 0-9H14a2 2 0 0 1-2-2V4a2 2 0 0 0-2-2zM7 13a1 1 0 1 1 0-2 1 1 0 0 1 0 2zm3-4a1 1 0 1 1 0-2 1 1 0 0 1 0 2zm4 0a1 1 0 1 1 0-2 1 1 0 0 1 0 2z',
+  gear:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm8.9-3a8.1 8.1 0 0 1-.1 1.2l2.1 1.6c.2.2.3.4.1.6l-2 3.5c-.1.2-.4.3-.6.2l-2.5-1a8.9 8.9 0 0 1-2 1.2l-.4 2.6c0 .3-.2.4-.5.4h-4c-.3 0-.5-.2-.5-.4l-.4-2.6a8.9 8.9 0 0 1-2-1.2l-2.5 1c-.2.1-.5 0-.6-.2l-2-3.5c-.1-.2-.1-.5.1-.6l2.1-1.6A8.4 8.4 0 0 1 3 12a8.4 8.4 0 0 1 .1-1.2L1 9.2c-.2-.2-.3-.4-.1-.6l2-3.5c.1-.2.4-.3.6-.2l2.5 1a8.9 8.9 0 0 1 2-1.2L8.4 2c0-.3.2-.4.5-.4h4c.3 0 .5.2.5.4l.4 2.6a8.9 8.9 0 0 1 2 1.2l2.5-1c.2-.1.5 0 .6.2l2 3.5c.1.2.1.5-.1.6l-2.1 1.6c.1.4.2.8.2 1.3z',
+  sun:'M12 3v1M12 20v1M4.22 4.22l.7.7M18.36 18.36l.71.71M3 12h1M20 12h1M4.22 19.78l.7-.7M18.36 5.64l.71-.71M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z',
+  moon:'M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z',
+  bar:'M18 20V10M12 20V4M6 20v-6',
+  report:'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8',
+  bell:'M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0',
 };
 const Ic = ({n,s=20,c='currentColor'}) => (
   <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -120,7 +161,7 @@ function AuthScreen() {
           <div className="font-black text-xl tracking-widest" style={{color:C.primary}}>STACKS</div>
           <div className="text-xs mt-1" style={{color:C.txt,opacity:.5}}>Stationery</div>
         </div>
-        <div className="bg-white rounded-3xl shadow-sm p-8">
+        <div className="rounded-3xl shadow-sm p-8" style={{background:C.card}}>
           <h2 className="font-bold text-lg mb-6" style={{color:C.txt}}>تسجيل الدخول</h2>
           {err && <div className="mb-4 p-3 rounded-xl text-sm text-center text-white" style={{background:C.err}}>{err}</div>}
           <div className="space-y-4">
@@ -129,7 +170,7 @@ function AuthScreen() {
               <input type="text" value={username} onChange={e=>setUsername(e.target.value)}
                 onKeyDown={e=>e.key==='Enter'&&login()}
                 className="w-full p-3 rounded-xl border text-sm outline-none"
-                style={{borderColor:C.border,background:'#FAFAFA',color:C.txt}}
+                style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}}
                 placeholder="مثال: ahmad" autoCapitalize="none" autoCorrect="off" />
             </div>
             <div>
@@ -137,7 +178,7 @@ function AuthScreen() {
               <input type="password" value={pass} onChange={e=>setPass(e.target.value)}
                 onKeyDown={e=>e.key==='Enter'&&login()}
                 className="w-full p-3 rounded-xl border text-sm outline-none"
-                style={{borderColor:C.border,background:'#FAFAFA',color:C.txt}}
+                style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}}
                 placeholder="••••••••" />
             </div>
             <button onClick={login} disabled={busy}
@@ -210,7 +251,7 @@ function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone}) {
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center p-4"
       style={{background:'rgba(58,47,61,0.5)'}} onClick={e=>e.target===e.currentTarget&&onClose()}>
-      <div className="w-full max-w-sm bg-white rounded-3xl p-6 shadow-2xl mb-2">
+      <div className="w-full max-w-sm rounded-3xl p-6 shadow-2xl mb-2" style={{background:C.card}}>
         <div className="flex items-center justify-between mb-5">
           <div className="font-bold text-lg" style={{color:C.txt}}>{d} {MONTHS[m]} {y}</div>
           <button onClick={onClose} className="p-2 rounded-xl" style={{background:C.soft}}>
@@ -244,7 +285,7 @@ function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone}) {
                     {rec&&(
                       <button onClick={()=>handleAdmin(emp.id,'del')}
                         className="py-2 px-3 rounded-xl"
-                        style={{background:'#FDECEA'}}>
+                        style={{background:'var(--err-bg)'}}>
                         <Ic n="trash" s={14} c={C.err}/>
                       </button>
                     )}
@@ -273,7 +314,7 @@ function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone}) {
             {getRec(me.id) && (
               <button onClick={removeMyRecord}
                 className="w-full py-2 rounded-xl text-sm font-bold mb-4"
-                style={{background:'#FDECEA',color:C.err}}>
+                style={{background:'var(--err-bg)',color:C.err}}>
                 إلغاء الحضور
               </button>
             )}
@@ -565,7 +606,75 @@ function EmpDashboard({me,employees,settings,onRefresh}) {
           </button>
         </div>
       )}
+
+      {/* Payslip archive */}
+      <PayslipArchive empId={me.id}/>
+
+      {/* Notification enable button */}
+      <NotifButton/>
     </div>
+  );
+}
+
+// ── PAYSLIP ARCHIVE (employee) ────────────────────────────────────────────────
+function PayslipArchive({empId}) {
+  const [show,setShow]=useState(false);
+  const [slips,setSlips]=useState([]);
+  const [loading,setLoading]=useState(false);
+
+  useEffect(()=>{
+    if(!show) return;
+    setLoading(true);
+    sb.from('payslips').select('*').eq('employee_id',empId)
+      .order('month',{ascending:false}).limit(24)
+      .then(({data})=>{setSlips(data||[]);setLoading(false);});
+  },[show]);
+
+  const total = s => (s.fixed_amount||0)+(s.percentage_amount||0)+(s.bonus||0)+(s.extra_amount||0);
+
+  return (
+    <div>
+      <button onClick={()=>setShow(v=>!v)}
+        className="w-full p-4 rounded-2xl font-bold flex items-center justify-between"
+        style={{background:C.card}}>
+        <div className="flex items-center gap-3">
+          <Ic n="report" s={18} c={C.e2}/>
+          <span style={{color:C.txt}}>كشوفات الرواتب السابقة</span>
+        </div>
+        <Ic n={show?'chL':'chR'} s={18} c={C.primary}/>
+      </button>
+      {show && (
+        <div className="rounded-2xl shadow-sm overflow-hidden" style={{background:C.card}}>
+          {loading && <div className="p-6 text-center text-sm" style={{color:C.txt,opacity:.4}}>جاري التحميل...</div>}
+          {!loading && slips.length===0 && <div className="p-6 text-center text-sm" style={{color:C.txt,opacity:.4}}>لا توجد كشوفات بعد</div>}
+          {slips.map(s=>{
+            const d=new Date(s.month+'T00:00:00');
+            return (
+              <div key={s.id} className="flex items-center justify-between px-4 py-3 border-b" style={{borderColor:C.border}}>
+                <div className="font-semibold text-sm" style={{color:C.txt}}>
+                  {MONTHS[d.getMonth()]} {d.getFullYear()}
+                </div>
+                <div className="font-black text-sm" style={{color:C.ok}}>{fmt(total(s))} <span className="font-normal text-xs">د.ع</span></div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── NOTIFICATION BUTTON ───────────────────────────────────────────────────────
+function NotifButton() {
+  const [perm,setPerm]=useState(typeof Notification!=='undefined'?Notification.permission:'denied');
+  if(perm==='denied'||perm==='granted') return null;
+  return (
+    <button onClick={async()=>{const p=await requestNotifPermission();setPerm(p?'granted':'denied');}}
+      className="w-full p-4 rounded-2xl font-bold flex items-center gap-3"
+      style={{background:C.card}}>
+      <Ic n="bell" s={18} c={C.e2}/>
+      <span style={{color:C.txt}}>تفعيل تنبيهات الحضور اليومية</span>
+    </button>
   );
 }
 
@@ -584,11 +693,29 @@ function AdminDashboard({employees,settings}) {
   const pool   = settings?.monthly_pool_amount||525000;
   const allPts = recs.reduce((s,r)=>s+pts(r),0);
 
+  const exportExcel = () => {
+    const wb = XLSX.utils.book_new();
+    const rows = [
+      ['الموظف','التاريخ','نوع الشفت','أيام','نقاط'],
+      ...recs.sort((a,b)=>a.date.localeCompare(b.date)).map(r=>{
+        const emp=employees.find(e=>e.id===r.employee_id);
+        return [emp?.name||'',r.date,r.shift_type==='full'?'كامل':'نص',days(r),pts(r)];
+      })
+    ];
+    const ws=XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols']=[{wch:20},{wch:12},{wch:10},{wch:8},{wch:8}];
+    XLSX.utils.book_append_sheet(wb,ws,'الحضور');
+    XLSX.writeFile(wb,`حضور-${MONTHS[vm]}-${vy}.xlsx`);
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="font-bold" style={{color:C.txt}}>إحصائيات الشهر</h2>
         <div className="flex items-center gap-2">
+          <button onClick={exportExcel} className="p-1.5 rounded-lg" style={{background:C.soft}} title="تصدير Excel">
+            <Ic n="dl" s={16} c={C.ok}/>
+          </button>
           <button onClick={()=>{if(vm===0){setVy(y=>y-1);setVm(11);}else setVm(m=>m-1)}}
             className="p-1.5 rounded-lg" style={{background:C.soft,color:C.primary}}><Ic n="chR" s={16}/></button>
           <span className="text-sm font-semibold" style={{color:C.txt}}>{MONTHS[vm]}</span>
@@ -596,6 +723,17 @@ function AdminDashboard({employees,settings}) {
             className="p-1.5 rounded-lg" style={{background:C.soft,color:C.primary}}><Ic n="chL" s={16}/></button>
         </div>
       </div>
+
+      {/* Bar chart */}
+      {allPts>0 && (
+        <div className="rounded-2xl p-5 shadow-sm" style={{background:C.card}}>
+          <div className="text-xs font-semibold mb-3" style={{color:C.txt,opacity:.5}}>النقاط مقارنةً</div>
+          <BarChart data={employees.map(emp=>{
+            const ep=recs.filter(r=>r.employee_id===emp.id).reduce((s,r)=>s+pts(r),0);
+            return {label:emp.name.split(' ')[0], value:ep, color:emp.color_hex};
+          })}/>
+        </div>
+      )}
 
       {employees.map(emp=>{
         const er=recs.filter(r=>r.employee_id===emp.id);
@@ -634,10 +772,34 @@ function PayslipsView({employees,settings}) {
   const now=new Date();
   const [empId,setEmpId]=useState(employees[0]?.id||'');
   const [month,setMonth]=useState(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`);
+  const [view,setView]=useState('monthly'); // 'monthly' | 'annual'
   const [recs,setRecs]=useState([]);
   const [f,setF]=useState({fixed:'',pct:'',sales:'',bonus:'',extra:'',notes:''});
   const [busy,setBusy]=useState(false);
   const [saved,setSaved]=useState(false);
+
+  // Annual report state
+  const [annualYear,setAnnualYear]=useState(new Date().getFullYear());
+  const [annualData,setAnnualData]=useState([]);
+
+  useEffect(()=>{
+    if(view!=='annual'||!empId) return;
+    const from=`${annualYear}-01-01`, to=`${annualYear}-12-31`;
+    sb.from('attendance_records').select('*').gte('date',from).lte('date',to).then(({data:r})=>{
+      const all=r||[];
+      const months=Array.from({length:12},(_,i)=>{
+        const mo=String(i+1).padStart(2,'0');
+        const mRecs=all.filter(rec=>rec.date.startsWith(`${annualYear}-${mo}`));
+        const allP=mRecs.reduce((s,rec)=>s+pts(rec),0);
+        const empRecs=mRecs.filter(rec=>rec.employee_id===empId);
+        const empP=empRecs.reduce((s,rec)=>s+pts(rec),0);
+        const empD=empRecs.reduce((s,rec)=>s+days(rec),0);
+        const salary=allP>0?(empP/allP)*(settings?.monthly_pool_amount||525000):0;
+        return {month:i,days:empD,pts:empP,salary};
+      });
+      setAnnualData(months);
+    });
+  },[view,empId,annualYear]);
 
   const pool = settings?.monthly_pool_amount||525000;
   const pct  = settings?.monthly_percentage||3.2;
@@ -754,20 +916,75 @@ function PayslipsView({employees,settings}) {
 
   return (
     <div className="space-y-4">
+      {/* View toggle */}
+      <div className="flex gap-2 p-1 rounded-2xl" style={{background:C.soft}}>
+        {[['monthly','كشف الشهر'],['annual','التقرير السنوي']].map(([v,l])=>(
+          <button key={v} onClick={()=>setView(v)}
+            className="flex-1 py-2 rounded-xl text-sm font-bold transition-all"
+            style={{background:view===v?C.card:'transparent',color:view===v?C.primary:C.txt,
+                    boxShadow:view===v?'0 1px 4px rgba(0,0,0,.08)':'none'}}>
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {/* Employee selector (always visible) */}
+      <div>
+        <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>الموظف</label>
+        <select value={empId} onChange={e=>setEmpId(e.target.value)}
+          className="w-full p-3 rounded-xl border text-sm outline-none"
+          style={{borderColor:C.border,color:C.txt,background:'var(--card)'}}>
+          {employees.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}
+        </select>
+      </div>
+
+      {/* ── ANNUAL REPORT ── */}
+      {view==='annual' && (()=>{
+        const totalD=annualData.reduce((s,m)=>s+m.days,0);
+        const totalP=annualData.reduce((s,m)=>s+m.pts,0);
+        const totalS=annualData.reduce((s,m)=>s+m.salary,0);
+        return (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-sm" style={{color:C.txt}}>سنة {annualYear}</span>
+              <div className="flex items-center gap-2">
+                <button onClick={()=>setAnnualYear(y=>y-1)} className="p-1.5 rounded-lg" style={{background:C.soft}}><Ic n="chR" s={16} c={C.primary}/></button>
+                <button onClick={()=>setAnnualYear(y=>y+1)} className="p-1.5 rounded-lg" style={{background:C.soft}}><Ic n="chL" s={16} c={C.primary}/></button>
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {[['إجمالي الأيام',totalD,C.primary],['إجمالي النقاط',totalP,C.e2],['الراتب التقديري',fmt(totalS)+' د.ع',C.ok]].map(([l,v,col])=>(
+                <div key={l} className="rounded-2xl p-3 text-center shadow-sm" style={{background:C.card}}>
+                  <div className="font-black text-lg leading-tight" style={{color:col}}>{v}</div>
+                  <div className="text-xs mt-0.5" style={{color:C.txt,opacity:.5}}>{l}</div>
+                </div>
+              ))}
+            </div>
+            <div className="rounded-2xl overflow-hidden shadow-sm" style={{background:C.card}}>
+              <div className="grid grid-cols-4 px-4 py-2 text-xs font-bold" style={{background:C.soft,color:C.txt,opacity:.7}}>
+                <span>الشهر</span><span className="text-center">أيام</span><span className="text-center">نقاط</span><span className="text-left">راتب</span>
+              </div>
+              {annualData.map((row,i)=>(
+                <div key={i} className="grid grid-cols-4 px-4 py-2.5 text-sm border-b" style={{borderColor:C.border,opacity:row.days===0?.4:1}}>
+                  <span className="font-semibold" style={{color:C.txt}}>{MONTHS[row.month]}</span>
+                  <span className="text-center font-bold" style={{color:C.primary}}>{row.days||'—'}</span>
+                  <span className="text-center font-bold" style={{color:C.e2}}>{row.pts||'—'}</span>
+                  <span className="text-left font-bold text-xs" style={{color:C.ok}}>{row.salary>0?fmt(row.salary):'—'}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── MONTHLY VIEW ── */}
+      {view==='monthly' && <>
       <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>الموظف</label>
-          <select value={empId} onChange={e=>setEmpId(e.target.value)}
-            className="w-full p-3 rounded-xl border text-sm outline-none bg-white"
-            style={{borderColor:C.border,color:C.txt}}>
-            {employees.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}
-          </select>
-        </div>
         <div>
           <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>الشهر</label>
           <input type="month" value={month} onChange={e=>setMonth(e.target.value)}
-            className="w-full p-3 rounded-xl border text-sm outline-none bg-white"
-            style={{borderColor:C.border,color:C.txt}}/>
+            className="w-full p-3 rounded-xl border text-sm outline-none"
+            style={{borderColor:C.border,color:C.txt,background:'var(--card)'}}/>
         </div>
       </div>
 
@@ -788,7 +1005,7 @@ function PayslipsView({employees,settings}) {
               <label className="text-xs font-semibold block mb-1" style={{color:C.txt,opacity:.7}}>{label}</label>
               <input type="text" inputMode="numeric" value={fmtNum(f[key])} onChange={e=>setF(p=>({...p,[key]:parseNum(e.target.value)}))}
                 className="w-full p-2.5 rounded-xl border text-sm outline-none"
-                style={{borderColor:C.border,background:'#FAFAFA'}} placeholder="0"/>
+                style={{borderColor:C.border,background:'var(--input-bg)'}} placeholder="0"/>
             </div>
           ))}
         </div>
@@ -796,7 +1013,7 @@ function PayslipsView({employees,settings}) {
           <label className="text-xs font-semibold block mb-1" style={{color:C.txt,opacity:.7}}>ملاحظة</label>
           <textarea value={f.notes} onChange={e=>setF(p=>({...p,notes:e.target.value}))}
             rows={2} className="w-full p-2.5 rounded-xl border text-sm outline-none resize-none"
-            style={{borderColor:C.border,background:'#FAFAFA'}} placeholder="ملاحظة اختيارية..."/>
+            style={{borderColor:C.border,background:'var(--input-bg)'}} placeholder="ملاحظة اختيارية..."/>
         </div>
         <div className="p-3 rounded-xl text-center" style={{background:C.soft}}>
           <div className="text-xs" style={{color:C.txt,opacity:.5}}>الإجمالي</div>
@@ -816,13 +1033,76 @@ function PayslipsView({employees,settings}) {
           </button>
         </div>
       </div>
+      </>}
 
     </div>
   );
 }
 
+// ── BAR CHART ─────────────────────────────────────────────────────────────────
+function BarChart({data}) {
+  const max = Math.max(...data.map(d=>d.value), 1);
+  const H = 80;
+  return (
+    <div className="flex items-end justify-center gap-4 pt-2" style={{height: H+48}}>
+      {data.map((d,i)=>(
+        <div key={i} className="flex flex-col items-center gap-1.5">
+          <div className="text-xs font-black" style={{color:d.color}}>{d.value}</div>
+          <div className="w-14 rounded-t-xl transition-all duration-500"
+            style={{height: Math.max((d.value/max)*H,4), background:d.color}}/>
+          <div className="text-xs font-semibold text-center leading-tight" style={{color:C.txt,opacity:.6,maxWidth:56}}>{d.label}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── SETTINGS SECTION (inside EmployeesView) ───────────────────────────────────
+function SettingsSection({settings, onSaved}) {
+  const [pool, setPool] = useState(String(settings?.monthly_pool_amount||525000));
+  const [pct,  setPct]  = useState(String(settings?.monthly_percentage||3.2));
+  const [busy, setBusy] = useState(false);
+  const [msg,  setMsg]  = useState({text:'',ok:true});
+  const flash = (text,ok=true)=>{setMsg({text,ok});setTimeout(()=>setMsg({text:'',ok:true}),3000);};
+
+  const save = async () => {
+    setBusy(true);
+    const {error} = await sb.from('settings')
+      .update({monthly_pool_amount: parseFloat(parseNum(pool))||525000, monthly_percentage: parseFloat(pct)||3.2})
+      .eq('id', settings.id);
+    setBusy(false);
+    if(error){flash(error.message,false);return;}
+    flash('تم حفظ الإعدادات');
+    if(onSaved) onSaved();
+  };
+
+  return (
+    <div className="rounded-2xl p-5 shadow-sm space-y-4" style={{background:C.card}}>
+      <h3 className="font-bold" style={{color:C.txt}}>إعدادات الراتب</h3>
+      <div>
+        <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>المجموع الشهري (د.ع)</label>
+        <input type="text" inputMode="numeric" value={fmtNum(pool)} onChange={e=>setPool(parseNum(e.target.value))}
+          className="w-full p-3 rounded-xl border text-sm outline-none"
+          style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}} placeholder="525,000"/>
+      </div>
+      <div>
+        <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>نسبة المبيعات (%)</label>
+        <input type="number" step="0.1" value={pct} onChange={e=>setPct(e.target.value)}
+          className="w-full p-3 rounded-xl border text-sm outline-none"
+          style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}} placeholder="3.2"/>
+      </div>
+      {msg.text && <div className="p-3 rounded-xl text-sm text-center text-white" style={{background:msg.ok?C.ok:C.err}}>{msg.text}</div>}
+      <button onClick={save} disabled={busy}
+        className="w-full py-3 rounded-xl font-bold text-white"
+        style={{background:busy?'#999':C.primary}}>
+        {busy?'جاري الحفظ...':'حفظ الإعدادات'}
+      </button>
+    </div>
+  );
+}
+
 // ── EMPLOYEES MANAGEMENT (ADMIN) ─────────────────────────────────────────────
-function EmployeesView({employees, onRefresh}) {
+function EmployeesView({employees, settings, onRefresh}) {
   const COLORS = ['#6B5876','#A8825B','#7A8B6F','#B0594F','#5876A8','#8B6F7A'];
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({name:'',username:'',password:'',color_hex:'#A8825B',role:'employee'});
@@ -915,12 +1195,12 @@ function EmployeesView({employees, onRefresh}) {
             </button>
             <button onClick={()=>openEdit(emp)}
               className="py-2 px-3 rounded-xl"
-              style={{background:'#EEE8F5'}}>
+              style={{background:'var(--edit-bg)'}}>
               <Ic n="pencil" s={14} c={C.primary}/>
             </button>
             <button onClick={()=>deleteEmployee(emp)}
               className="py-2 px-3 rounded-xl"
-              style={{background:'#FDECEA'}}>
+              style={{background:'var(--err-bg)'}}>
               <Ic n="trash" s={14} c={C.err}/>
             </button>
           </div>
@@ -943,7 +1223,7 @@ function EmployeesView({employees, onRefresh}) {
               <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>{l}</label>
               <input type={t} value={form[k]} onChange={e=>setForm(p=>({...p,[k]:e.target.value}))}
                 className="w-full p-3 rounded-xl border text-sm outline-none"
-                style={{borderColor:C.border,background:'#FAFAFA'}}
+                style={{borderColor:C.border,background:'var(--input-bg)'}}
                 placeholder={ph} autoCapitalize="none" autoCorrect="off"/>
             </div>
           ))}
@@ -981,7 +1261,7 @@ function EmployeesView({employees, onRefresh}) {
       {resetTarget && (
         <div className="fixed inset-0 z-50 flex items-end justify-center p-4"
           style={{background:'rgba(58,47,61,0.5)'}} onClick={e=>e.target===e.currentTarget&&setResetTarget(null)}>
-          <div className="w-full max-w-sm bg-white rounded-3xl p-6 shadow-2xl mb-2">
+          <div className="w-full max-w-sm rounded-3xl p-6 shadow-2xl mb-2" style={{background:C.card}}>
             <div className="flex items-center justify-between mb-4">
               <div className="font-bold" style={{color:C.txt}}>تغيير كلمة مرور {resetTarget.name}</div>
               <button onClick={()=>setResetTarget(null)} className="p-2 rounded-xl" style={{background:C.soft}}>
@@ -1004,7 +1284,7 @@ function EmployeesView({employees, onRefresh}) {
       {editTarget && (
         <div className="fixed inset-0 z-50 flex items-end justify-center p-4"
           style={{background:'rgba(58,47,61,0.5)'}} onClick={e=>e.target===e.currentTarget&&setEditTarget(null)}>
-          <div className="w-full max-w-sm bg-white rounded-3xl p-6 shadow-2xl mb-2 space-y-4">
+          <div className="w-full max-w-sm rounded-3xl p-6 shadow-2xl mb-2 space-y-4" style={{background:C.card}}>
             <div className="flex items-center justify-between">
               <div className="font-bold" style={{color:C.txt}}>تعديل: {editTarget.name}</div>
               <button onClick={()=>setEditTarget(null)} className="p-2 rounded-xl" style={{background:C.soft}}>
@@ -1016,7 +1296,7 @@ function EmployeesView({employees, onRefresh}) {
                 <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>{l}</label>
                 <input type={t} value={editForm[k]||''} onChange={e=>setEditForm(p=>({...p,[k]:e.target.value}))}
                   className="w-full p-3 rounded-xl border text-sm outline-none"
-                  style={{borderColor:C.border,background:'#FAFAFA'}}
+                  style={{borderColor:C.border,background:'var(--input-bg)'}}
                   autoCapitalize="none" autoCorrect="off"/>
               </div>
             ))}
@@ -1053,6 +1333,15 @@ function EmployeesView({employees, onRefresh}) {
           </div>
         </div>
       )}
+
+      {/* Settings section */}
+      <div className="pt-2">
+        <div className="flex items-center gap-2 mb-3 px-1">
+          <Ic n="gear" s={16} c={C.primary}/>
+          <span className="text-xs font-bold uppercase tracking-widest" style={{color:C.primary}}>إعدادات الراتب</span>
+        </div>
+        <SettingsSection settings={settings} onSaved={onRefresh}/>
+      </div>
     </div>
   );
 }
@@ -1073,9 +1362,9 @@ function AuditLogView({employees}) {
   const getEmp = id => employees.find(e=>e.id===id);
 
   const ACTION = {
-    add:   {label:'إضافة',   bg:'#EAF3EA', color:C.ok},
-    update:{label:'تعديل',   bg:'#EEE8F5', color:C.primary},
-    delete:{label:'حذف',     bg:'#FDECEA', color:C.err},
+    add:   {label:'إضافة',   bg:'var(--ok-bg)', color:C.ok},
+    update:{label:'تعديل',   bg:'var(--edit-bg)', color:C.primary},
+    delete:{label:'حذف',     bg:'var(--err-bg)', color:C.err},
   };
 
   const shiftLabel = s => s==='full'?'كامل':'نص';
@@ -1163,6 +1452,15 @@ function App() {
   const [employees,setEmployees]=useState([]);
   const [settings,setSettings]=useState(null);
   const [tab,setTab]=useState('calendar');
+  const [dark,setDark]=useState(()=>localStorage.getItem('dark')==='1');
+  const [attendanceBanner,setAttendanceBanner]=useState(false);
+
+  const toggleDark = () => {
+    const next=!dark;
+    setDark(next);
+    document.documentElement.classList.toggle('dark',next);
+    localStorage.setItem('dark',next?'1':'0');
+  };
 
   useEffect(()=>{
     sb.auth.getSession().then(({data:{session:s}})=>{
@@ -1185,13 +1483,21 @@ function App() {
     ]);
     const all=emps||[];
     setEmployees(all);
-    setMe(all.find(e=>e.auth_user_id===s.user.id)||null);
+    const myEmp=all.find(e=>e.auth_user_id===s.user.id)||null;
+    setMe(myEmp);
     setSettings(sets);
+    // Check attendance reminder
+    if(myEmp && myEmp.role!=='admin') {
+      const today=todayStr();
+      const {data:todayRec}=await sb.from('attendance_records').select('id').eq('employee_id',myEmp.id).eq('date',today).maybeSingle();
+      const h=new Date().getHours();
+      if(!todayRec && h>=8 && h<22) setAttendanceBanner(true);
+    }
   };
 
   const logout = async () => {
     await sb.auth.signOut();
-    setMe(null); setSession(null); setTab('calendar');
+    setMe(null); setSession(null); setTab('calendar'); setAttendanceBanner(false);
   };
 
   if(session===undefined) return (
@@ -1219,7 +1525,8 @@ function App() {
   return (
     <div className="min-h-screen" style={{background:C.bg}}>
       {/* Header */}
-      <div className="bg-white shadow-sm px-4 py-3 flex items-center justify-between sticky top-0 z-40">
+      <div className="shadow-sm px-4 py-3 flex items-center justify-between sticky top-0 z-40"
+        style={{background:C.card}}>
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-xl flex items-center justify-center font-black text-sm text-white" style={{background:C.primary}}>S</div>
           <div>
@@ -1228,12 +1535,31 @@ function App() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {isAdmin&&<span className="text-xs px-2 py-1 rounded-lg font-semibold" style={{background:'#F0EAF0',color:C.primary}}>مدير</span>}
+          {isAdmin&&<span className="text-xs px-2 py-1 rounded-lg font-semibold" style={{background:'var(--badge-bg)',color:C.primary}}>مدير</span>}
+          <button onClick={toggleDark} className="p-2 rounded-xl" style={{background:C.soft}}>
+            <Ic n={dark?'sun':'moon'} s={17} c={C.primary}/>
+          </button>
           <button onClick={logout} className="p-2 rounded-xl" style={{background:C.soft}}>
             <Ic n="logout" s={17} c={C.err}/>
           </button>
         </div>
       </div>
+
+      {/* Attendance banner */}
+      {attendanceBanner && (
+        <div className="mx-4 mt-4 p-3 rounded-2xl flex items-center justify-between"
+          style={{background:'var(--edit-bg)'}}>
+          <div className="flex items-center gap-2">
+            <Ic n="bell" s={16} c={C.primary}/>
+            <span className="text-sm font-semibold" style={{color:C.primary}}>لم تسجل حضورك اليوم بعد</span>
+          </div>
+          <button onClick={()=>{setAttendanceBanner(false);setTab('calendar');}}
+            className="text-xs font-bold px-3 py-1 rounded-lg text-white"
+            style={{background:C.primary}}>
+            سجّل الآن
+          </button>
+        </div>
+      )}
 
       {/* Page content */}
       <div className="p-4 max-w-lg mx-auto pb-24">
@@ -1241,18 +1567,18 @@ function App() {
         {tab==='dashboard'&&!isAdmin&&<EmpDashboard me={me} employees={employees} settings={settings} onRefresh={()=>loadData(session)}/>}
         {tab==='dashboard'&&isAdmin&&<AdminDashboard employees={employees} settings={settings}/>}
         {tab==='payslips'&&isAdmin&&<PayslipsView employees={employees} settings={settings}/>}
-        {tab==='employees'&&isAdmin&&<EmployeesView employees={employees} onRefresh={()=>loadData(session)}/>}
+        {tab==='employees'&&isAdmin&&<EmployeesView employees={employees} settings={settings} onRefresh={()=>loadData(session)}/>}
         {tab==='audit'&&isAdmin&&<AuditLogView employees={employees}/>}
       </div>
 
       {/* Bottom nav */}
-      <div className="fixed bottom-0 inset-x-0 bg-white border-t" style={{borderColor:C.border}}>
+      <div className="fixed bottom-0 inset-x-0 border-t" style={{background:C.card,borderColor:C.border}}>
         <div className="flex max-w-lg mx-auto">
           {tabs.map(t=>(
             <button key={t.id} onClick={()=>setTab(t.id)}
               className="flex-1 py-3 flex flex-col items-center gap-0.5 transition-colors"
-              style={{color:tab===t.id?C.primary:'#BBB'}}>
-              <Ic n={t.icon} s={22} c={tab===t.id?C.primary:'#BBB'}/>
+              style={{color:tab===t.id?C.primary:'var(--muted)'}}>
+              <Ic n={t.icon} s={22} c={tab===t.id?C.primary:'var(--muted)'}/>
               <span className="text-xs font-semibold">{t.label}</span>
             </button>
           ))}
