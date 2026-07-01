@@ -25,10 +25,6 @@ Deno.serve(async (req) => {
   const { data: { user }, error: authErr } = await supabase.auth.getUser(token);
   if (authErr || !user) return json({ error: 'غير مصرح' }, 401);
 
-  const { data: caller } = await supabase
-    .from('employees').select('role').eq('auth_user_id', user.id).maybeSingle();
-  if (caller?.role !== 'admin') return json({ error: 'للمدير فقط' }, 403);
-
   // ── Loyverse token ─────────────────────────────────────────
   const loyToken = Deno.env.get('LOYVERSE_TOKEN');
   if (!loyToken) return json({ error: 'LOYVERSE_TOKEN غير مضبوط في Supabase Secrets' }, 500);
