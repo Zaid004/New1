@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stacks Stationery — دليل الموظف</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;900&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:'Cairo',sans-serif}
+body{background:#0F0D12;overflow:hidden;height:100vh;width:100vw}
+
+/* ── SLIDES ── */
+.deck{position:relative;width:100vw;height:100vh}
+.slide{
+  position:absolute;inset:0;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:40px 60px;
+  opacity:0;transform:translateX(-40px);
+  transition:opacity .45s ease, transform .45s ease;
+  pointer-events:none;
+}
+.slide.active{opacity:1;transform:translateX(0);pointer-events:all}
+.slide.prev{opacity:0;transform:translateX(40px)}
+
+/* ── BACKGROUNDS ── */
+.bg-dark{background:linear-gradient(135deg,#0F0D12 0%,#1C1825 100%)}
+.bg-purple{background:linear-gradient(135deg,#3D2B4F 0%,#6B5876 100%)}
+.bg-warm{background:linear-gradient(135deg,#2A1F10 0%,#3D2E1A 100%)}
+.bg-green{background:linear-gradient(135deg,#0F2010 0%,#1A3020 100%)}
+.bg-hero{background:linear-gradient(135deg,#1C1825 0%,#2A2040 50%,#3D2B4F 100%)}
+
+/* ── DECORATIVE BLOBS ── */
+.blob{position:absolute;border-radius:50%;filter:blur(80px);opacity:.25;pointer-events:none}
+
+/* ── TYPOGRAPHY ── */
+.slide-num{font-size:11px;font-weight:700;letter-spacing:3px;opacity:.3;margin-bottom:12px;color:#fff}
+h1{font-size:clamp(32px,6vw,72px);font-weight:900;color:#fff;line-height:1.1;text-align:center}
+h2{font-size:clamp(22px,4vw,44px);font-weight:900;color:#fff;line-height:1.2;text-align:center;margin-bottom:8px}
+h3{font-size:clamp(16px,2.5vw,28px);font-weight:700;color:#9B8AB6;margin-bottom:6px}
+p{font-size:clamp(13px,1.8vw,20px);color:rgba(255,255,255,.7);line-height:1.7;text-align:center}
+.sub{font-size:clamp(11px,1.5vw,16px);color:rgba(255,255,255,.4);letter-spacing:2px;text-transform:uppercase;margin-bottom:16px}
+
+/* ── LOGO ── */
+.logo-box{width:clamp(64px,10vw,100px);height:clamp(64px,10vw,100px);border-radius:24px;background:#6B5876;
+  display:flex;align-items:center;justify-content:center;font-size:clamp(28px,5vw,52px);font-weight:900;
+  color:#fff;margin:0 auto 24px;box-shadow:0 20px 60px rgba(107,88,118,.5)}
+.logo-sm{width:44px;height:44px;border-radius:12px;background:#6B5876;
+  display:inline-flex;align-items:center;justify-content:center;font-size:20px;font-weight:900;color:#fff;
+  vertical-align:middle;margin-left:10px}
+
+/* ── CARDS ── */
+.cards{display:flex;gap:20px;flex-wrap:wrap;justify-content:center;margin-top:24px;width:100%;max-width:900px}
+.card{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);border-radius:20px;
+  padding:24px 28px;flex:1;min-width:180px;max-width:260px;backdrop-filter:blur(10px)}
+.card-icon{font-size:32px;margin-bottom:12px}
+.card h3{color:#fff;font-size:clamp(14px,2vw,18px);margin-bottom:6px}
+.card p{font-size:clamp(11px,1.4vw,14px);text-align:right;opacity:.6}
+
+/* ── STEPS ── */
+.steps{display:flex;flex-direction:column;gap:16px;margin-top:20px;width:100%;max-width:700px}
+.step{display:flex;align-items:flex-start;gap:18px;background:rgba(255,255,255,.06);
+  border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:18px 22px}
+.step-num{width:36px;height:36px;border-radius:10px;background:#6B5876;display:flex;
+  align-items:center;justify-content:center;font-weight:900;font-size:16px;color:#fff;flex-shrink:0}
+.step-text h4{color:#fff;font-size:clamp(13px,1.8vw,17px);margin-bottom:3px}
+.step-text p{font-size:clamp(11px,1.4vw,14px);text-align:right;opacity:.55}
+
+/* ── SHIFT CARDS ── */
+.shift-cards{display:flex;gap:24px;margin-top:24px;justify-content:center}
+.shift{border-radius:24px;padding:32px 36px;text-align:center;flex:1;max-width:320px}
+.shift-full{background:linear-gradient(135deg,#6B5876,#9B8AB6)}
+.shift-half{background:linear-gradient(135deg,#A8825B,#C4A882)}
+.shift-pts{font-size:clamp(36px,7vw,72px);font-weight:900;color:#fff;line-height:1}
+.shift-label{font-size:clamp(12px,2vw,18px);color:rgba(255,255,255,.8);margin-top:4px;font-weight:700}
+.shift-desc{font-size:clamp(10px,1.4vw,14px);color:rgba(255,255,255,.55);margin-top:10px}
+
+/* ── HIGHLIGHT BOX ── */
+.highlight{background:rgba(107,88,118,.3);border:1px solid rgba(107,88,118,.6);
+  border-radius:16px;padding:20px 28px;margin-top:20px;max-width:680px;width:100%}
+.highlight p{text-align:right;font-size:clamp(12px,1.6vw,16px)}
+
+/* ── FAQ ── */
+.faq{display:flex;flex-direction:column;gap:12px;margin-top:20px;width:100%;max-width:780px}
+.faq-item{background:rgba(255,255,255,.06);border-radius:14px;padding:16px 22px}
+.faq-q{color:#9B8AB6;font-weight:700;font-size:clamp(12px,1.6vw,15px);margin-bottom:4px}
+.faq-a{color:rgba(255,255,255,.6);font-size:clamp(11px,1.4vw,13px)}
+
+/* ── NAV ── */
+#nav{position:fixed;bottom:32px;left:50%;transform:translateX(-50%);
+  display:flex;align-items:center;gap:16px;z-index:100;
+  background:rgba(255,255,255,.08);backdrop-filter:blur(20px);
+  border:1px solid rgba(255,255,255,.12);border-radius:50px;padding:10px 20px}
+#nav button{background:none;border:none;cursor:pointer;padding:6px 14px;border-radius:30px;
+  color:rgba(255,255,255,.6);font-family:'Cairo',sans-serif;font-weight:700;font-size:14px;transition:.2s}
+#nav button:hover{background:rgba(255,255,255,.1);color:#fff}
+#counter{color:rgba(255,255,255,.35);font-size:13px;font-weight:700;min-width:48px;text-align:center}
+.dot-row{display:flex;gap:6px;align-items:center}
+.dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.2);transition:.3s;cursor:pointer}
+.dot.on{background:#9B8AB6;width:18px;border-radius:4px}
+
+/* ── HINT ── */
+#hint{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);
+  color:rgba(255,255,255,.2);font-size:12px;font-weight:600;letter-spacing:1px;
+  transition:opacity 1s;pointer-events:none}
+
+/* ── PROGRESS ── */
+#bar{position:fixed;top:0;left:0;height:3px;background:#6B5876;transition:width .4s ease;z-index:200}
+
+/* ── NOTE DEMO ── */
+.note-demo{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);
+  border-radius:16px;padding:20px 24px;margin-top:20px;max-width:500px;width:100%}
+.note-demo label{display:block;font-size:12px;font-weight:700;color:rgba(255,255,255,.4);margin-bottom:8px}
+.note-demo .fake-input{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);
+  border-radius:10px;padding:10px 14px;color:rgba(255,255,255,.5);font-size:13px;font-family:'Cairo',sans-serif}
+
+/* ── SALARY DEMO ── */
+.salary-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;
+  border-bottom:1px solid rgba(255,255,255,.06)}
+.salary-row:last-child{border:none;padding-top:14px;margin-top:4px}
+.salary-label{color:rgba(255,255,255,.5);font-size:clamp(11px,1.4vw,14px)}
+.salary-val{color:#fff;font-weight:700;font-size:clamp(11px,1.4vw,14px)}
+.salary-total .salary-label{color:#9B8AB6;font-weight:900;font-size:clamp(13px,1.8vw,18px)}
+.salary-total .salary-val{color:#9B8AB6;font-weight:900;font-size:clamp(15px,2.2vw,22px)}
+</style>
+</head>
+<body>
+
+<div id="bar"></div>
+
+<div class="deck" id="deck">
+
+  <!-- ═══ SLIDE 1: HERO ═══ -->
+  <div class="slide bg-hero active" id="s0">
+    <div class="blob" style="width:500px;height:500px;background:#6B5876;top:-100px;right:-100px"></div>
+    <div class="blob" style="width:400px;height:400px;background:#A8825B;bottom:-80px;left:-80px"></div>
+    <div class="logo-box">S</div>
+    <div class="sub">نظام الحضور والرواتب</div>
+    <h1>Stacks Stationery</h1>
+    <p style="margin-top:16px;max-width:500px">دليلك الكامل لاستخدام التطبيق<br>كل ما تحتاج معرفته في دقائق</p>
+    <div style="margin-top:40px;display:flex;gap:12px;flex-wrap:wrap;justify-content:center">
+      <div style="background:rgba(255,255,255,.08);border-radius:30px;padding:8px 20px;font-size:13px;color:rgba(255,255,255,.5)">دليل الموظف</div>
+      <div style="background:rgba(107,88,118,.3);border-radius:30px;padding:8px 20px;font-size:13px;color:#9B8AB6">٢٠٢٦</div>
+    </div>
+  </div>
+
+  <!-- ═══ SLIDE 2: ما هو التطبيق ═══ -->
+  <div class="slide bg-dark" id="s1">
+    <div class="blob" style="width:350px;height:350px;background:#6B5876;top:-60px;left:50%;transform:translateX(-50%)"></div>
+    <div class="slide-num">٠٢</div>
+    <h2>ما هو تطبيق Stacks؟</h2>
+    <p style="max-width:560px;margin-top:8px">نظام رقمي يُسهّل تسجيل الحضور وحساب الرواتب<br>بشكل شفاف وعادل للجميع</p>
+    <div class="cards">
+      <div class="card">
+        <div class="card-icon">📅</div>
+        <h3>تسجيل الحضور</h3>
+        <p>سجّل حضورك يومياً بضغطة واحدة</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">📊</div>
+        <h3>متابعة النقاط</h3>
+        <p>شوف نقاطك وأيامك في أي وقت</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">💰</div>
+        <h3>كشف الراتب</h3>
+        <p>احفظ كشوفات رواتبك الشهرية</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ SLIDE 3: تسجيل الدخول ═══ -->
+  <div class="slide bg-purple" id="s2">
+    <div class="slide-num">٠٣</div>
+    <h2>كيف تدخل للتطبيق؟</h2>
+    <p style="max-width:500px;margin-top:8px">المدير يعطيك اسم مستخدم وكلمة مرور خاصة بك</p>
+    <div class="steps" style="margin-top:28px">
+      <div class="step">
+        <div class="step-num">١</div>
+        <div class="step-text">
+          <h4>افتح الرابط</h4>
+          <p>stacksattendance.netlify.app — من أي جهاز أو متصفح</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">٢</div>
+        <div class="step-text">
+          <h4>أدخل اسم المستخدم</h4>
+          <p>اسم المستخدم اللي أعطاك إياه المدير (مثال: ahmad)</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">٣</div>
+        <div class="step-text">
+          <h4>أدخل كلمة المرور وادخل</h4>
+          <p>اضغط "دخول" أو Enter من لوحة المفاتيح</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ SLIDE 4: نوعا الشفت ═══ -->
+  <div class="slide bg-dark" id="s3">
+    <div class="blob" style="width:400px;height:400px;background:#A8825B;bottom:-100px;right:-100px"></div>
+    <div class="slide-num">٠٤</div>
+    <h2>نوعا الشفت</h2>
+    <p style="max-width:520px;margin-top:8px">كل نوع يعطيك عدداً مختلفاً من النقاط</p>
+    <div class="shift-cards">
+      <div class="shift shift-full">
+        <div class="shift-pts">٢</div>
+        <div class="shift-label">شفت كامل</div>
+        <div class="shift-desc">يوم دوام كامل<br>نقطتان</div>
+      </div>
+      <div class="shift shift-half">
+        <div class="shift-pts">١</div>
+        <div class="shift-label">نص شفت</div>
+        <div class="shift-desc">نص يوم دوام<br>نقطة واحدة</div>
+      </div>
+    </div>
+    <div class="highlight">
+      <p>النقاط تحدد حصتك من الراتب الشهري — كلما زادت نقاطك، زادت حصتك</p>
+    </div>
+  </div>
+
+  <!-- ═══ SLIDE 5: تسجيل الحضور ═══ -->
+  <div class="slide bg-warm" id="s4">
+    <div class="blob" style="width:350px;height:350px;background:#A8825B;top:-80px;left:-60px"></div>
+    <div class="slide-num">٠٥</div>
+    <h2>كيف تسجّل حضورك؟</h2>
+    <p style="max-width:500px;margin-top:8px">يومياً — الموظف يسجّل حضوره بنفسه من التطبيق</p>
+    <div class="steps" style="margin-top:24px">
+      <div class="step">
+        <div class="step-num">١</div>
+        <div class="step-text">
+          <h4>افتح تبويب "التقويم"</h4>
+          <p>الأيقونة الأولى في شريط التنقل أسفل الشاشة</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">٢</div>
+        <div class="step-text">
+          <h4>اضغط على يوم اليوم</h4>
+          <p>فقط اليوم الحالي يمكنك الضغط عليه (الإطار البنفسجي)</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">٣</div>
+        <div class="step-text">
+          <h4>اختر نوع الشفت</h4>
+          <p>شفت كامل أو نص شفت — ثم أضف ملاحظة إن أردت</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ SLIDE 6: الملاحظات ═══ -->
+  <div class="slide bg-dark" id="s5">
+    <div class="blob" style="width:300px;height:300px;background:#6B5876;bottom:-60px;left:30%"></div>
+    <div class="slide-num">٠٦</div>
+    <h2>ميزة الملاحظات</h2>
+    <p style="max-width:520px;margin-top:8px">تقدر تضيف ملاحظة مع كل يوم تسجّله</p>
+    <div class="note-demo" style="margin-top:28px">
+      <div style="display:flex;gap:12px;margin-bottom:14px">
+        <div style="flex:1;background:#6B5876;border-radius:12px;padding:16px;text-align:center;color:#fff;font-weight:900;font-size:15px">شفت كامل<br><span style="font-size:11px;opacity:.7">نقطتان</span></div>
+        <div style="flex:1;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:16px;text-align:center;color:rgba(255,255,255,.5);font-size:15px">نص شفت<br><span style="font-size:11px;opacity:.7">نقطة</span></div>
+      </div>
+      <label>ملاحظة اختيارية</label>
+      <div class="fake-input">جئت متأخراً بسبب طارئ...</div>
+    </div>
+    <div class="highlight" style="margin-top:16px">
+      <p>الملاحظة اختيارية — يراها المدير عند فتح اليوم في التقويم</p>
+    </div>
+  </div>
+
+  <!-- ═══ SLIDE 7: متابعة الإحصائيات ═══ -->
+  <div class="slide bg-purple" id="s6">
+    <div class="slide-num">٠٧</div>
+    <h2>متابعة نقاطك وأيامك</h2>
+    <p style="max-width:520px;margin-top:8px">من تبويب "الرئيسية" تشوف وضعك الشهري الحالي</p>
+    <div class="cards" style="margin-top:28px">
+      <div class="card">
+        <div class="card-icon">📆</div>
+        <h3>أيام الشهر</h3>
+        <p>عدد الأيام التي حضرت فيها هذا الشهر</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">⭐</div>
+        <h3>نقاطك</h3>
+        <p>مجموع نقاطك مقارنةً بإجمالي نقاط الفريق</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">🧮</div>
+        <h3>حاسبة الراتب</h3>
+        <p>تقدير تقريبي لراتبك بناءً على نقاطك</p>
+      </div>
+    </div>
+    <div class="highlight" style="margin-top:8px">
+      <p>الحاسبة تقديرية فقط — الراتب النهائي يحدده المدير في نهاية الشهر</p>
+    </div>
+  </div>
+
+  <!-- ═══ SLIDE 8: كشف الراتب ═══ -->
+  <div class="slide bg-green" id="s7">
+    <div class="blob" style="width:350px;height:350px;background:#7A8B6F;top:-80px;right:-60px"></div>
+    <div class="slide-num">٠٨</div>
+    <h2>كشف الراتب الشهري</h2>
+    <p style="max-width:520px;margin-top:8px">بعد إعداد الكشف من المدير، يمكنك رؤيته في "كشوفات الرواتب السابقة"</p>
+    <div style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:20px;padding:24px 32px;margin-top:24px;max-width:460px;width:100%">
+      <div class="salary-row">
+        <span class="salary-label">المبلغ الثابت</span>
+        <span class="salary-val">١٧٥,٠٠٠ د.ع</span>
+      </div>
+      <div class="salary-row">
+        <span class="salary-label">حصة المبيعات</span>
+        <span class="salary-val">٢٢,٠٠٠ د.ع</span>
+      </div>
+      <div class="salary-row">
+        <span class="salary-label">بونص</span>
+        <span class="salary-val">١٠,٠٠٠ د.ع</span>
+      </div>
+      <div class="salary-row salary-total">
+        <span class="salary-label">الإجمالي</span>
+        <span class="salary-val">٢٠٧,٠٠٠ د.ع</span>
+      </div>
+    </div>
+    <p style="margin-top:16px;font-size:13px">يمكن تصدير الكشف كـ PDF للاحتفاظ به</p>
+  </div>
+
+  <!-- ═══ SLIDE 9: نصائح مهمة ═══ -->
+  <div class="slide bg-dark" id="s8">
+    <div class="blob" style="width:400px;height:400px;background:#6B5876;top:50%;right:-100px;transform:translateY(-50%)"></div>
+    <div class="slide-num">٠٩</div>
+    <h2>أسئلة شائعة</h2>
+    <div class="faq">
+      <div class="faq-item">
+        <div class="faq-q">هل يمكنني تسجيل يوم سابق؟</div>
+        <div class="faq-a">لا — الموظف يسجّل يوم اليوم فقط. المدير هو من يتحكم بالأيام السابقة.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">نسيت تسجيل حضوري اليوم، ماذا أفعل؟</div>
+        <div class="faq-a">تواصل مع المدير وسيضيف الحضور يدوياً من حسابه.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">التطبيق يعمل على الجوال؟</div>
+        <div class="faq-a">نعم، من أي متصفح. يمكن إضافته للشاشة الرئيسية كتطبيق مستقل.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">ما الفرق بين اللون البنفسجي والبني في التقويم؟</div>
+        <div class="faq-a">كل موظف له لون مختلف — التقويم يعرض لوني الموظفين معاً.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ SLIDE 10: CLOSING ═══ -->
+  <div class="slide bg-hero" id="s9">
+    <div class="blob" style="width:500px;height:500px;background:#6B5876;top:-120px;left:-100px"></div>
+    <div class="blob" style="width:400px;height:400px;background:#A8825B;bottom:-80px;right:-80px"></div>
+    <div class="logo-box">S</div>
+    <h1 style="font-size:clamp(24px,4vw,48px)">أي سؤال؟<br>تواصل مع المدير</h1>
+    <p style="margin-top:16px;max-width:440px">نحن هنا لنجعل تجربة العمل أفضل<br>وأكثر شفافية للجميع</p>
+    <div style="margin-top:36px;display:flex;gap:12px;flex-wrap:wrap;justify-content:center">
+      <div style="background:rgba(107,88,118,.3);border:1px solid rgba(107,88,118,.5);border-radius:16px;padding:12px 24px;color:#9B8AB6;font-weight:700;font-size:14px">Stacks Stationery</div>
+    </div>
+  </div>
+
+</div><!-- /deck -->
+
+<!-- NAV -->
+<div id="nav">
+  <button id="btnPrev">→</button>
+  <div class="dot-row" id="dots"></div>
+  <span id="counter">١ / ١٠</span>
+  <button id="btnNext">←</button>
+</div>
+
+<div id="hint">← → للتنقل بين الشرائح</div>
+
+<script>
+const slides = document.querySelectorAll('.slide');
+const total  = slides.length;
+let cur = 0;
+
+const dotsEl   = document.getElementById('dots');
+const counter  = document.getElementById('counter');
+const bar      = document.getElementById('bar');
+const hint     = document.getElementById('hint');
+
+// build dots
+slides.forEach((_,i)=>{
+  const d=document.createElement('div');
+  d.className='dot'+(i===0?' on':'');
+  d.onclick=()=>go(i);
+  dotsEl.appendChild(d);
+});
+
+// Arabic numerals
+const toAr = n => String(n).replace(/\d/g,d=>'٠١٢٣٤٥٦٧٨٩'[d]);
+
+function go(n){
+  if(n<0||n>=total) return;
+  slides[cur].classList.remove('active');
+  slides[cur].classList.add('prev');
+  setTimeout(()=>slides[cur<n?cur:n].classList.remove('prev'),450);
+  cur=n;
+  slides[cur].classList.add('active');
+  document.querySelectorAll('.dot').forEach((d,i)=>d.classList.toggle('on',i===cur));
+  counter.textContent=`${toAr(cur+1)} / ${toAr(total)}`;
+  bar.style.width=`${((cur+1)/total)*100}%`;
+}
+
+document.getElementById('btnNext').onclick=()=>go(cur+1);
+document.getElementById('btnPrev').onclick=()=>go(cur-1);
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowLeft'||e.key==='ArrowDown'||e.key===' ') go(cur+1);
+  if(e.key==='ArrowRight'||e.key==='ArrowUp') go(cur-1);
+});
+
+// Touch swipe
+let tx=0;
+document.addEventListener('touchstart',e=>{tx=e.touches[0].clientX;},{passive:true});
+document.addEventListener('touchend',e=>{
+  const dx=e.changedTouches[0].clientX-tx;
+  if(Math.abs(dx)>50){dx<0?go(cur+1):go(cur-1);}
+});
+
+// hide hint
+setTimeout(()=>{hint.style.opacity='0';},4000);
+
+// init bar
+bar.style.width=`${(1/total)*100}%`;
+</script>
+</body>
+</html>
