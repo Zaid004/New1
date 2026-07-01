@@ -27,8 +27,8 @@ select,input,textarea{-webkit-appearance:none}
 const {useState,useEffect,useRef} = React;
 
 // ── CONFIG (replace with your Supabase credentials) ──────────────────────────
-const SUPA_URL = window.__SUPABASE_URL__ || 'YOUR_SUPABASE_URL';
-const SUPA_KEY = window.__SUPABASE_ANON_KEY__ || 'YOUR_SUPABASE_ANON_KEY';
+const SUPA_URL = window.__SUPABASE_URL__ || 'https://djzvuuqgqsniabgibfnq.supabase.co';
+const SUPA_KEY = window.__SUPABASE_ANON_KEY__ || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRqenZ1dXFncXNuaWFiZ2liZm5xIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4NDY1NzksImV4cCI6MjA5ODQyMjU3OX0.A2Jc1WRjM3iOVfHiyM4JU3I_N8kRWKSzFvNDdcusbDA';
 const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
 
 // Edge Function helper (admin operations)
