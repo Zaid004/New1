@@ -83,6 +83,7 @@ const PATHS = {
   chR:'M9 18l6-6-6-6',
   check:'M20 6 9 17l-5-5',
   calc:'M4 2h16a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zM8 6h8M8 10h2M12 10h2M16 10h.01M8 14h2M12 14h2M16 14h2M8 18h2M12 18h2M16 18h2',
+  clock:'M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zM12 6v6l4 2',
 };
 const Ic = ({n,s=20,c='currentColor'}) => (
   <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -926,6 +927,105 @@ function EmployeesView({employees, onRefresh}) {
   );
 }
 
+// ── AUDIT LOG (ADMIN) ─────────────────────────────────────────────────────────
+function AuditLogView({employees}) {
+  const [logs, setLogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(()=>{
+    sb.from('audit_log')
+      .select('*')
+      .order('created_at',{ascending:false})
+      .limit(200)
+      .then(({data})=>{ setLogs(data||[]); setLoading(false); });
+  },[]);
+
+  const getEmp = id => employees.find(e=>e.id===id);
+
+  const ACTION = {
+    add:   {label:'إضافة',   bg:'#EAF3EA', color:C.ok},
+    update:{label:'تعديل',   bg:'#EEE8F5', color:C.primary},
+    delete:{label:'حذف',     bg:'#FDECEA', color:C.err},
+  };
+
+  const shiftLabel = s => s==='full'?'كامل':'نص';
+
+  const fmtDate = iso => {
+    const d=new Date(iso);
+    return d.toLocaleDateString('ar-IQ',{day:'numeric',month:'short'}) +
+           ' · ' + d.toLocaleTimeString('ar-IQ',{hour:'2-digit',minute:'2-digit'});
+  };
+
+  // Group logs by date (record_date)
+  const grouped = logs.reduce((acc,log)=>{
+    const key=log.record_date;
+    if(!acc[key]) acc[key]=[];
+    acc[key].push(log);
+    return acc;
+  },{});
+
+  return (
+    <div className="space-y-4">
+      <h2 className="font-bold text-lg" style={{color:C.txt}}>سجل التعديلات</h2>
+
+      {loading && <div className="text-center py-8 text-sm" style={{color:C.txt,opacity:.4}}>جاري التحميل...</div>}
+
+      {!loading && logs.length===0 && (
+        <div className="text-center py-12 text-sm" style={{color:C.txt,opacity:.4}}>لا توجد تعديلات بعد</div>
+      )}
+
+      {Object.entries(grouped).sort(([a],[b])=>b.localeCompare(a)).map(([date,dayLogs])=>(
+        <div key={date}>
+          <div className="text-xs font-bold mb-2 px-1" style={{color:C.txt,opacity:.4}}>
+            {new Date(date+'T00:00:00').toLocaleDateString('ar-IQ',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}
+          </div>
+          <div className="space-y-2">
+            {dayLogs.map(log=>{
+              const emp    = getEmp(log.employee_id);
+              const byEmp  = getEmp(log.changed_by);
+              const act    = ACTION[log.action] || ACTION.update;
+              return (
+                <div key={log.id} className="rounded-2xl p-4 shadow-sm" style={{background:C.card}}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      {/* color dot of affected employee */}
+                      {emp && <div className="w-2.5 h-2.5 rounded-full flex-shrink-0 mt-0.5" style={{background:emp.color_hex}}/>}
+                      <div className="min-w-0">
+                        <div className="font-semibold text-sm truncate" style={{color:C.txt}}>
+                          {emp?.name || '—'}
+                        </div>
+                        <div className="text-xs mt-0.5" style={{color:C.txt,opacity:.5}}>
+                          {log.action==='add'    && `${shiftLabel(log.new_shift)} شفت`}
+                          {log.action==='update' && `${shiftLabel(log.old_shift)} ← ${shiftLabel(log.new_shift)}`}
+                          {log.action==='delete' && `حُذف ${shiftLabel(log.old_shift)} شفت`}
+                          {log.is_auto && <span className="mr-1 opacity-60">(تلقائي)</span>}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-left flex-shrink-0">
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-lg" style={{background:act.bg,color:act.color}}>
+                        {act.label}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between mt-3 pt-2" style={{borderTop:`1px solid ${C.soft}`}}>
+                    <div className="text-xs" style={{color:C.primary,opacity:.8}}>
+                      {byEmp ? `بواسطة: ${byEmp.name}` : '—'}
+                    </div>
+                    <div className="text-xs" style={{color:C.txt,opacity:.35}}>
+                      {fmtDate(log.created_at)}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── MAIN APP ──────────────────────────────────────────────────────────────────
 function App() {
   const [session,setSession]=useState(undefined);
@@ -982,6 +1082,7 @@ function App() {
     ...(isAdmin?[
       {id:'payslips',label:'الرواتب',icon:'file'},
       {id:'employees',label:'الموظفون',icon:'user'},
+      {id:'audit',label:'السجل',icon:'clock'},
     ]:[]),
   ];
 
@@ -1011,6 +1112,7 @@ function App() {
         {tab==='dashboard'&&isAdmin&&<AdminDashboard employees={employees} settings={settings}/>}
         {tab==='payslips'&&isAdmin&&<PayslipsView employees={employees} settings={settings}/>}
         {tab==='employees'&&isAdmin&&<EmployeesView employees={employees} onRefresh={()=>loadData(session)}/>}
+        {tab==='audit'&&isAdmin&&<AuditLogView employees={employees}/>}
       </div>
 
       {/* Bottom nav */}
