@@ -799,6 +799,8 @@ function PayslipsView({employees,settings}) {
   const [f,setF]=useState({fixed:'',pct:'',sales:'',bonus:'',extra:'',notes:''});
   const [busy,setBusy]=useState(false);
   const [saved,setSaved]=useState(false);
+  const [loyBusy,setLoyBusy]=useState(false);
+  const [loyMsg,setLoyMsg]=useState('');
 
   // Annual report state
   const [annualYear,setAnnualYear]=useState(new Date().getFullYear());
@@ -864,6 +866,22 @@ function PayslipsView({employees,settings}) {
   },[f.sales,recs,empId]);
 
   const total=(parseFloat(f.fixed)||0)+(parseFloat(f.pct)||0)+(parseFloat(f.bonus)||0)+(parseFloat(f.extra)||0);
+
+  const fetchLoyverse = async () => {
+    setLoyBusy(true); setLoyMsg('');
+    const {data:{session}} = await sb.auth.getSession();
+    const res = await fetch(`${SUPA_URL}/functions/v1/get-loyverse-sales`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':`Bearer ${session.access_token}`},
+      body: JSON.stringify({month}),
+    });
+    const data = await res.json();
+    setLoyBusy(false);
+    if(data.error){ setLoyMsg('خطأ: ' + data.error); setTimeout(()=>setLoyMsg(''),4000); return; }
+    setF(p=>({...p, sales: String(data.total)}));
+    setLoyMsg(`تم جلب ${fmt(data.total)} د.ع`);
+    setTimeout(()=>setLoyMsg(''),3000);
+  };
 
   const save = async () => {
     setBusy(true);
@@ -1025,12 +1043,32 @@ function PayslipsView({employees,settings}) {
           {fields.map(([label,key])=>(
             <div key={key}>
               <label className="text-xs font-semibold block mb-1" style={{color:C.txt,opacity:.7}}>{label}</label>
-              <input type="text" inputMode="numeric" value={fmtNum(f[key])} onChange={e=>setF(p=>({...p,[key]:parseNum(e.target.value)}))}
-                className="w-full p-2.5 rounded-xl border text-sm outline-none"
-                style={{borderColor:C.border,background:'var(--input-bg)'}} placeholder="0"/>
+              {key==='sales' ? (
+                <div className="flex gap-1.5">
+                  <input type="text" inputMode="numeric" value={fmtNum(f[key])} onChange={e=>setF(p=>({...p,[key]:parseNum(e.target.value)}))}
+                    className="flex-1 p-2.5 rounded-xl border text-sm outline-none"
+                    style={{borderColor:C.border,background:'var(--input-bg)'}} placeholder="0"/>
+                  <button onClick={fetchLoyverse} disabled={loyBusy} title="جلب من Loyverse"
+                    className="px-2.5 rounded-xl text-xs font-black text-white flex-shrink-0"
+                    style={{background:loyBusy?'#999':C.ok}}>
+                    {loyBusy?'..':'L'}
+                  </button>
+                </div>
+              ) : (
+                <input type="text" inputMode="numeric" value={fmtNum(f[key])} onChange={e=>setF(p=>({...p,[key]:parseNum(e.target.value)}))}
+                  className="w-full p-2.5 rounded-xl border text-sm outline-none"
+                  style={{borderColor:C.border,background:'var(--input-bg)'}} placeholder="0"/>
+              )}
             </div>
           ))}
         </div>
+        {loyMsg && (
+          <div className="p-2.5 rounded-xl text-xs font-semibold text-center"
+            style={{background:loyMsg.startsWith('خطأ')?'var(--err-bg)':'var(--ok-bg)',
+                    color:loyMsg.startsWith('خطأ')?C.err:C.ok}}>
+            {loyMsg}
+          </div>
+        )}
         <div>
           <label className="text-xs font-semibold block mb-1" style={{color:C.txt,opacity:.7}}>ملاحظة</label>
           <textarea value={f.notes} onChange={e=>setF(p=>({...p,notes:e.target.value}))}
