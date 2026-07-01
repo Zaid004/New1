@@ -16,7 +16,6 @@
 body{background:#FBF1EC;margin:0}
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
 .day-cell{border-radius:10px;position:relative;overflow:hidden;min-height:64px}
-#pdf-slip{position:absolute;left:-9999px;top:0;width:210mm;padding:20mm;background:#fff;font-family:'Cairo',sans-serif;direction:rtl}
 input[type=month]::-webkit-calendar-picker-indicator{opacity:0.5;cursor:pointer}
 select,input,textarea{-webkit-appearance:none}
 </style>
@@ -178,6 +177,18 @@ function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone}) {
     onDone();
   };
 
+  const removeMyRecord = async () => {
+    setBusy(true);
+    await del(me.id);
+    // حذف السجلات التلقائية للزملاء التي تولّدت بسببي
+    for(const o of employees.filter(e=>e.id!==me.id)){
+      const r=getRec(o.id);
+      if(r?.is_auto_generated) await del(o.id);
+    }
+    setBusy(false);
+    onDone();
+  };
+
   const handleAdmin = async (empId, action) => {
     setBusy(true);
     if(action==='del') await del(empId);
@@ -255,6 +266,13 @@ function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone}) {
                 );
               })}
             </div>
+            {getRec(me.id) && (
+              <button onClick={removeMyRecord}
+                className="w-full py-2 rounded-xl text-sm font-bold mb-4"
+                style={{background:'#FDECEA',color:C.err}}>
+                إلغاء الحضور
+              </button>
+            )}
             {employees.filter(e=>e.id!==me.id).map(emp=>{
               const rec=getRec(emp.id);
               if(!rec) return null;
@@ -624,13 +642,51 @@ function PayslipsView({employees,settings}) {
 
   const exportPdf = () => {
     const emp=employees.find(e=>e.id===empId);
-    const el=document.getElementById('pdf-slip');
-    el.style.display='block';
+    const mn=MONTHS[parseInt(m)-1];
+    const rows=[
+      ['المبلغ الثابت (حصة من المجموع الشهري)',f.fixed],
+      ['حصة النسبة من المبيعات',f.pct],
+      ['بونص',f.bonus],
+      ['مبلغ إضافي',f.extra],
+    ].filter(([,v])=>parseFloat(v)>0)
+     .map(([l,v])=>`<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #F0EAE8;font-size:14px"><span style="color:#555">${l}</span><span style="font-weight:700">${fmt(v)} د.ع</span></div>`)
+     .join('');
+    const notesHtml=f.notes?`<div style="margin-top:20px;padding:14px;background:#FBF1EC;border-radius:10px;font-size:13px;color:#555"><strong>ملاحظة: </strong>${f.notes}</div>`:'';
+    const html=`<div style="font-family:Arial,sans-serif;direction:rtl;padding:50px;color:#3A2F3D;background:#fff;width:740px">
+      <div style="text-align:center;margin-bottom:28px">
+        <div style="font-size:30px;font-weight:900;color:#6B5876;letter-spacing:6px">STACKS</div>
+        <div style="font-size:14px;color:#999;margin-top:6px">Stationery — كشف راتب شهري</div>
+      </div>
+      <div style="border-top:3px solid #6B5876;margin-bottom:28px"></div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:24px">
+        <div><div style="font-size:11px;color:#999;margin-bottom:4px">الموظف</div><div style="font-size:22px;font-weight:900">${emp?.name||''}</div></div>
+        <div><div style="font-size:11px;color:#999;margin-bottom:4px">الشهر</div><div style="font-size:22px;font-weight:900">${mn} ${y}</div></div>
+      </div>
+      <div style="background:#F5EDE8;border-radius:12px;padding:18px;margin-bottom:28px">
+        <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #E8DDE0;font-size:14px"><span style="color:#666">أيام الدوام</span><span style="font-weight:700">${empD} يوم</span></div>
+        <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #E8DDE0;font-size:14px"><span style="color:#666">النقاط المكتسبة</span><span style="font-weight:700">${empP} نقطة</span></div>
+        <div style="display:flex;justify-content:space-between;padding:7px 0;font-size:14px"><span style="color:#666">اجمالي نقاط الشهر</span><span style="font-weight:700">${allP} نقطة</span></div>
+      </div>
+      ${rows}
+      <div style="display:flex;justify-content:space-between;padding:18px 0;border-top:2px solid #6B5876;margin-top:10px">
+        <span style="font-weight:900;font-size:17px">الاجمالي</span>
+        <span style="font-weight:900;font-size:22px;color:#6B5876">${fmt(total)} د.ع</span>
+      </div>
+      ${notesHtml}
+      <div style="margin-top:50px;border-top:1px solid #EEE;padding-top:14px;font-size:12px;color:#AAA;text-align:center">
+        صدر بتاريخ ${new Date().toLocaleDateString('ar-IQ')} · STACKS Stationery
+      </div>
+    </div>`;
+    const wrap=document.createElement('div');
+    wrap.style.cssText='position:fixed;left:0;top:0;z-index:-9999';
+    wrap.innerHTML=html;
+    document.body.appendChild(wrap);
     html2pdf().set({
-      margin:0,filename:`كشف-${emp?.name}-${MONTHS[parseInt(m)-1]}-${y}.pdf`,
-      html2canvas:{scale:2,useCORS:true},
+      margin:0,
+      filename:`كشف-${emp?.name}-${mn}-${y}.pdf`,
+      html2canvas:{scale:2,useCORS:true,logging:false},
       jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}
-    }).from(el).save().then(()=>{el.style.display='none';});
+    }).from(wrap.firstChild).save().then(()=>document.body.removeChild(wrap));
   };
 
   const emp=employees.find(e=>e.id===empId);
@@ -709,57 +765,6 @@ function PayslipsView({employees,settings}) {
         </div>
       </div>
 
-      {/* PDF Template (hidden, rendered off-screen) */}
-      <div id="pdf-slip" style={{display:'none'}}>
-        <div style={{fontFamily:'Cairo,sans-serif',direction:'rtl',padding:'20mm',color:C.txt,background:'#fff'}}>
-          <div style={{textAlign:'center',marginBottom:24}}>
-            <div style={{fontSize:28,fontWeight:900,color:C.primary,letterSpacing:4}}>STACKS</div>
-            <div style={{fontSize:13,color:'#888',marginTop:2}}>Stationery — كشف راتب شهري</div>
-          </div>
-          <div style={{borderTop:`3px solid ${C.primary}`,marginBottom:24}}/>
-          <div style={{display:'flex',justifyContent:'space-between',marginBottom:20}}>
-            <div>
-              <div style={{fontSize:11,color:'#999',marginBottom:2}}>الموظف</div>
-              <div style={{fontSize:20,fontWeight:900}}>{emp?.name}</div>
-            </div>
-            <div style={{textAlign:'left'}}>
-              <div style={{fontSize:11,color:'#999',marginBottom:2}}>الشهر</div>
-              <div style={{fontSize:20,fontWeight:900}}>{MONTHS[parseInt(m)-1]} {y}</div>
-            </div>
-          </div>
-          <div style={{background:C.soft,borderRadius:12,padding:16,marginBottom:24}}>
-            {[['أيام الدوام',empD+' يوم'],['النقاط المكتسبة',empP+' نقطة'],['من إجمالي نقاط الشهر',allP+' نقطة']].map(([l,v])=>(
-              <div key={l} style={{display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid #EEE8E5',fontSize:13}}>
-                <span style={{color:'#666'}}>{l}</span>
-                <span style={{fontWeight:700}}>{v}</span>
-              </div>
-            ))}
-          </div>
-          {[
-            ['المبلغ الثابت (حصة من المجموع الشهري)',f.fixed],
-            ['حصة النسبة من المبيعات',f.pct],
-            ['بونص',f.bonus],
-            ['مبلغ إضافي',f.extra],
-          ].filter(([,v])=>parseFloat(v)>0).map(([l,v])=>(
-            <div key={l} style={{display:'flex',justifyContent:'space-between',padding:'10px 0',borderBottom:'1px solid #F0EAE8',fontSize:13}}>
-              <span style={{color:'#555'}}>{l}</span>
-              <span style={{fontWeight:700}}>{fmt(v)} د.ع</span>
-            </div>
-          ))}
-          <div style={{display:'flex',justifyContent:'space-between',padding:'16px 0',borderTop:`2px solid ${C.primary}`,marginTop:8}}>
-            <span style={{fontWeight:900,fontSize:16}}>الإجمالي</span>
-            <span style={{fontWeight:900,fontSize:20,color:C.primary}}>{fmt(total)} د.ع</span>
-          </div>
-          {f.notes&&(
-            <div style={{marginTop:20,padding:14,background:C.soft,borderRadius:10,fontSize:13,color:'#555'}}>
-              <strong style={{color:C.txt}}>ملاحظة: </strong>{f.notes}
-            </div>
-          )}
-          <div style={{marginTop:40,borderTop:'1px solid #EEE',paddingTop:12,fontSize:11,color:'#AAA',textAlign:'center'}}>
-            صدر بتاريخ {new Date().toLocaleDateString('ar-IQ')} · STACKS Stationery
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
