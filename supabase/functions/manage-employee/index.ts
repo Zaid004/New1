@@ -94,5 +94,37 @@ Deno.serve(async (req) => {
     });
   }
 
+  // ── UPDATE EMPLOYEE ───────────────────────────────────────────────────────────
+  if (action === 'update') {
+    const { employee_id, name, username, color_hex, role } = body;
+    if (!employee_id) return new Response(JSON.stringify({ error: 'employee_id مطلوب' }), { status: 400, headers: corsHeaders });
+
+    const { data: emp } = await supabaseAdmin
+      .from('employees').select('auth_user_id, username').eq('id', employee_id).maybeSingle();
+    if (!emp) return new Response(JSON.stringify({ error: 'موظف غير موجود' }), { status: 404, headers: corsHeaders });
+
+    const updates: Record<string, unknown> = {};
+    if (name) updates.name = name.trim();
+    if (color_hex) updates.color_hex = color_hex;
+    if (role) updates.role = role;
+
+    if (username && username.trim().toLowerCase() !== emp.username) {
+      const newUsername = username.trim().toLowerCase();
+      updates.username = newUsername;
+      if (emp.auth_user_id) {
+        const newEmail = `${newUsername}@stacks-internal.app`;
+        const { error: authErr } = await supabaseAdmin.auth.admin.updateUserById(emp.auth_user_id, { email: newEmail });
+        if (authErr) return new Response(JSON.stringify({ error: authErr.message }), { status: 400, headers: corsHeaders });
+      }
+    }
+
+    const { error: empErr } = await supabaseAdmin.from('employees').update(updates).eq('id', employee_id);
+    if (empErr) return new Response(JSON.stringify({ error: empErr.message }), { status: 400, headers: corsHeaders });
+
+    return new Response(JSON.stringify({ success: true }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
   return new Response(JSON.stringify({ error: 'action غير معروف' }), { status: 400, headers: corsHeaders });
 });

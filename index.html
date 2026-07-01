@@ -84,6 +84,8 @@ const PATHS = {
   check:'M20 6 9 17l-5-5',
   calc:'M4 2h16a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zM8 6h8M8 10h2M12 10h2M16 10h.01M8 14h2M12 14h2M16 14h2M8 18h2M12 18h2M16 18h2',
   clock:'M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zM12 6v6l4 2',
+  pencil:'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z',
+  palette:'M12 2a10 10 0 0 0 0 20c1.1 0 2-.9 2-2v-.5c0-.6.4-1 1-1h2.5a4.5 4.5 0 0 0 0-9H14a2 2 0 0 1-2-2V4a2 2 0 0 0-2-2zM7 13a1 1 0 1 1 0-2 1 1 0 0 1 0 2zm3-4a1 1 0 1 1 0-2 1 1 0 0 1 0 2zm4 0a1 1 0 1 1 0-2 1 1 0 0 1 0 2z',
 };
 const Ic = ({n,s=20,c='currentColor'}) => (
   <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -435,12 +437,17 @@ function CalendarView({me,employees,isAdmin}) {
 }
 
 // ── EMPLOYEE DASHBOARD ────────────────────────────────────────────────────────
-function EmpDashboard({me,employees,settings}) {
+function EmpDashboard({me,employees,settings,onRefresh}) {
+  const COLORS = ['#6B5876','#A8825B','#7A8B6F','#B0594F','#5876A8','#8B6F7A'];
   const now=new Date();
   const [recs,setRecs]=useState([]);
   const [sales,setSales]=useState('');
   const [extra,setExtra]=useState('');
   const [showCalc,setShowCalc]=useState(false);
+  const [showColor,setShowColor]=useState(false);
+  const [myColor,setMyColor]=useState(me.color_hex);
+  const [colorBusy,setColorBusy]=useState(false);
+  const [colorMsg,setColorMsg]=useState('');
 
   useEffect(()=>{
     const {from,to}=monthRange(now.getFullYear(),now.getMonth());
@@ -459,6 +466,16 @@ function EmpDashboard({me,employees,settings}) {
   const pctShare   = allPts>0?(myPts/allPts)*(salesAmt*pct/100):0;
   const extraAmt   = parseFloat(extra)||0;
   const total      = fixedShare+pctShare+extraAmt;
+
+  const saveColor = async () => {
+    setColorBusy(true); setColorMsg('');
+    const {error} = await sb.rpc('update_my_color', {new_color: myColor});
+    setColorBusy(false);
+    if(error){ setColorMsg('حدث خطأ، حاول مجدداً'); return; }
+    setColorMsg('تم تحديث اللون');
+    if(onRefresh) onRefresh();
+    setTimeout(()=>setColorMsg(''),2500);
+  };
 
   return (
     <div className="space-y-4">
@@ -510,6 +527,39 @@ function EmpDashboard({me,employees,settings}) {
             <div className="text-white text-3xl font-black">{fmt(total)}</div>
             <div className="text-white text-sm opacity-70">د.ع</div>
           </div>
+        </div>
+      )}
+
+      {/* Color picker */}
+      <button onClick={()=>setShowColor(v=>!v)}
+        className="w-full p-4 rounded-2xl font-bold flex items-center justify-between"
+        style={{background:C.card}}>
+        <div className="flex items-center gap-3">
+          <div className="w-7 h-7 rounded-lg" style={{background:myColor}}/>
+          <span style={{color:C.txt}}>لون ملفك الشخصي</span>
+        </div>
+        <Ic n={showColor?'chL':'chR'} s={18} c={C.primary}/>
+      </button>
+
+      {showColor && (
+        <div className="rounded-2xl p-5 shadow-sm space-y-4" style={{background:C.card}}>
+          <div className="flex gap-3 justify-center">
+            {COLORS.map(col=>(
+              <button key={col} onClick={()=>setMyColor(col)}
+                className="w-10 h-10 rounded-xl transition-transform"
+                style={{background:col,transform:myColor===col?'scale(1.2)':'scale(1)',outline:myColor===col?`2px solid ${col}`:undefined,outlineOffset:3}}/>
+            ))}
+          </div>
+          {colorMsg && (
+            <div className="text-center text-sm font-semibold" style={{color: colorMsg.includes('خطأ')?C.err:C.ok}}>
+              {colorMsg}
+            </div>
+          )}
+          <button onClick={saveColor} disabled={colorBusy}
+            className="w-full py-3 rounded-xl font-bold text-white"
+            style={{background:colorBusy?'#999':C.ok}}>
+            {colorBusy?'جاري الحفظ...':'حفظ اللون'}
+          </button>
         </div>
       )}
     </div>
@@ -775,6 +825,8 @@ function EmployeesView({employees, onRefresh}) {
   const [form, setForm] = useState({name:'',username:'',password:'',color_hex:'#A8825B',role:'employee'});
   const [resetTarget, setResetTarget] = useState(null);
   const [newPass, setNewPass] = useState('');
+  const [editTarget, setEditTarget] = useState(null);
+  const [editForm, setEditForm] = useState({});
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState({text:'',ok:true});
 
@@ -813,6 +865,22 @@ function EmployeesView({employees, onRefresh}) {
     setResetTarget(null); setNewPass('');
   };
 
+  const openEdit = emp => {
+    setEditTarget(emp);
+    setEditForm({name: emp.name, username: emp.username||'', color_hex: emp.color_hex, role: emp.role});
+  };
+
+  const saveEdit = async () => {
+    if(!editForm.name.trim()){ flash('الاسم مطلوب',false); return; }
+    setBusy(true);
+    const res = await callFn('update', {employee_id: editTarget.id, ...editForm});
+    setBusy(false);
+    if(res.error){ flash(res.error, false); return; }
+    flash('تم تحديث معلومات الموظف');
+    setEditTarget(null);
+    onRefresh();
+  };
+
   return (
     <div className="space-y-4">
       {msg.text && (
@@ -841,6 +909,11 @@ function EmployeesView({employees, onRefresh}) {
               className="flex-1 py-2 rounded-xl text-xs font-bold"
               style={{background:C.soft,color:C.txt}}>
               تغيير الباسورد
+            </button>
+            <button onClick={()=>openEdit(emp)}
+              className="py-2 px-3 rounded-xl"
+              style={{background:'#EEE8F5'}}>
+              <Ic n="pencil" s={14} c={C.primary}/>
             </button>
             <button onClick={()=>deleteEmployee(emp)}
               className="py-2 px-3 rounded-xl"
@@ -919,6 +992,60 @@ function EmployeesView({employees, onRefresh}) {
               className="w-full py-3 rounded-xl font-bold text-white"
               style={{background:busy?'#999':C.primary}}>
               {busy?'جاري...':'حفظ'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Edit employee modal */}
+      {editTarget && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center p-4"
+          style={{background:'rgba(58,47,61,0.5)'}} onClick={e=>e.target===e.currentTarget&&setEditTarget(null)}>
+          <div className="w-full max-w-sm bg-white rounded-3xl p-6 shadow-2xl mb-2 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="font-bold" style={{color:C.txt}}>تعديل: {editTarget.name}</div>
+              <button onClick={()=>setEditTarget(null)} className="p-2 rounded-xl" style={{background:C.soft}}>
+                <Ic n="x" s={16} c={C.txt}/>
+              </button>
+            </div>
+            {[['الاسم الكامل','name','text'],['اسم المستخدم','username','text']].map(([l,k,t])=>(
+              <div key={k}>
+                <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>{l}</label>
+                <input type={t} value={editForm[k]||''} onChange={e=>setEditForm(p=>({...p,[k]:e.target.value}))}
+                  className="w-full p-3 rounded-xl border text-sm outline-none"
+                  style={{borderColor:C.border,background:'#FAFAFA'}}
+                  autoCapitalize="none" autoCorrect="off"/>
+              </div>
+            ))}
+            <div>
+              <label className="text-xs font-semibold block mb-2" style={{color:C.txt}}>اللون</label>
+              <div className="flex gap-2">
+                {COLORS.map(col=>(
+                  <button key={col} onClick={()=>setEditForm(p=>({...p,color_hex:col}))}
+                    className="w-8 h-8 rounded-lg transition-transform"
+                    style={{background:col,transform:editForm.color_hex===col?'scale(1.25)':'scale(1)',outline:editForm.color_hex===col?`2px solid ${col}`:undefined,outlineOffset:2}}/>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>الصلاحية</label>
+              <div className="flex gap-2">
+                {[['employee','موظف'],['admin','مدير']].map(([v,l])=>(
+                  <button key={v} onClick={()=>setEditForm(p=>({...p,role:v}))}
+                    className="flex-1 py-2 rounded-xl text-sm font-bold"
+                    style={{background:editForm.role===v?C.primary:C.soft,color:editForm.role===v?'#fff':C.txt}}>
+                    {l}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="text-xs px-1" style={{color:C.txt,opacity:.5}}>
+              تغيير اسم المستخدم سيستلزم تسجيل الدخول مجدداً باسم المستخدم الجديد.
+            </div>
+            <button onClick={saveEdit} disabled={busy}
+              className="w-full py-3 rounded-xl font-bold text-white"
+              style={{background:busy?'#999':C.ok}}>
+              {busy?'جاري الحفظ...':'حفظ التعديلات'}
             </button>
           </div>
         </div>
@@ -1108,7 +1235,7 @@ function App() {
       {/* Page content */}
       <div className="p-4 max-w-lg mx-auto pb-24">
         {tab==='calendar'&&<CalendarView me={me} employees={employees} isAdmin={isAdmin}/>}
-        {tab==='dashboard'&&!isAdmin&&<EmpDashboard me={me} employees={employees} settings={settings}/>}
+        {tab==='dashboard'&&!isAdmin&&<EmpDashboard me={me} employees={employees} settings={settings} onRefresh={()=>loadData(session)}/>}
         {tab==='dashboard'&&isAdmin&&<AdminDashboard employees={employees} settings={settings}/>}
         {tab==='payslips'&&isAdmin&&<PayslipsView employees={employees} settings={settings}/>}
         {tab==='employees'&&isAdmin&&<EmployeesView employees={employees} onRefresh={()=>loadData(session)}/>}
