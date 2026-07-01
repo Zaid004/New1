@@ -43,14 +43,16 @@ Deno.serve(async (req) => {
   const [y, m] = month.split('-');
   const lastDay = new Date(parseInt(y), parseInt(m), 0).getDate();
 
-  // Iraq is UTC+3 — build boundaries in local Iraq time so no sales are missed
+  // Iraq is UTC+3 — boundaries in local Iraq time so no sales are missed
   const from = new Date(`${y}-${m}-01T00:00:00.000+03:00`).toISOString();
   const to   = new Date(`${y}-${m}-${String(lastDay).padStart(2, '0')}T23:59:59.999+03:00`).toISOString();
 
   // ── Fetch from Loyverse (paginated) ────────────────────────
-  let salesTotal    = 0;  // gross SALE total_money
-  let discountTotal = 0;  // all discounts (line-item level + receipt level)
-  let refundTotal   = 0;  // REFUND total_money
+  // total_money on each SALE receipt = what the customer actually paid (already net of any
+  // discount, whether stored as an explicit discount or a price override). No need to subtract
+  // discounts separately — subtracting them again would double-count.
+  let salesTotal  = 0;
+  let refundTotal = 0;
   let cursor: string | null = null;
 
   try {
@@ -75,44 +77,19 @@ Deno.serve(async (req) => {
       }
 
       const data = await res.json() as {
-        receipts: {
-          total_money: number;
-          total_discounts: number;
-          receipt_type: string;
-          line_items?: { total_discount?: number; gross_total_money?: number; total_money?: number }[];
-        }[];
+        receipts: { total_money: number; receipt_type: string }[];
         cursor?: string;
       };
 
       for (const r of data.receipts ?? []) {
-        if (r.receipt_type === 'SALE') {
-          salesTotal += r.total_money ?? 0;
-
-          // Receipt-level discount (e.g. coupon applied to whole receipt)
-          discountTotal += Math.abs(r.total_discounts ?? 0);
-
-          // Line-item level discounts — this is where Loyverse stores most discounts
-          for (const item of r.line_items ?? []) {
-            discountTotal += Math.abs(item.total_discount ?? 0);
-          }
-
-        } else if (r.receipt_type === 'REFUND') {
-          refundTotal += Math.abs(r.total_money ?? 0);
-        }
+        if (r.receipt_type === 'SALE')   salesTotal  += r.total_money ?? 0;
+        else if (r.receipt_type === 'REFUND') refundTotal += Math.abs(r.total_money ?? 0);
       }
       cursor = data.cursor ?? null;
 
     } while (cursor);
 
-    // net = gross sales − all discounts − refunds
-    const net = Math.round(salesTotal - discountTotal - refundTotal);
-
-    return json({
-      total:     net,
-      sales:     Math.round(salesTotal),
-      discounts: Math.round(discountTotal),
-      refunds:   Math.round(refundTotal),
-    });
+    return json({ total: Math.round(salesTotal - refundTotal) });
 
   } catch (e) {
     return json({ error: (e as Error).message }, 500);
