@@ -879,8 +879,12 @@ function PayslipsView({employees,settings}) {
     setLoyBusy(false);
     if(data.error){ setLoyMsg('خطأ: ' + data.error); setTimeout(()=>setLoyMsg(''),4000); return; }
     setF(p=>({...p, sales: String(data.total)}));
-    setLoyMsg(`تم جلب ${fmt(data.total)} د.ع`);
-    setTimeout(()=>setLoyMsg(''),3000);
+    const parts = [`صافي: ${fmt(data.total)}`];
+    if(data.sales    != null) parts.push(`مبيعات: ${fmt(data.sales)}`);
+    if(data.discounts!= null) parts.push(`خصومات: ${fmt(data.discounts)}`);
+    if(data.refunds  != null) parts.push(`مرتجعات: ${fmt(data.refunds)}`);
+    setLoyMsg(parts.join(' | '));
+    setTimeout(()=>setLoyMsg(''),8000);
   };
 
   const save = async () => {

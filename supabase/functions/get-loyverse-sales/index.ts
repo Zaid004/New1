@@ -35,21 +35,22 @@ Deno.serve(async (req) => {
 
   // ── Parse month ────────────────────────────────────────────
   const body = await req.json().catch(() => ({}));
-  const { month } = body; // "2026-07"
+  const { month } = body;
   if (!month || !/^\d{4}-\d{2}$/.test(month)) {
     return json({ error: 'month مطلوب بصيغة YYYY-MM' }, 400);
   }
 
   const [y, m] = month.split('-');
   const lastDay = new Date(parseInt(y), parseInt(m), 0).getDate();
-
-  // Use UTC range — extend by 3h on each side to cover Iraq (UTC+3) fully
   const from = `${y}-${m}-01T00:00:00.000Z`;
   const to   = `${y}-${m}-${String(lastDay).padStart(2, '0')}T23:59:59.000Z`;
 
   // ── Fetch from Loyverse (paginated) ────────────────────────
-  let total  = 0;
+  let salesTotal    = 0;  // sum of SALE total_money
+  let discountTotal = 0;  // sum of |SALE total_discounts|
+  let refundTotal   = 0;  // sum of |REFUND total_money|
   let cursor: string | null = null;
+  let firstReceipt: unknown = null;
 
   try {
     do {
@@ -72,22 +73,37 @@ Deno.serve(async (req) => {
         );
       }
 
-      const data = await res.json() as { receipts: { total_money: number; total_discounts: number; receipt_type: string }[]; cursor?: string };
-      if (data.receipts?.length && !cursor) {
-        const s = data.receipts[0];
-        console.log('sample receipt:', JSON.stringify({ type: s.receipt_type, total_money: s.total_money, total_discounts: s.total_discounts }));
-      }
+      const data = await res.json() as {
+        receipts: { total_money: number; total_discounts: number; receipt_type: string }[];
+        cursor?: string;
+      };
+
       for (const r of data.receipts ?? []) {
-        // total_money is already net of discounts (what the customer paid).
-        // Subtracting total_discounts again would double-count the discount and zero out the total.
-        if (r.receipt_type === 'SALE') total += r.total_money ?? 0;
-        else if (r.receipt_type === 'REFUND') total -= Math.abs(r.total_money ?? 0);
+        if (!firstReceipt) {
+          firstReceipt = { type: r.receipt_type, total_money: r.total_money, total_discounts: r.total_discounts };
+          console.log('first receipt:', JSON.stringify(firstReceipt));
+        }
+        if (r.receipt_type === 'SALE') {
+          salesTotal    += r.total_money ?? 0;
+          discountTotal += Math.abs(r.total_discounts ?? 0);
+        } else if (r.receipt_type === 'REFUND') {
+          refundTotal   += Math.abs(r.total_money ?? 0);
+        }
       }
       cursor = data.cursor ?? null;
 
     } while (cursor);
 
-    return json({ total: Math.round(total) });
+    // net = salesTotal - discountTotal - refundTotal
+    // (if total_money is gross before discounts)
+    const net = Math.round(salesTotal - discountTotal - refundTotal);
+
+    return json({
+      total:     net,
+      sales:     Math.round(salesTotal),
+      discounts: Math.round(discountTotal),
+      refunds:   Math.round(refundTotal),
+    });
 
   } catch (e) {
     return json({ error: (e as Error).message }, 500);
