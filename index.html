@@ -155,9 +155,9 @@ function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone}) {
   const upsert = async (empId, shiftType, autoGen=false) => {
     const ex = getRec(empId);
     if(ex){
-      await sb.from('attendance_records').update({shift_type:shiftType,is_auto_generated:autoGen,updated_at:new Date().toISOString()}).eq('id',ex.id);
+      return sb.from('attendance_records').update({shift_type:shiftType,is_auto_generated:autoGen,updated_at:new Date().toISOString()}).eq('id',ex.id);
     } else {
-      await sb.from('attendance_records').insert({employee_id:empId,date:dateStr,shift_type:shiftType,is_auto_generated:autoGen});
+      return sb.from('attendance_records').insert({employee_id:empId,date:dateStr,shift_type:shiftType,is_auto_generated:autoGen});
     }
   };
 
@@ -168,22 +168,20 @@ function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone}) {
 
   const handleEmp = async shiftType => {
     setBusy(true);
-    await upsert(me.id, shiftType, false);
-    if(shiftType==='half'){
-      const others = employees.filter(e=>e.id!==me.id);
-      for(const o of others){ if(!getRec(o.id)) await upsert(o.id,'half',true); }
-    }
+    const {error} = await upsert(me.id, shiftType, false);
+    if(error) console.error('upsert error:', error);
+    // الـ trigger في Supabase يتولى إنشاء/حذف سجل الزميل تلقائياً
     setBusy(false);
     onDone();
   };
 
   const removeMyRecord = async () => {
     setBusy(true);
-    await del(me.id);
-    // حذف السجلات التلقائية للزملاء التي تولّدت بسببي
-    for(const o of employees.filter(e=>e.id!==me.id)){
-      const r=getRec(o.id);
-      if(r?.is_auto_generated) await del(o.id);
+    const r = getRec(me.id);
+    if(r){
+      const {error} = await sb.from('attendance_records').delete().eq('id', r.id);
+      if(error) console.error('delete error:', error);
+      // الـ trigger يحذف سجل الزميل التلقائي تلقائياً
     }
     setBusy(false);
     onDone();
