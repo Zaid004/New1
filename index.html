@@ -701,7 +701,7 @@ function PayslipsView({employees,settings}) {
      .map(([l,v])=>`<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #F0EAE8;font-size:14px"><span style="color:#555">${l}</span><span style="font-weight:700">${fmt(v)} د.ع</span></div>`)
      .join('');
     const notesHtml=f.notes?`<div style="margin-top:20px;padding:14px;background:#FBF1EC;border-radius:10px;font-size:13px;color:#555"><strong>ملاحظة: </strong>${f.notes}</div>`:'';
-    const html=`<div style="font-family:Arial,sans-serif;direction:rtl;padding:50px;color:#3A2F3D;background:#fff;width:740px">
+    const html=`<div style="font-family:Tahoma,'Segoe UI','Arial Unicode MS',sans-serif;direction:rtl;padding:50px;color:#3A2F3D;background:#fff;width:740px;word-spacing:2px">
       <div style="text-align:center;margin-bottom:28px">
         <div style="font-size:30px;font-weight:900;color:#6B5876;letter-spacing:6px">STACKS</div>
         <div style="font-size:14px;color:#999;margin-top:6px">Stationery — كشف راتب شهري</div>
