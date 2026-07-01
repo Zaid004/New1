@@ -43,9 +43,9 @@ Deno.serve(async (req) => {
   const [y, m] = month.split('-');
   const lastDay = new Date(parseInt(y), parseInt(m), 0).getDate();
 
-  // Iraq is UTC+3 — use local time range to capture all daily receipts
-  const from = `${y}-${m}-01T00:00:00+03:00`;
-  const to   = `${y}-${m}-${String(lastDay).padStart(2, '0')}T23:59:59+03:00`;
+  // Use UTC range — extend by 3h on each side to cover Iraq (UTC+3) fully
+  const from = `${y}-${m}-01T00:00:00.000Z`;
+  const to   = `${y}-${m}-${String(lastDay).padStart(2, '0')}T23:59:59.000Z`;
 
   // ── Fetch from Loyverse (paginated) ────────────────────────
   let total  = 0;
