@@ -1,5 +1,5 @@
 const CACHE = 'stacks-v2';
-const SHELL = ['/index.html', '/icon.svg', '/manifest.json'];
+const SHELL = ['/index.html', '/icon.png', '/manifest.json'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL).catch(()=>{})));
