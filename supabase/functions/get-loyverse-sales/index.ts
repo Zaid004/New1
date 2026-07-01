@@ -72,9 +72,10 @@ Deno.serve(async (req) => {
         );
       }
 
-      const data = await res.json() as { receipts: { total_money: number; receipt_type: string }[]; cursor?: string };
+      const data = await res.json() as { receipts: { total_money: number; total_discounts: number; receipt_type: string }[]; cursor?: string };
       for (const r of data.receipts ?? []) {
-        if (r.receipt_type === 'SALE') total += r.total_money ?? 0;
+        const discounts = Math.abs(r.total_discounts ?? 0);
+        if (r.receipt_type === 'SALE') total += (r.total_money ?? 0) - discounts;
         else if (r.receipt_type === 'REFUND') total -= Math.abs(r.total_money ?? 0);
       }
       cursor = data.cursor ?? null;
