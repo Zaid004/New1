@@ -54,6 +54,8 @@ const MONTHS = ['يناير','فبراير','مارس','أبريل','مايو','
 const DAYS   = ['أحد','اثن','ثلا','أرب','خمس','جمع','سبت'];
 
 const fmt = n => new Intl.NumberFormat('en').format(Math.round(Number(n)||0));
+const fmtNum = v => { if(v===''||v===undefined||v===null) return ''; const n=Number(String(v).replace(/,/g,'')); return isNaN(n)||n===0&&v===''?'':new Intl.NumberFormat('en').format(n); };
+const parseNum = v => String(v).replace(/[^0-9.]/g,'');
 const todayStr = () => new Date().toISOString().split('T')[0];
 const monthRange = (y,m) => {
   const from = `${y}-${String(m+1).padStart(2,'0')}-01`;
@@ -512,13 +514,13 @@ function EmpDashboard({me,employees,settings,onRefresh}) {
           </div>
           <div>
             <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>حجم المبيعات (د.ع)</label>
-            <input type="number" value={sales} onChange={e=>setSales(e.target.value)}
+            <input type="text" inputMode="numeric" value={fmtNum(sales)} onChange={e=>setSales(parseNum(e.target.value))}
               className="w-full p-3 rounded-xl border text-sm outline-none"
               style={{borderColor:C.border}} placeholder="0"/>
           </div>
           <div>
             <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>مبلغ إضافي (اختياري)</label>
-            <input type="number" value={extra} onChange={e=>setExtra(e.target.value)}
+            <input type="text" inputMode="numeric" value={fmtNum(extra)} onChange={e=>setExtra(parseNum(e.target.value))}
               className="w-full p-3 rounded-xl border text-sm outline-none"
               style={{borderColor:C.border}} placeholder="0"/>
           </div>
@@ -783,7 +785,7 @@ function PayslipsView({employees,settings}) {
           {fields.map(([label,key])=>(
             <div key={key}>
               <label className="text-xs font-semibold block mb-1" style={{color:C.txt,opacity:.7}}>{label}</label>
-              <input type="number" value={f[key]} onChange={e=>setF(p=>({...p,[key]:e.target.value}))}
+              <input type="text" inputMode="numeric" value={fmtNum(f[key])} onChange={e=>setF(p=>({...p,[key]:parseNum(e.target.value)}))}
                 className="w-full p-2.5 rounded-xl border text-sm outline-none"
                 style={{borderColor:C.border,background:'#FAFAFA'}} placeholder="0"/>
             </div>
