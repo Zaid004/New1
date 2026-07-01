@@ -1,91 +1,857 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Stacks Dashboard</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap');
-        body { font-family: 'Cairo', sans-serif; }
-        @media print { .no-print { display: none !important; } }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stacks Stationery — نظام الحضور</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;900&display=swap');
+*{font-family:'Cairo',sans-serif;box-sizing:border-box}
+body{background:#FBF1EC;margin:0}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.day-cell{border-radius:10px;position:relative;overflow:hidden;min-height:64px}
+#pdf-slip{position:absolute;left:-9999px;top:0;width:210mm;padding:20mm;background:#fff;font-family:'Cairo',sans-serif;direction:rtl}
+input[type=month]::-webkit-calendar-picker-indicator{opacity:0.5;cursor:pointer}
+select,input,textarea{-webkit-appearance:none}
+</style>
 </head>
 <body>
-    <div id="root"></div>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect,useRef} = React;
 
-    <script type="text/babel">
-        const { useState, useEffect } = React;
+// ── CONFIG (replace with your Supabase credentials) ──────────────────────────
+const SUPA_URL = window.__SUPABASE_URL__ || 'YOUR_SUPABASE_URL';
+const SUPA_KEY = window.__SUPABASE_ANON_KEY__ || 'YOUR_SUPABASE_ANON_KEY';
+const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
 
-        // مكون بسيط للأيقونات ليعمل بدون Import
-        const SimpleIcon = ({ name }) => {
-            const icons = {
-                dashboard: "🏠", calculator: "🔢", users: "👥", 
-                dollar: "💵", building: "🏢", briefcase: "💼", 
-                wallet: "👛", percent: "٪", share: "📤"
-            };
-            return <span className="ml-2">{icons[name] || "•"}</span>;
-        };
+// ── THEME ────────────────────────────────────────────────────────────────────
+const C = {
+  primary:'#6B5876', bg:'#FBF1EC', e1:'#6B5876', e2:'#A8825B',
+  ok:'#7A8B6F', err:'#B0594F', txt:'#3A2F3D',
+  card:'#FFFFFF', soft:'#F5EDE8', border:'#E8DDE5'
+};
 
-        function App() {
-            const [activeTab, setActiveTab] = useState('dashboard');
-            const theme = { primary: '#67546A', primaryLight: '#847088', bg: '#FDF8F9', white: '#FFFFFF' };
+// ── HELPERS ──────────────────────────────────────────────────────────────────
+const MONTHS = ['يناير','فبراير','مارس','أبريل','مايو','يونيو',
+                'يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+const DAYS   = ['أحد','اثن','ثلا','أرب','خمس','جمع','سبت'];
 
-            // هنا نضع وظيفة الرواتب
-            const SalaryCalc = () => {
-                const [data, setData] = useState({ employeeName: '', basicSalary: '', totalSales: '', commissionRate: '', bonus: '' });
-                const commission = (parseFloat(data.totalSales) || 0) * (parseFloat(data.commissionRate) || 0) / 100;
-                const total = (parseFloat(data.basicSalary) || 0) + commission + (parseFloat(data.bonus) || 0);
+const fmt = n => new Intl.NumberFormat('en').format(Math.round(Number(n)||0));
+const todayStr = () => new Date().toISOString().split('T')[0];
+const monthRange = (y,m) => {
+  const from = `${y}-${String(m+1).padStart(2,'0')}-01`;
+  const last = new Date(y,m+1,0).getDate();
+  const to   = `${y}-${String(m+1).padStart(2,'0')}-${String(last).padStart(2,'0')}`;
+  return {from,to};
+};
+const calDays = (y,m) => {
+  const arr=[], first=new Date(y,m,1).getDay(), last=new Date(y,m+1,0).getDate();
+  for(let i=0;i<first;i++) arr.push(null);
+  for(let d=1;d<=last;d++) arr.push(d);
+  return arr;
+};
+const pts = r => r.shift_type==='full'?2:1;
+const days = r => r.shift_type==='full'?1:0.5;
 
-                return (
-                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                        <h2 className="text-xl font-bold mb-4" style={{color: theme.primary}}>حاسبة الرواتب</h2>
-                        <div className="space-y-4">
-                            <input type="text" placeholder="اسم الموظف" className="w-full p-3 border rounded-xl bg-gray-50" onChange={e => setData({...data, employeeName: e.target.value})} />
-                            <input type="number" placeholder="الراتب الأساسي" className="w-full p-3 border rounded-xl bg-gray-50" onChange={e => setData({...data, basicSalary: e.target.value})} />
-                            <div className="grid grid-cols-2 gap-2">
-                                <input type="number" placeholder="المبيعات" className="w-full p-3 border rounded-xl bg-gray-50" onChange={e => setData({...data, totalSales: e.target.value})} />
-                                <input type="number" placeholder="النسبة %" className="w-full p-3 border rounded-xl bg-gray-50" onChange={e => setData({...data, commissionRate: e.target.value})} />
-                            </div>
-                            <div className="p-4 rounded-xl text-white font-bold text-xl text-center" style={{backgroundColor: theme.primary}}>
-                                المجموع: {new Intl.NumberFormat().format(total)} د.ع
-                            </div>
-                        </div>
-                    </div>
-                );
-            };
+// ── SVG ICONS ────────────────────────────────────────────────────────────────
+const PATHS = {
+  calendar:'M8 2v3M16 2v3M3.5 9.09h17M21 8.5V17c0 3-1.5 5-5 5H8c-3.5 0-5-2-5-5V8.5c0-3 1.5-5 5-5h8c3.5 0 5 2 5 5z',
+  home:'M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M9 22V12h6v10',
+  file:'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8',
+  logout:'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9',
+  dl:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3',
+  trash:'M3 6h18M8 6V4h8v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6',
+  x:'M18 6 6 18M6 6l12 12',
+  chL:'M15 18l-6-6 6-6',
+  chR:'M9 18l6-6-6-6',
+  check:'M20 6 9 17l-5-5',
+  calc:'M4 2h16a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zM8 6h8M8 10h2M12 10h2M16 10h.01M8 14h2M12 14h2M16 14h2M8 18h2M12 18h2M16 18h2',
+};
+const Ic = ({n,s=20,c='currentColor'}) => (
+  <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d={PATHS[n]||''} />
+  </svg>
+);
 
-            return (
-                <div className="min-h-screen flex flex-col md:flex-row">
-                    {/* Sidebar */}
-                    <div className="w-full md:w-64 bg-white shadow-lg p-6 space-y-4">
-                        <div className="text-center mb-8">
-                            <div className="w-12 h-12 bg-[#67546A] text-white rounded-full flex items-center justify-center mx-auto text-xl font-bold mb-2">S</div>
-                            <h1 className="font-bold tracking-widest" style={{color: theme.primary}}>STACKS</h1>
-                        </div>
-                        <button onClick={() => setActiveTab('dashboard')} className="w-full text-right p-3 rounded-xl hover:bg-gray-50 flex items-center"><SimpleIcon name="dashboard" /> الرئيسية</button>
-                        <button onClick={() => setActiveTab('salary')} className="w-full text-right p-3 rounded-xl hover:bg-gray-50 flex items-center"><SimpleIcon name="users" /> الرواتب</button>
-                    </div>
+// ── AUTH SCREEN ───────────────────────────────────────────────────────────────
+function AuthScreen() {
+  const [email,setEmail]=useState('');
+  const [pass,setPass]=useState('');
+  const [err,setErr]=useState('');
+  const [busy,setBusy]=useState(false);
 
-                    {/* Main */}
-                    <div className="flex-1 p-4 md:p-8 bg-[#FDF8F9]">
-                        {activeTab === 'dashboard' ? (
-                            <div className="text-center mt-20">
-                                <h2 className="text-3xl font-bold mb-4" style={{color: theme.primary}}>أهلاً بك في STACKS</h2>
-                                <p className="text-gray-500 mb-8">اختر الأداة المطلوبة من القائمة الجانبية</p>
-                            </div>
-                        ) : <SalaryCalc />}
-                    </div>
+  const login = async () => {
+    setBusy(true); setErr('');
+    const {error} = await sb.auth.signInWithPassword({email,password:pass});
+    if(error) setErr('البريد أو كلمة المرور غير صحيحة');
+    setBusy(false);
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center p-4" style={{background:C.bg}}>
+      <div className="w-full max-w-sm">
+        <div className="text-center mb-10">
+          <div className="w-16 h-16 rounded-2xl mx-auto mb-3 flex items-center justify-center font-black text-2xl text-white" style={{background:C.primary}}>S</div>
+          <div className="font-black text-xl tracking-widest" style={{color:C.primary}}>STACKS</div>
+          <div className="text-xs mt-1" style={{color:C.txt,opacity:.5}}>Stationery</div>
+        </div>
+        <div className="bg-white rounded-3xl shadow-sm p-8">
+          <h2 className="font-bold text-lg mb-6" style={{color:C.txt}}>تسجيل الدخول</h2>
+          {err && <div className="mb-4 p-3 rounded-xl text-sm text-center text-white" style={{background:C.err}}>{err}</div>}
+          <div className="space-y-4">
+            <div>
+              <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>البريد الإلكتروني</label>
+              <input type="email" value={email} onChange={e=>setEmail(e.target.value)}
+                onKeyDown={e=>e.key==='Enter'&&login()}
+                className="w-full p-3 rounded-xl border text-sm outline-none"
+                style={{borderColor:C.border,background:'#FAFAFA',color:C.txt}}
+                placeholder="example@email.com" />
+            </div>
+            <div>
+              <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>كلمة المرور</label>
+              <input type="password" value={pass} onChange={e=>setPass(e.target.value)}
+                onKeyDown={e=>e.key==='Enter'&&login()}
+                className="w-full p-3 rounded-xl border text-sm outline-none"
+                style={{borderColor:C.border,background:'#FAFAFA',color:C.txt}}
+                placeholder="••••••••" />
+            </div>
+            <button onClick={login} disabled={busy}
+              className="w-full p-3 rounded-xl text-white font-bold transition-opacity"
+              style={{background:C.primary,opacity:busy?.7:1}}>
+              {busy?'جاري الدخول...':'دخول'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── DAY MODAL ────────────────────────────────────────────────────────────────
+function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone}) {
+  const [busy,setBusy]=useState(false);
+
+  const getRec = empId => recs.find(r=>r.employee_id===empId);
+
+  const upsert = async (empId, shiftType, autoGen=false) => {
+    const ex = getRec(empId);
+    if(ex){
+      await sb.from('attendance_records').update({shift_type:shiftType,is_auto_generated:autoGen,updated_at:new Date().toISOString()}).eq('id',ex.id);
+    } else {
+      await sb.from('attendance_records').insert({employee_id:empId,date:dateStr,shift_type:shiftType,is_auto_generated:autoGen});
+    }
+  };
+
+  const del = async empId => {
+    const r=getRec(empId);
+    if(r) await sb.from('attendance_records').delete().eq('id',r.id);
+  };
+
+  const handleEmp = async shiftType => {
+    setBusy(true);
+    await upsert(me.id, shiftType, false);
+    if(shiftType==='half'){
+      const others = employees.filter(e=>e.id!==me.id);
+      for(const o of others){ if(!getRec(o.id)) await upsert(o.id,'half',true); }
+    }
+    setBusy(false);
+    onDone();
+  };
+
+  const handleAdmin = async (empId, action) => {
+    setBusy(true);
+    if(action==='del') await del(empId);
+    else await upsert(empId, action, false);
+    setBusy(false);
+    onDone();
+  };
+
+  const [d,m,y] = [
+    parseInt(dateStr.split('-')[2]),
+    parseInt(dateStr.split('-')[1])-1,
+    parseInt(dateStr.split('-')[0])
+  ];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center p-4"
+      style={{background:'rgba(58,47,61,0.5)'}} onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="w-full max-w-sm bg-white rounded-3xl p-6 shadow-2xl mb-2">
+        <div className="flex items-center justify-between mb-5">
+          <div className="font-bold text-lg" style={{color:C.txt}}>{d} {MONTHS[m]} {y}</div>
+          <button onClick={onClose} className="p-2 rounded-xl" style={{background:C.soft}}>
+            <Ic n="x" s={16} c={C.txt} />
+          </button>
+        </div>
+
+        {isAdmin ? (
+          <div className="space-y-3">
+            {employees.map(emp=>{
+              const rec=getRec(emp.id);
+              return (
+                <div key={emp.id} className="p-4 rounded-2xl" style={{background:C.soft}}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-3 h-3 rounded-full" style={{background:emp.color_hex}}/>
+                    <span className="font-semibold text-sm" style={{color:C.txt}}>{emp.name}</span>
+                    {rec?.is_auto_generated&&<span className="text-xs px-2 py-0.5 rounded-full" style={{background:'#E8DDE5',color:C.primary}}>تلقائي</span>}
+                    {rec&&<span className="text-xs px-2 py-0.5 rounded-full mr-auto" style={{background:emp.color_hex+'22',color:emp.color_hex}}>{rec.shift_type==='full'?'كامل':'نص'}</span>}
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={()=>handleAdmin(emp.id,'full')}
+                      className="flex-1 py-2 rounded-xl text-xs font-bold"
+                      style={{background:rec?.shift_type==='full'?emp.color_hex:'#EEE8F0',color:rec?.shift_type==='full'?'#fff':C.txt}}>
+                      شفت كامل
+                    </button>
+                    <button onClick={()=>handleAdmin(emp.id,'half')}
+                      className="flex-1 py-2 rounded-xl text-xs font-bold"
+                      style={{background:rec?.shift_type==='half'?emp.color_hex:'#EEE8F0',color:rec?.shift_type==='half'?'#fff':C.txt}}>
+                      نص شفت
+                    </button>
+                    {rec&&(
+                      <button onClick={()=>handleAdmin(emp.id,'del')}
+                        className="py-2 px-3 rounded-xl"
+                        style={{background:'#FDECEA'}}>
+                        <Ic n="trash" s={14} c={C.err}/>
+                      </button>
+                    )}
+                  </div>
                 </div>
-            );
-        }
+              );
+            })}
+          </div>
+        ) : (
+          <div>
+            <p className="text-sm mb-4" style={{color:C.txt,opacity:.6}}>سجّل حضورك لهذا اليوم</p>
+            <div className="flex gap-3 mb-4">
+              {['full','half'].map(st=>{
+                const rec=getRec(me.id);
+                const active=rec?.shift_type===st;
+                return (
+                  <button key={st} onClick={()=>handleEmp(st)}
+                    className="flex-1 py-4 rounded-2xl font-bold flex flex-col items-center gap-1"
+                    style={{background:active?C.primary:C.soft,color:active?'#fff':C.txt}}>
+                    <span>{st==='full'?'شفت كامل':'نص شفت'}</span>
+                    <span className="text-xs opacity-70">{st==='full'?'نقطتان':'نقطة'}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {employees.filter(e=>e.id!==me.id).map(emp=>{
+              const rec=getRec(emp.id);
+              if(!rec) return null;
+              return (
+                <div key={emp.id} className="p-3 rounded-xl text-sm flex items-center gap-2" style={{background:C.soft}}>
+                  <div className="w-2 h-2 rounded-full" style={{background:emp.color_hex}}/>
+                  <span style={{color:C.txt,opacity:.7}}>{emp.name}:</span>
+                  <span className="font-semibold" style={{color:C.txt}}>{rec.shift_type==='full'?'شفت كامل':'نص شفت'}</span>
+                  {rec.is_auto_generated&&<span className="text-xs opacity-40">(تلقائي)</span>}
+                </div>
+              );
+            })}
+          </div>
+        )}
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
-    </script>
+        {busy&&<div className="mt-4 text-center text-sm" style={{color:C.primary}}>جاري الحفظ...</div>}
+      </div>
+    </div>
+  );
+}
+
+// ── CALENDAR VIEW ─────────────────────────────────────────────────────────────
+function CalendarView({me,employees,isAdmin}) {
+  const now = new Date();
+  const [vy,setVy]=useState(now.getFullYear());
+  const [vm,setVm]=useState(now.getMonth());
+  const [recs,setRecs]=useState([]);
+  const [modal,setModal]=useState(null);
+
+  const load = async (y,m) => {
+    const {from,to}=monthRange(y,m);
+    const {data}=await sb.from('attendance_records').select('*').gte('date',from).lte('date',to);
+    setRecs(data||[]);
+  };
+
+  useEffect(()=>{load(vy,vm);},[vy,vm]);
+
+  const prevMonth = () => { if(vm===0){setVy(y=>y-1);setVm(11);}else setVm(m=>m-1); };
+  const nextMonth = () => { if(vm===11){setVy(y=>y+1);setVm(0);}else setVm(m=>m+1); };
+
+  const dayRecs = d => {
+    if(!d) return [];
+    const ds=`${vy}-${String(vm+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    return recs.filter(r=>r.date===ds);
+  };
+
+  const canEdit = d => {
+    if(!d) return false;
+    if(isAdmin) return true;
+    const ds=`${vy}-${String(vm+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    return ds===todayStr();
+  };
+
+  const openDay = d => {
+    if(!canEdit(d)) return;
+    const ds=`${vy}-${String(vm+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    setModal({dateStr:ds,recs:dayRecs(d)});
+  };
+
+  const getEmpColor = id => employees.find(e=>e.id===id)?.color_hex||C.primary;
+
+  const cells = calDays(vy,vm);
+
+  return (
+    <div>
+      {/* Nav */}
+      <div className="flex items-center justify-between mb-4">
+        <button onClick={prevMonth} className="p-2 rounded-xl" style={{background:C.card,color:C.primary}}><Ic n="chR" s={18}/></button>
+        <div className="font-bold" style={{color:C.txt}}>{MONTHS[vm]} {vy}</div>
+        <button onClick={nextMonth} className="p-2 rounded-xl" style={{background:C.card,color:C.primary}}><Ic n="chL" s={18}/></button>
+      </div>
+
+      {/* Day headers */}
+      <div className="cal-grid mb-1">
+        {DAYS.map(d=>(
+          <div key={d} className="text-center text-xs font-semibold py-1" style={{color:C.txt,opacity:.4}}>{d}</div>
+        ))}
+      </div>
+
+      {/* Cells */}
+      <div className="cal-grid">
+        {cells.map((d,i)=>{
+          if(!d) return <div key={i}/>;
+          const dr=dayRecs(d);
+          const isToday=`${vy}-${String(vm+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`===todayStr();
+          const editable=canEdit(d);
+
+          let bg = C.soft;
+          let overlay = null;
+          if(dr.length===1){
+            bg=getEmpColor(dr[0].employee_id);
+          } else if(dr.length>=2){
+            const c1=getEmpColor(dr[0].employee_id), c2=getEmpColor(dr[1].employee_id);
+            overlay=(
+              <>
+                <div style={{position:'absolute',inset:0,background:c1,clipPath:'polygon(0 0,100% 0,0 100%)'}}/>
+                <div style={{position:'absolute',inset:0,background:c2,clipPath:'polygon(100% 0,100% 100%,0 100%)'}}/>
+              </>
+            );
+            bg='transparent';
+          }
+
+          return (
+            <div key={i} className="day-cell" onClick={()=>openDay(d)}
+              style={{
+                background:dr.length<2?bg:'transparent',
+                border:`2px solid ${isToday?C.primary:'transparent'}`,
+                cursor:editable?'pointer':'default',
+                transition:'transform .1s',
+              }}
+              onMouseEnter={e=>{if(editable)e.currentTarget.style.transform='scale(1.04)';}}
+              onMouseLeave={e=>{e.currentTarget.style.transform='scale(1)';}}>
+              {overlay}
+              <div style={{position:'relative',zIndex:1,padding:'4px 5px'}}>
+                <span className="text-xs font-bold leading-none" style={{color:dr.length>0?'#fff':C.txt}}>{d}</span>
+              </div>
+              {dr.length>0&&(
+                <div style={{position:'relative',zIndex:1,padding:'0 5px 4px'}}>
+                  {dr.map(r=>{
+                    const emp=employees.find(e=>e.id===r.employee_id);
+                    return (
+                      <div key={r.id} className="text-white leading-tight" style={{fontSize:9,fontWeight:700}}>
+                        {emp?.name?.split(' ')[0]} · {r.shift_type==='full'?'ك':'ن'}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Legend */}
+      <div className="flex gap-4 mt-4 justify-center">
+        {employees.map(e=>(
+          <div key={e.id} className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded-full" style={{background:e.color_hex}}/>
+            <span className="text-xs" style={{color:C.txt,opacity:.7}}>{e.name}</span>
+          </div>
+        ))}
+        <div className="flex items-center gap-1.5">
+          <div className="w-8 h-3 rounded" style={{background:`linear-gradient(to right, ${C.e1} 50%, ${C.e2} 50%)`}}/>
+          <span className="text-xs" style={{color:C.txt,opacity:.7}}>مشترك</span>
+        </div>
+      </div>
+
+      {modal&&(
+        <DayModal
+          dateStr={modal.dateStr}
+          recs={modal.recs}
+          employees={employees}
+          me={me}
+          isAdmin={isAdmin}
+          onClose={()=>setModal(null)}
+          onDone={()=>{load(vy,vm);setModal(null);}}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── EMPLOYEE DASHBOARD ────────────────────────────────────────────────────────
+function EmpDashboard({me,employees,settings}) {
+  const now=new Date();
+  const [recs,setRecs]=useState([]);
+  const [sales,setSales]=useState('');
+  const [extra,setExtra]=useState('');
+  const [showCalc,setShowCalc]=useState(false);
+
+  useEffect(()=>{
+    const {from,to}=monthRange(now.getFullYear(),now.getMonth());
+    sb.from('attendance_records').select('*').gte('date',from).lte('date',to).then(({data})=>setRecs(data||[]));
+  },[]);
+
+  const pool   = settings?.monthly_pool_amount||525000;
+  const pct    = settings?.monthly_percentage||3.2;
+  const myRecs = recs.filter(r=>r.employee_id===me.id);
+  const allPts = recs.reduce((s,r)=>s+pts(r),0);
+  const myPts  = myRecs.reduce((s,r)=>s+pts(r),0);
+  const myDays = myRecs.reduce((s,r)=>s+days(r),0);
+
+  const fixedShare = allPts>0?(myPts/allPts)*pool:0;
+  const salesAmt   = parseFloat(sales)||0;
+  const pctShare   = allPts>0?(myPts/allPts)*(salesAmt*pct/100):0;
+  const extraAmt   = parseFloat(extra)||0;
+  const total      = fixedShare+pctShare+extraAmt;
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3">
+        <div className="rounded-2xl p-5 shadow-sm" style={{background:C.card}}>
+          <div className="text-xs font-semibold mb-1" style={{color:C.txt,opacity:.5}}>أيام {MONTHS[now.getMonth()]}</div>
+          <div className="text-4xl font-black" style={{color:C.primary}}>{myDays}</div>
+        </div>
+        <div className="rounded-2xl p-5 shadow-sm" style={{background:C.card}}>
+          <div className="text-xs font-semibold mb-1" style={{color:C.txt,opacity:.5}}>النقاط</div>
+          <div className="text-4xl font-black" style={{color:C.e2}}>{myPts}</div>
+          <div className="text-xs" style={{color:C.txt,opacity:.4}}>من {allPts}</div>
+        </div>
+      </div>
+
+      <button onClick={()=>setShowCalc(v=>!v)}
+        className="w-full p-4 rounded-2xl font-bold text-white flex items-center justify-between"
+        style={{background:C.primary}}>
+        <span>حاسبة الراتب التقديرية</span>
+        <Ic n={showCalc?'chL':'chR'} s={18} c="#fff"/>
+      </button>
+
+      {showCalc&&(
+        <div className="rounded-2xl p-5 shadow-sm space-y-4" style={{background:C.card}}>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="p-3 rounded-xl" style={{background:C.soft}}>
+              <div className="text-xs mb-1" style={{color:C.txt,opacity:.5}}>الحصة الثابتة</div>
+              <div className="font-bold text-sm" style={{color:C.txt}}>{fmt(fixedShare)} د.ع</div>
+            </div>
+            <div className="p-3 rounded-xl" style={{background:C.soft}}>
+              <div className="text-xs mb-1" style={{color:C.txt,opacity:.5}}>حصة النسبة ({pct}%)</div>
+              <div className="font-bold text-sm" style={{color:C.txt}}>{fmt(pctShare)} د.ع</div>
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>حجم المبيعات (د.ع)</label>
+            <input type="number" value={sales} onChange={e=>setSales(e.target.value)}
+              className="w-full p-3 rounded-xl border text-sm outline-none"
+              style={{borderColor:C.border}} placeholder="0"/>
+          </div>
+          <div>
+            <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>مبلغ إضافي (اختياري)</label>
+            <input type="number" value={extra} onChange={e=>setExtra(e.target.value)}
+              className="w-full p-3 rounded-xl border text-sm outline-none"
+              style={{borderColor:C.border}} placeholder="0"/>
+          </div>
+          <div className="p-4 rounded-2xl text-center" style={{background:C.primary}}>
+            <div className="text-white text-xs opacity-70 mb-1">الإجمالي التقديري</div>
+            <div className="text-white text-3xl font-black">{fmt(total)}</div>
+            <div className="text-white text-sm opacity-70">د.ع</div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── ADMIN DASHBOARD ───────────────────────────────────────────────────────────
+function AdminDashboard({employees,settings}) {
+  const now=new Date();
+  const [vy,setVy]=useState(now.getFullYear());
+  const [vm,setVm]=useState(now.getMonth());
+  const [recs,setRecs]=useState([]);
+
+  useEffect(()=>{
+    const {from,to}=monthRange(vy,vm);
+    sb.from('attendance_records').select('*').gte('date',from).lte('date',to).then(({data})=>setRecs(data||[]));
+  },[vy,vm]);
+
+  const pool   = settings?.monthly_pool_amount||525000;
+  const allPts = recs.reduce((s,r)=>s+pts(r),0);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="font-bold" style={{color:C.txt}}>إحصائيات الشهر</h2>
+        <div className="flex items-center gap-2">
+          <button onClick={()=>{if(vm===0){setVy(y=>y-1);setVm(11);}else setVm(m=>m-1)}}
+            className="p-1.5 rounded-lg" style={{background:C.soft,color:C.primary}}><Ic n="chR" s={16}/></button>
+          <span className="text-sm font-semibold" style={{color:C.txt}}>{MONTHS[vm]}</span>
+          <button onClick={()=>{if(vm===11){setVy(y=>y+1);setVm(0);}else setVm(m=>m+1)}}
+            className="p-1.5 rounded-lg" style={{background:C.soft,color:C.primary}}><Ic n="chL" s={16}/></button>
+        </div>
+      </div>
+
+      {employees.map(emp=>{
+        const er=recs.filter(r=>r.employee_id===emp.id);
+        const ep=er.reduce((s,r)=>s+pts(r),0);
+        const ed=er.reduce((s,r)=>s+days(r),0);
+        const fs=allPts>0?(ep/allPts)*pool:0;
+        return (
+          <div key={emp.id} className="rounded-2xl p-5 shadow-sm" style={{background:C.card}}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold"
+                style={{background:emp.color_hex}}>
+                {emp.name.charAt(0)}
+              </div>
+              <div>
+                <div className="font-bold" style={{color:C.txt}}>{emp.name}</div>
+                <div className="text-xs" style={{color:C.txt,opacity:.4}}>{emp.role==='admin'?'مدير':'موظف'}</div>
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              {[['أيام',ed,C.primary],['نقاط',ep,C.e2],['ثابت (تقديري)',fmt(fs)+' د.ع',C.ok]].map(([l,v,col])=>(
+                <div key={l} className="p-2 rounded-xl" style={{background:C.soft}}>
+                  <div className="font-black text-base leading-tight" style={{color:col}}>{v}</div>
+                  <div className="text-xs mt-0.5" style={{color:C.txt,opacity:.5}}>{l}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── PAYSLIPS (ADMIN) ──────────────────────────────────────────────────────────
+function PayslipsView({employees,settings}) {
+  const now=new Date();
+  const [empId,setEmpId]=useState(employees[0]?.id||'');
+  const [month,setMonth]=useState(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`);
+  const [recs,setRecs]=useState([]);
+  const [f,setF]=useState({fixed:'',pct:'',sales:'',bonus:'',extra:'',notes:''});
+  const [busy,setBusy]=useState(false);
+  const [saved,setSaved]=useState(false);
+
+  const pool = settings?.monthly_pool_amount||525000;
+  const pct  = settings?.monthly_percentage||3.2;
+
+  const [y,m] = month.split('-');
+  const monthDate = `${y}-${m}-01`;
+
+  useEffect(()=>{
+    if(!empId||!month) return;
+    const [yr,mo]=month.split('-');
+    const from=`${yr}-${mo}-01`;
+    const last=new Date(parseInt(yr),parseInt(mo),0).getDate();
+    const to=`${yr}-${mo}-${String(last).padStart(2,'0')}`;
+
+    Promise.all([
+      sb.from('attendance_records').select('*').gte('date',from).lte('date',to),
+      sb.from('payslips').select('*').eq('employee_id',empId).eq('month',from).maybeSingle()
+    ]).then(([{data:recData},{data:slip}])=>{
+      const r=recData||[];
+      setRecs(r);
+      if(slip){
+        setF({fixed:slip.fixed_amount||'',pct:slip.percentage_amount||'',sales:slip.sales_amount||'',
+              bonus:slip.bonus||'',extra:slip.extra_amount||'',notes:slip.notes||''});
+      } else {
+        const allP=r.reduce((s,x)=>s+pts(x),0);
+        const empP=r.filter(x=>x.employee_id===empId).reduce((s,x)=>s+pts(x),0);
+        const fs=allP>0?(empP/allP)*pool:0;
+        setF({fixed:Math.round(fs),pct:'',sales:'',bonus:'',extra:'',notes:''});
+      }
+    });
+  },[empId,month]);
+
+  useEffect(()=>{
+    if(!recs.length) return;
+    const allP=recs.reduce((s,r)=>s+pts(r),0);
+    const empP=recs.filter(r=>r.employee_id===empId).reduce((s,r)=>s+pts(r),0);
+    const salesAmt=parseFloat(f.sales)||0;
+    const share=allP>0?(empP/allP)*(salesAmt*pct/100):0;
+    setF(p=>({...p,pct:Math.round(share)}));
+  },[f.sales,recs,empId]);
+
+  const total=(parseFloat(f.fixed)||0)+(parseFloat(f.pct)||0)+(parseFloat(f.bonus)||0)+(parseFloat(f.extra)||0);
+
+  const save = async () => {
+    setBusy(true);
+    const payload={employee_id:empId,month:monthDate,fixed_amount:parseFloat(f.fixed)||0,
+      percentage_amount:parseFloat(f.pct)||0,sales_amount:parseFloat(f.sales)||0,
+      bonus:parseFloat(f.bonus)||0,extra_amount:parseFloat(f.extra)||0,notes:f.notes};
+    const {data:ex}=await sb.from('payslips').select('id').eq('employee_id',empId).eq('month',monthDate).maybeSingle();
+    if(ex) await sb.from('payslips').update(payload).eq('id',ex.id);
+    else await sb.from('payslips').insert(payload);
+    setBusy(false); setSaved(true); setTimeout(()=>setSaved(false),2500);
+  };
+
+  const exportPdf = () => {
+    const emp=employees.find(e=>e.id===empId);
+    const el=document.getElementById('pdf-slip');
+    el.style.display='block';
+    html2pdf().set({
+      margin:0,filename:`كشف-${emp?.name}-${MONTHS[parseInt(m)-1]}-${y}.pdf`,
+      html2canvas:{scale:2,useCORS:true},
+      jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}
+    }).from(el).save().then(()=>{el.style.display='none';});
+  };
+
+  const emp=employees.find(e=>e.id===empId);
+  const er=recs.filter(r=>r.employee_id===empId);
+  const allP=recs.reduce((s,r)=>s+pts(r),0);
+  const empP=er.reduce((s,r)=>s+pts(r),0);
+  const empD=er.reduce((s,r)=>s+days(r),0);
+
+  const fields=[
+    ['المبلغ الثابت','fixed'],['حصة النسبة','pct'],['حجم المبيعات','sales'],
+    ['بونص (اختياري)','bonus'],['مبلغ إضافي (اختياري)','extra'],
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>الموظف</label>
+          <select value={empId} onChange={e=>setEmpId(e.target.value)}
+            className="w-full p-3 rounded-xl border text-sm outline-none bg-white"
+            style={{borderColor:C.border,color:C.txt}}>
+            {employees.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>الشهر</label>
+          <input type="month" value={month} onChange={e=>setMonth(e.target.value)}
+            className="w-full p-3 rounded-xl border text-sm outline-none bg-white"
+            style={{borderColor:C.border,color:C.txt}}/>
+        </div>
+      </div>
+
+      <div className="flex gap-2">
+        {[['يوم',empD,C.primary],['نقطة',empP,C.e2],['مجموع',allP,C.ok]].map(([l,v,col])=>(
+          <div key={l} className="flex-1 rounded-2xl p-3 text-center shadow-sm" style={{background:C.card}}>
+            <div className="text-2xl font-black" style={{color:col}}>{v}</div>
+            <div className="text-xs" style={{color:C.txt,opacity:.5}}>{l}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="rounded-2xl p-5 shadow-sm space-y-3" style={{background:C.card}}>
+        <h3 className="font-bold" style={{color:C.txt}}>بيانات الكشف</h3>
+        <div className="grid grid-cols-2 gap-3">
+          {fields.map(([label,key])=>(
+            <div key={key}>
+              <label className="text-xs font-semibold block mb-1" style={{color:C.txt,opacity:.7}}>{label}</label>
+              <input type="number" value={f[key]} onChange={e=>setF(p=>({...p,[key]:e.target.value}))}
+                className="w-full p-2.5 rounded-xl border text-sm outline-none"
+                style={{borderColor:C.border,background:'#FAFAFA'}} placeholder="0"/>
+            </div>
+          ))}
+        </div>
+        <div>
+          <label className="text-xs font-semibold block mb-1" style={{color:C.txt,opacity:.7}}>ملاحظة</label>
+          <textarea value={f.notes} onChange={e=>setF(p=>({...p,notes:e.target.value}))}
+            rows={2} className="w-full p-2.5 rounded-xl border text-sm outline-none resize-none"
+            style={{borderColor:C.border,background:'#FAFAFA'}} placeholder="ملاحظة اختيارية..."/>
+        </div>
+        <div className="p-3 rounded-xl text-center" style={{background:C.soft}}>
+          <div className="text-xs" style={{color:C.txt,opacity:.5}}>الإجمالي</div>
+          <div className="text-2xl font-black" style={{color:C.primary}}>{fmt(total)} <span className="text-base">د.ع</span></div>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={save} disabled={busy}
+            className="flex-1 py-3 rounded-xl font-bold text-white text-sm"
+            style={{background:saved?C.ok:busy?'#999':C.primary}}>
+            {saved?'تم الحفظ':busy?'جاري...':'حفظ'}
+          </button>
+          <button onClick={exportPdf}
+            className="flex-1 py-3 rounded-xl font-bold text-white text-sm flex items-center justify-center gap-2"
+            style={{background:C.e2}}>
+            <Ic n="dl" s={16} c="#fff"/>
+            تصدير PDF
+          </button>
+        </div>
+      </div>
+
+      {/* PDF Template (hidden, rendered off-screen) */}
+      <div id="pdf-slip" style={{display:'none'}}>
+        <div style={{fontFamily:'Cairo,sans-serif',direction:'rtl',padding:'20mm',color:C.txt,background:'#fff'}}>
+          <div style={{textAlign:'center',marginBottom:24}}>
+            <div style={{fontSize:28,fontWeight:900,color:C.primary,letterSpacing:4}}>STACKS</div>
+            <div style={{fontSize:13,color:'#888',marginTop:2}}>Stationery — كشف راتب شهري</div>
+          </div>
+          <div style={{borderTop:`3px solid ${C.primary}`,marginBottom:24}}/>
+          <div style={{display:'flex',justifyContent:'space-between',marginBottom:20}}>
+            <div>
+              <div style={{fontSize:11,color:'#999',marginBottom:2}}>الموظف</div>
+              <div style={{fontSize:20,fontWeight:900}}>{emp?.name}</div>
+            </div>
+            <div style={{textAlign:'left'}}>
+              <div style={{fontSize:11,color:'#999',marginBottom:2}}>الشهر</div>
+              <div style={{fontSize:20,fontWeight:900}}>{MONTHS[parseInt(m)-1]} {y}</div>
+            </div>
+          </div>
+          <div style={{background:C.soft,borderRadius:12,padding:16,marginBottom:24}}>
+            {[['أيام الدوام',empD+' يوم'],['النقاط المكتسبة',empP+' نقطة'],['من إجمالي نقاط الشهر',allP+' نقطة']].map(([l,v])=>(
+              <div key={l} style={{display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid #EEE8E5',fontSize:13}}>
+                <span style={{color:'#666'}}>{l}</span>
+                <span style={{fontWeight:700}}>{v}</span>
+              </div>
+            ))}
+          </div>
+          {[
+            ['المبلغ الثابت (حصة من المجموع الشهري)',f.fixed],
+            ['حصة النسبة من المبيعات',f.pct],
+            ['بونص',f.bonus],
+            ['مبلغ إضافي',f.extra],
+          ].filter(([,v])=>parseFloat(v)>0).map(([l,v])=>(
+            <div key={l} style={{display:'flex',justifyContent:'space-between',padding:'10px 0',borderBottom:'1px solid #F0EAE8',fontSize:13}}>
+              <span style={{color:'#555'}}>{l}</span>
+              <span style={{fontWeight:700}}>{fmt(v)} د.ع</span>
+            </div>
+          ))}
+          <div style={{display:'flex',justifyContent:'space-between',padding:'16px 0',borderTop:`2px solid ${C.primary}`,marginTop:8}}>
+            <span style={{fontWeight:900,fontSize:16}}>الإجمالي</span>
+            <span style={{fontWeight:900,fontSize:20,color:C.primary}}>{fmt(total)} د.ع</span>
+          </div>
+          {f.notes&&(
+            <div style={{marginTop:20,padding:14,background:C.soft,borderRadius:10,fontSize:13,color:'#555'}}>
+              <strong style={{color:C.txt}}>ملاحظة: </strong>{f.notes}
+            </div>
+          )}
+          <div style={{marginTop:40,borderTop:'1px solid #EEE',paddingTop:12,fontSize:11,color:'#AAA',textAlign:'center'}}>
+            صدر بتاريخ {new Date().toLocaleDateString('ar-IQ')} · STACKS Stationery
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── MAIN APP ──────────────────────────────────────────────────────────────────
+function App() {
+  const [session,setSession]=useState(undefined);
+  const [me,setMe]=useState(null);
+  const [employees,setEmployees]=useState([]);
+  const [settings,setSettings]=useState(null);
+  const [tab,setTab]=useState('calendar');
+
+  useEffect(()=>{
+    sb.auth.getSession().then(({data:{session:s}})=>{
+      setSession(s);
+      if(s) loadData(s);
+      else setSession(null);
+    });
+    const {data:{subscription}}=sb.auth.onAuthStateChange((_,s)=>{
+      setSession(s);
+      if(s) loadData(s);
+      else {setMe(null);setEmployees([]);}
+    });
+    return ()=>subscription.unsubscribe();
+  },[]);
+
+  const loadData = async s => {
+    const [{data:emps},{data:sets}]=await Promise.all([
+      sb.from('employees').select('*'),
+      sb.from('settings').select('*').order('effective_from',{ascending:false}).limit(1).maybeSingle()
+    ]);
+    const all=emps||[];
+    setEmployees(all);
+    setMe(all.find(e=>e.auth_user_id===s.user.id)||null);
+    setSettings(sets);
+  };
+
+  const logout = async () => {
+    await sb.auth.signOut();
+    setMe(null); setSession(null); setTab('calendar');
+  };
+
+  if(session===undefined) return (
+    <div className="min-h-screen flex items-center justify-center" style={{background:C.bg}}>
+      <div className="text-center">
+        <div className="w-14 h-14 rounded-2xl mx-auto mb-3 flex items-center justify-center font-black text-xl text-white" style={{background:C.primary}}>S</div>
+        <div className="text-sm" style={{color:C.txt,opacity:.4}}>جاري التحميل...</div>
+      </div>
+    </div>
+  );
+
+  if(!session||!me) return <AuthScreen/>;
+
+  const isAdmin=me.role==='admin';
+  const tabs=[
+    {id:'calendar',label:'التقويم',icon:'calendar'},
+    {id:'dashboard',label:'الرئيسية',icon:'home'},
+    ...(isAdmin?[{id:'payslips',label:'الرواتب',icon:'file'}]:[]),
+  ];
+
+  return (
+    <div className="min-h-screen" style={{background:C.bg}}>
+      {/* Header */}
+      <div className="bg-white shadow-sm px-4 py-3 flex items-center justify-between sticky top-0 z-40">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-xl flex items-center justify-center font-black text-sm text-white" style={{background:C.primary}}>S</div>
+          <div>
+            <div className="text-xs font-black tracking-widest leading-none" style={{color:C.primary}}>STACKS</div>
+            <div className="text-xs leading-none mt-0.5" style={{color:C.txt,opacity:.45}}>{me.name}</div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {isAdmin&&<span className="text-xs px-2 py-1 rounded-lg font-semibold" style={{background:'#F0EAF0',color:C.primary}}>مدير</span>}
+          <button onClick={logout} className="p-2 rounded-xl" style={{background:C.soft}}>
+            <Ic n="logout" s={17} c={C.err}/>
+          </button>
+        </div>
+      </div>
+
+      {/* Page content */}
+      <div className="p-4 max-w-lg mx-auto pb-24">
+        {tab==='calendar'&&<CalendarView me={me} employees={employees} isAdmin={isAdmin}/>}
+        {tab==='dashboard'&&!isAdmin&&<EmpDashboard me={me} employees={employees} settings={settings}/>}
+        {tab==='dashboard'&&isAdmin&&<AdminDashboard employees={employees} settings={settings}/>}
+        {tab==='payslips'&&isAdmin&&<PayslipsView employees={employees} settings={settings}/>}
+      </div>
+
+      {/* Bottom nav */}
+      <div className="fixed bottom-0 inset-x-0 bg-white border-t" style={{borderColor:C.border}}>
+        <div className="flex max-w-lg mx-auto">
+          {tabs.map(t=>(
+            <button key={t.id} onClick={()=>setTab(t.id)}
+              className="flex-1 py-3 flex flex-col items-center gap-0.5 transition-colors"
+              style={{color:tab===t.id?C.primary:'#BBB'}}>
+              <Ic n={t.icon} s={22} c={tab===t.id?C.primary:'#BBB'}/>
+              <span className="text-xs font-semibold">{t.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
 </body>
 </html>

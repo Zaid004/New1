@@ -1,0 +1,141 @@
+-- ════════════════════════════════════════════════════════════
+-- STACKS STATIONERY — Supabase Database Setup
+-- Run this in your Supabase SQL Editor
+-- ════════════════════════════════════════════════════════════
+
+-- 1. EMPLOYEES
+create table if not exists employees (
+  id            uuid primary key default gen_random_uuid(),
+  name          text not null,
+  color_hex     text not null default '#6B5876',
+  auth_user_id  uuid references auth.users(id) on delete cascade,
+  role          text not null default 'employee' check (role in ('admin','employee')),
+  created_at    timestamptz default now()
+);
+
+-- 2. ATTENDANCE RECORDS
+create table if not exists attendance_records (
+  id                uuid primary key default gen_random_uuid(),
+  employee_id       uuid not null references employees(id) on delete cascade,
+  date              date not null,
+  shift_type        text not null check (shift_type in ('full','half')),
+  is_auto_generated boolean not null default false,
+  created_at        timestamptz default now(),
+  updated_at        timestamptz default now(),
+  unique (employee_id, date)
+);
+
+-- 3. SALARY INPUTS (employee personal calc persistence)
+create table if not exists salary_inputs (
+  id          uuid primary key default gen_random_uuid(),
+  employee_id uuid not null references employees(id) on delete cascade,
+  month       date not null,
+  sales_amount  numeric default 0,
+  extra_amount  numeric default 0,
+  updated_at  timestamptz default now(),
+  unique (employee_id, month)
+);
+
+-- 4. PAYSLIPS (admin only)
+create table if not exists payslips (
+  id                 uuid primary key default gen_random_uuid(),
+  employee_id        uuid not null references employees(id) on delete cascade,
+  month              date not null,
+  fixed_amount       numeric default 0,
+  percentage_amount  numeric default 0,
+  sales_amount       numeric default 0,
+  bonus              numeric default 0,
+  extra_amount       numeric default 0,
+  notes              text default '',
+  created_at         timestamptz default now(),
+  created_by         uuid references employees(id)
+);
+
+-- 5. SETTINGS
+create table if not exists settings (
+  id                   uuid primary key default gen_random_uuid(),
+  monthly_pool_amount  numeric not null default 525000,
+  monthly_percentage   numeric not null default 3.2,
+  effective_from       date not null default current_date
+);
+
+-- Insert default settings row
+insert into settings (monthly_pool_amount, monthly_percentage, effective_from)
+values (525000, 3.2, current_date)
+on conflict do nothing;
+
+-- ════════════════════════════════════════════════════════════
+-- ROW LEVEL SECURITY
+-- ════════════════════════════════════════════════════════════
+
+alter table employees          enable row level security;
+alter table attendance_records enable row level security;
+alter table salary_inputs      enable row level security;
+alter table payslips           enable row level security;
+alter table settings           enable row level security;
+
+-- Helper: get current employee's role
+create or replace function current_employee_role()
+returns text language sql stable security definer as $$
+  select role from employees where auth_user_id = auth.uid() limit 1;
+$$;
+
+-- Helper: get current employee's id
+create or replace function current_employee_id()
+returns uuid language sql stable security definer as $$
+  select id from employees where auth_user_id = auth.uid() limit 1;
+$$;
+
+-- ── employees: all logged-in users can read; only admin can write ──
+create policy "emp_read" on employees for select
+  using (auth.uid() is not null);
+
+create policy "emp_admin_write" on employees for all
+  using (current_employee_role() = 'admin');
+
+-- ── attendance_records: all read; employee writes own today only; admin writes all ──
+create policy "att_read" on attendance_records for select
+  using (auth.uid() is not null);
+
+create policy "att_employee_write" on attendance_records for insert
+  with check (
+    employee_id = current_employee_id()
+    and date = current_date
+  );
+
+create policy "att_employee_update" on attendance_records for update
+  using (
+    employee_id = current_employee_id()
+    and date = current_date
+  );
+
+create policy "att_admin_all" on attendance_records for all
+  using (current_employee_role() = 'admin');
+
+-- ── salary_inputs: employee manages own rows ──
+create policy "si_own" on salary_inputs for all
+  using (employee_id = current_employee_id());
+
+create policy "si_admin" on salary_inputs for all
+  using (current_employee_role() = 'admin');
+
+-- ── payslips: admin only ──
+create policy "pay_admin" on payslips for all
+  using (current_employee_role() = 'admin');
+
+-- ── settings: all read; admin write ──
+create policy "set_read" on settings for select
+  using (auth.uid() is not null);
+
+create policy "set_admin" on settings for all
+  using (current_employee_role() = 'admin');
+
+-- ════════════════════════════════════════════════════════════
+-- SAMPLE DATA (run after creating auth users)
+-- Replace UUIDs with actual auth.users IDs from your Supabase Auth dashboard
+-- ════════════════════════════════════════════════════════════
+
+-- insert into employees (name, color_hex, auth_user_id, role)
+-- values
+--   ('اسم المدير',   '#6B5876', 'AUTH_USER_ID_ADMIN',    'admin'),
+--   ('اسم الموظف',  '#A8825B', 'AUTH_USER_ID_EMPLOYEE',  'employee');
