@@ -7,6 +7,7 @@
 create table if not exists employees (
   id            uuid primary key default gen_random_uuid(),
   name          text not null,
+  username      text unique,                                   -- اسم الدخول (بدون إيميل)
   color_hex     text not null default '#6B5876',
   auth_user_id  uuid references auth.users(id) on delete cascade,
   role          text not null default 'employee' check (role in ('admin','employee')),
@@ -131,11 +132,19 @@ create policy "set_admin" on settings for all
   using (current_employee_role() = 'admin');
 
 -- ════════════════════════════════════════════════════════════
--- SAMPLE DATA (run after creating auth users)
--- Replace UUIDs with actual auth.users IDs from your Supabase Auth dashboard
+-- IF YOU ALREADY RAN THIS SCRIPT BEFORE — run only this:
+-- ════════════════════════════════════════════════════════════
+-- alter table employees add column if not exists username text unique;
+
+-- ════════════════════════════════════════════════════════════
+-- SAMPLE DATA
+-- الإضافة تتم من داخل التطبيق (شاشة الموظفون) بعد نشر Edge Function
+-- أو يدوياً عبر Supabase Auth + employees table
 -- ════════════════════════════════════════════════════════════
 
--- insert into employees (name, color_hex, auth_user_id, role)
--- values
---   ('اسم المدير',   '#6B5876', 'AUTH_USER_ID_ADMIN',    'admin'),
---   ('اسم الموظف',  '#A8825B', 'AUTH_USER_ID_EMPLOYEE',  'employee');
+-- لإضافة المدير يدوياً (مرة واحدة فقط):
+-- 1. أنشئ المستخدم في Supabase → Authentication → Users
+--    البريد: admin@stacks-internal.app  |  كلمة المرور: تختارها
+-- 2. ثم شغّل:
+-- insert into employees (name, username, color_hex, auth_user_id, role)
+-- values ('اسم المدير', 'admin', '#6B5876', 'AUTH_USER_ID_FROM_SUPABASE_AUTH', 'admin');

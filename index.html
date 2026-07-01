@@ -31,6 +31,17 @@ const SUPA_URL = window.__SUPABASE_URL__ || 'YOUR_SUPABASE_URL';
 const SUPA_KEY = window.__SUPABASE_ANON_KEY__ || 'YOUR_SUPABASE_ANON_KEY';
 const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
 
+// Edge Function helper (admin operations)
+const callFn = async (action, payload) => {
+  const {data:{session}} = await sb.auth.getSession();
+  const res = await fetch(`${SUPA_URL}/functions/v1/manage-employee`, {
+    method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':`Bearer ${session.access_token}`},
+    body: JSON.stringify({action,...payload}),
+  });
+  return res.json();
+};
+
 // ── THEME ────────────────────────────────────────────────────────────────────
 const C = {
   primary:'#6B5876', bg:'#FBF1EC', e1:'#6B5876', e2:'#A8825B',
@@ -82,15 +93,17 @@ const Ic = ({n,s=20,c='currentColor'}) => (
 
 // ── AUTH SCREEN ───────────────────────────────────────────────────────────────
 function AuthScreen() {
-  const [email,setEmail]=useState('');
+  const [username,setUsername]=useState('');
   const [pass,setPass]=useState('');
   const [err,setErr]=useState('');
   const [busy,setBusy]=useState(false);
 
   const login = async () => {
+    if(!username.trim()||!pass){setErr('أدخل اسم المستخدم وكلمة المرور');return;}
     setBusy(true); setErr('');
+    const email=`${username.trim().toLowerCase()}@stacks-internal.app`;
     const {error} = await sb.auth.signInWithPassword({email,password:pass});
-    if(error) setErr('البريد أو كلمة المرور غير صحيحة');
+    if(error) setErr('اسم المستخدم أو كلمة المرور غير صحيحة');
     setBusy(false);
   };
 
@@ -107,12 +120,12 @@ function AuthScreen() {
           {err && <div className="mb-4 p-3 rounded-xl text-sm text-center text-white" style={{background:C.err}}>{err}</div>}
           <div className="space-y-4">
             <div>
-              <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>البريد الإلكتروني</label>
-              <input type="email" value={email} onChange={e=>setEmail(e.target.value)}
+              <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>اسم المستخدم</label>
+              <input type="text" value={username} onChange={e=>setUsername(e.target.value)}
                 onKeyDown={e=>e.key==='Enter'&&login()}
                 className="w-full p-3 rounded-xl border text-sm outline-none"
                 style={{borderColor:C.border,background:'#FAFAFA',color:C.txt}}
-                placeholder="example@email.com" />
+                placeholder="مثال: ahmad" autoCapitalize="none" autoCorrect="off" />
             </div>
             <div>
               <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>كلمة المرور</label>
@@ -751,6 +764,165 @@ function PayslipsView({employees,settings}) {
   );
 }
 
+// ── EMPLOYEES MANAGEMENT (ADMIN) ─────────────────────────────────────────────
+function EmployeesView({employees, onRefresh}) {
+  const COLORS = ['#6B5876','#A8825B','#7A8B6F','#B0594F','#5876A8','#8B6F7A'];
+  const [showAdd, setShowAdd] = useState(false);
+  const [form, setForm] = useState({name:'',username:'',password:'',color_hex:'#A8825B',role:'employee'});
+  const [resetTarget, setResetTarget] = useState(null);
+  const [newPass, setNewPass] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState({text:'',ok:true});
+
+  const flash = (text, ok=true) => { setMsg({text,ok}); setTimeout(()=>setMsg({text:'',ok:true}),3000); };
+
+  const addEmployee = async () => {
+    if(!form.name.trim()||!form.username.trim()||!form.password) { flash('يرجى تعبئة جميع الحقول',false); return; }
+    if(form.password.length<6) { flash('كلمة المرور 6 أحرف على الأقل',false); return; }
+    setBusy(true);
+    const res = await callFn('create', form);
+    setBusy(false);
+    if(res.error){ flash(res.error, false); return; }
+    flash('تم إضافة الموظف بنجاح');
+    setForm({name:'',username:'',password:'',color_hex:'#A8825B',role:'employee'});
+    setShowAdd(false);
+    onRefresh();
+  };
+
+  const deleteEmployee = async (emp) => {
+    if(!confirm(`حذف ${emp.name}؟ لا يمكن التراجع.`)) return;
+    setBusy(true);
+    const res = await callFn('delete', {employee_id: emp.id});
+    setBusy(false);
+    if(res.error){ flash(res.error, false); return; }
+    flash('تم الحذف');
+    onRefresh();
+  };
+
+  const resetPassword = async () => {
+    if(!newPass||newPass.length<6){ flash('6 أحرف على الأقل',false); return; }
+    setBusy(true);
+    const res = await callFn('reset_password', {employee_id: resetTarget.id, new_password: newPass});
+    setBusy(false);
+    if(res.error){ flash(res.error, false); return; }
+    flash('تم تغيير كلمة المرور');
+    setResetTarget(null); setNewPass('');
+  };
+
+  return (
+    <div className="space-y-4">
+      {msg.text && (
+        <div className="p-3 rounded-xl text-sm text-center text-white" style={{background: msg.ok?C.ok:C.err}}>
+          {msg.text}
+        </div>
+      )}
+
+      {/* Employee list */}
+      {employees.map(emp => (
+        <div key={emp.id} className="rounded-2xl p-4 shadow-sm" style={{background:C.card}}>
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold"
+              style={{background:emp.color_hex}}>
+              {emp.name.charAt(0)}
+            </div>
+            <div className="flex-1">
+              <div className="font-bold" style={{color:C.txt}}>{emp.name}</div>
+              <div className="text-xs" style={{color:C.txt,opacity:.45}}>
+                {emp.username ? `@${emp.username}` : ''} · {emp.role==='admin'?'مدير':'موظف'}
+              </div>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={()=>{setResetTarget(emp);setNewPass('');}}
+              className="flex-1 py-2 rounded-xl text-xs font-bold"
+              style={{background:C.soft,color:C.txt}}>
+              تغيير الباسورد
+            </button>
+            <button onClick={()=>deleteEmployee(emp)}
+              className="py-2 px-3 rounded-xl"
+              style={{background:'#FDECEA'}}>
+              <Ic n="trash" s={14} c={C.err}/>
+            </button>
+          </div>
+        </div>
+      ))}
+
+      {/* Add button */}
+      <button onClick={()=>setShowAdd(v=>!v)}
+        className="w-full p-4 rounded-2xl font-bold text-white flex items-center justify-between"
+        style={{background:C.primary}}>
+        <span>إضافة موظف جديد</span>
+        <Ic n={showAdd?'chL':'chR'} s={18} c="#fff"/>
+      </button>
+
+      {/* Add form */}
+      {showAdd && (
+        <div className="rounded-2xl p-5 shadow-sm space-y-3" style={{background:C.card}}>
+          {[['الاسم الكامل','name','text','مثال: أحمد محمد'],['اسم المستخدم للدخول','username','text','مثال: ahmad'],['كلمة المرور','password','password','6 أحرف على الأقل']].map(([l,k,t,ph])=>(
+            <div key={k}>
+              <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>{l}</label>
+              <input type={t} value={form[k]} onChange={e=>setForm(p=>({...p,[k]:e.target.value}))}
+                className="w-full p-3 rounded-xl border text-sm outline-none"
+                style={{borderColor:C.border,background:'#FAFAFA'}}
+                placeholder={ph} autoCapitalize="none" autoCorrect="off"/>
+            </div>
+          ))}
+          <div>
+            <label className="text-xs font-semibold block mb-2" style={{color:C.txt}}>اللون</label>
+            <div className="flex gap-2">
+              {COLORS.map(col=>(
+                <button key={col} onClick={()=>setForm(p=>({...p,color_hex:col}))}
+                  className="w-8 h-8 rounded-lg transition-transform"
+                  style={{background:col,transform:form.color_hex===col?'scale(1.25)':'scale(1)',outline:form.color_hex===col?`2px solid ${col}`:undefined,outlineOffset:2}}/>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>الصلاحية</label>
+            <div className="flex gap-2">
+              {[['employee','موظف'],['admin','مدير']].map(([v,l])=>(
+                <button key={v} onClick={()=>setForm(p=>({...p,role:v}))}
+                  className="flex-1 py-2 rounded-xl text-sm font-bold"
+                  style={{background:form.role===v?C.primary:C.soft,color:form.role===v?'#fff':C.txt}}>
+                  {l}
+                </button>
+              ))}
+            </div>
+          </div>
+          <button onClick={addEmployee} disabled={busy}
+            className="w-full py-3 rounded-xl font-bold text-white"
+            style={{background:busy?'#999':C.ok}}>
+            {busy?'جاري الإضافة...':'إضافة الموظف'}
+          </button>
+        </div>
+      )}
+
+      {/* Reset password modal */}
+      {resetTarget && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center p-4"
+          style={{background:'rgba(58,47,61,0.5)'}} onClick={e=>e.target===e.currentTarget&&setResetTarget(null)}>
+          <div className="w-full max-w-sm bg-white rounded-3xl p-6 shadow-2xl mb-2">
+            <div className="flex items-center justify-between mb-4">
+              <div className="font-bold" style={{color:C.txt}}>تغيير كلمة مرور {resetTarget.name}</div>
+              <button onClick={()=>setResetTarget(null)} className="p-2 rounded-xl" style={{background:C.soft}}>
+                <Ic n="x" s={16} c={C.txt}/>
+              </button>
+            </div>
+            <input type="password" value={newPass} onChange={e=>setNewPass(e.target.value)}
+              className="w-full p-3 rounded-xl border text-sm outline-none mb-3"
+              style={{borderColor:C.border}} placeholder="كلمة المرور الجديدة (6 أحرف+)"/>
+            <button onClick={resetPassword} disabled={busy}
+              className="w-full py-3 rounded-xl font-bold text-white"
+              style={{background:busy?'#999':C.primary}}>
+              {busy?'جاري...':'حفظ'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── MAIN APP ──────────────────────────────────────────────────────────────────
 function App() {
   const [session,setSession]=useState(undefined);
@@ -804,7 +976,10 @@ function App() {
   const tabs=[
     {id:'calendar',label:'التقويم',icon:'calendar'},
     {id:'dashboard',label:'الرئيسية',icon:'home'},
-    ...(isAdmin?[{id:'payslips',label:'الرواتب',icon:'file'}]:[]),
+    ...(isAdmin?[
+      {id:'payslips',label:'الرواتب',icon:'file'},
+      {id:'employees',label:'الموظفون',icon:'user'},
+    ]:[]),
   ];
 
   return (
@@ -832,6 +1007,7 @@ function App() {
         {tab==='dashboard'&&!isAdmin&&<EmpDashboard me={me} employees={employees} settings={settings}/>}
         {tab==='dashboard'&&isAdmin&&<AdminDashboard employees={employees} settings={settings}/>}
         {tab==='payslips'&&isAdmin&&<PayslipsView employees={employees} settings={settings}/>}
+        {tab==='employees'&&isAdmin&&<EmployeesView employees={employees} onRefresh={()=>loadData(session)}/>}
       </div>
 
       {/* Bottom nav */}
