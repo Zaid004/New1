@@ -196,15 +196,21 @@ function AuthScreen() {
 // ── DAY MODAL ────────────────────────────────────────────────────────────────
 function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone}) {
   const [busy,setBusy]=useState(false);
+  const [notes,setNotes]=useState(()=>{
+    const init={};
+    recs.forEach(r=>{if(r.note) init[r.employee_id]=r.note;});
+    return init;
+  });
 
   const getRec = empId => recs.find(r=>r.employee_id===empId);
 
   const upsert = async (empId, shiftType, autoGen=false) => {
     const ex = getRec(empId);
+    const note = notes[empId]||null;
     if(ex){
-      return sb.from('attendance_records').update({shift_type:shiftType,is_auto_generated:autoGen,updated_at:new Date().toISOString()}).eq('id',ex.id);
+      return sb.from('attendance_records').update({shift_type:shiftType,is_auto_generated:autoGen,note,updated_at:new Date().toISOString()}).eq('id',ex.id);
     } else {
-      return sb.from('attendance_records').insert({employee_id:empId,date:dateStr,shift_type:shiftType,is_auto_generated:autoGen});
+      return sb.from('attendance_records').insert({employee_id:empId,date:dateStr,shift_type:shiftType,is_auto_generated:autoGen,note});
     }
   };
 
@@ -271,7 +277,7 @@ function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone}) {
                     {rec?.is_auto_generated&&<span className="text-xs px-2 py-0.5 rounded-full" style={{background:'#E8DDE5',color:C.primary}}>تلقائي</span>}
                     {rec&&<span className="text-xs px-2 py-0.5 rounded-full mr-auto" style={{background:emp.color_hex+'22',color:emp.color_hex}}>{rec.shift_type==='full'?'كامل':'نص'}</span>}
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 mb-2">
                     <button onClick={()=>handleAdmin(emp.id,'full')}
                       className="flex-1 py-2 rounded-xl text-xs font-bold"
                       style={{background:rec?.shift_type==='full'?emp.color_hex:'#EEE8F0',color:rec?.shift_type==='full'?'#fff':C.txt}}>
@@ -290,6 +296,12 @@ function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone}) {
                       </button>
                     )}
                   </div>
+                  <input type="text"
+                    value={notes[emp.id]||''}
+                    onChange={e=>setNotes(n=>({...n,[emp.id]:e.target.value}))}
+                    className="w-full p-2 rounded-lg border text-xs outline-none"
+                    style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}}
+                    placeholder="ملاحظة..."/>
                 </div>
               );
             })}
@@ -297,7 +309,7 @@ function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone}) {
         ) : (
           <div>
             <p className="text-sm mb-4" style={{color:C.txt,opacity:.6}}>سجّل حضورك لهذا اليوم</p>
-            <div className="flex gap-3 mb-4">
+            <div className="flex gap-3 mb-3">
               {['full','half'].map(st=>{
                 const rec=getRec(me.id);
                 const active=rec?.shift_type===st;
@@ -311,6 +323,13 @@ function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone}) {
                 );
               })}
             </div>
+            <textarea
+              value={notes[me.id]||''}
+              onChange={e=>setNotes(n=>({...n,[me.id]:e.target.value}))}
+              rows={2}
+              className="w-full p-2.5 rounded-xl border text-sm outline-none resize-none mb-3"
+              style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}}
+              placeholder="ملاحظة اختيارية..."/>
             {getRec(me.id) && (
               <button onClick={removeMyRecord}
                 className="w-full py-2 rounded-xl text-sm font-bold mb-4"
@@ -322,11 +341,14 @@ function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone}) {
               const rec=getRec(emp.id);
               if(!rec) return null;
               return (
-                <div key={emp.id} className="p-3 rounded-xl text-sm flex items-center gap-2" style={{background:C.soft}}>
-                  <div className="w-2 h-2 rounded-full" style={{background:emp.color_hex}}/>
-                  <span style={{color:C.txt,opacity:.7}}>{emp.name}:</span>
-                  <span className="font-semibold" style={{color:C.txt}}>{rec.shift_type==='full'?'شفت كامل':'نص شفت'}</span>
-                  {rec.is_auto_generated&&<span className="text-xs opacity-40">(تلقائي)</span>}
+                <div key={emp.id} className="p-3 rounded-xl text-sm mb-2" style={{background:C.soft}}>
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full" style={{background:emp.color_hex}}/>
+                    <span style={{color:C.txt,opacity:.7}}>{emp.name}:</span>
+                    <span className="font-semibold" style={{color:C.txt}}>{rec.shift_type==='full'?'شفت كامل':'نص شفت'}</span>
+                    {rec.is_auto_generated&&<span className="text-xs opacity-40">(تلقائي)</span>}
+                  </div>
+                  {rec.note&&<div className="text-xs mt-1.5 pr-4" style={{color:C.txt,opacity:.55}}>{rec.note}</div>}
                 </div>
               );
             })}
@@ -1371,8 +1393,9 @@ function AuditLogView({employees}) {
 
   const fmtDate = iso => {
     const d=new Date(iso);
-    return d.toLocaleDateString('ar-IQ',{day:'numeric',month:'short'}) +
-           ' · ' + d.toLocaleTimeString('ar-IQ',{hour:'2-digit',minute:'2-digit'});
+    const h=String(d.getHours()).padStart(2,'0');
+    const min=String(d.getMinutes()).padStart(2,'0');
+    return `${d.getDate()} ${MONTHS[d.getMonth()]} · ${h}:${min}`;
   };
 
   // Group logs by date (record_date)
@@ -1396,7 +1419,7 @@ function AuditLogView({employees}) {
       {Object.entries(grouped).sort(([a],[b])=>b.localeCompare(a)).map(([date,dayLogs])=>(
         <div key={date}>
           <div className="text-xs font-bold mb-2 px-1" style={{color:C.txt,opacity:.4}}>
-            {new Date(date+'T00:00:00').toLocaleDateString('ar-IQ',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}
+            {(()=>{const p=date.split('-');return `${parseInt(p[2])} ${MONTHS[parseInt(p[1])-1]} ${p[0]}`;})()}
           </div>
           <div className="space-y-2">
             {dayLogs.map(log=>{

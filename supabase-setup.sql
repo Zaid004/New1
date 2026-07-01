@@ -21,10 +21,14 @@ create table if not exists attendance_records (
   date              date not null,
   shift_type        text not null check (shift_type in ('full','half')),
   is_auto_generated boolean not null default false,
+  note              text,
   created_at        timestamptz default now(),
   updated_at        timestamptz default now(),
   unique (employee_id, date)
 );
+
+-- Migration (run if table already exists):
+-- alter table attendance_records add column if not exists note text;
 
 -- 3. SALARY INPUTS (employee personal calc persistence)
 create table if not exists salary_inputs (
