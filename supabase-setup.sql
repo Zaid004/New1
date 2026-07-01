@@ -136,9 +136,59 @@ create policy "set_admin" on settings for all
   using (current_employee_role() = 'admin');
 
 -- ════════════════════════════════════════════════════════════
+-- 6. AUDIT LOG
+-- ════════════════════════════════════════════════════════════
+create table if not exists audit_log (
+  id          uuid primary key default gen_random_uuid(),
+  action      text not null check (action in ('add','update','delete')),
+  employee_id uuid references employees(id) on delete set null,
+  changed_by  uuid references employees(id) on delete set null,
+  record_date date,
+  old_shift   text,
+  new_shift   text,
+  is_auto     boolean default false,
+  created_at  timestamptz default now()
+);
+
+alter table audit_log enable row level security;
+
+create policy "audit_admin_read" on audit_log for select
+  using (current_employee_role() = 'admin');
+
+-- ════════════════════════════════════════════════════════════
+-- AUDIT TRIGGER (SECURITY DEFINER — بدونها سجلات الموظفين لا تظهر)
+-- ════════════════════════════════════════════════════════════
+create or replace function log_attendance_change()
+returns trigger language plpgsql security definer as $$
+begin
+  if (TG_OP = 'INSERT') then
+    insert into audit_log (action, employee_id, changed_by, record_date, new_shift, is_auto)
+    values ('add', NEW.employee_id, current_employee_id(), NEW.date, NEW.shift_type, NEW.is_auto_generated);
+
+  elsif (TG_OP = 'UPDATE') then
+    if OLD.shift_type <> NEW.shift_type or OLD.is_auto_generated <> NEW.is_auto_generated then
+      insert into audit_log (action, employee_id, changed_by, record_date, old_shift, new_shift, is_auto)
+      values ('update', NEW.employee_id, current_employee_id(), NEW.date, OLD.shift_type, NEW.shift_type, NEW.is_auto_generated);
+    end if;
+
+  elsif (TG_OP = 'DELETE') then
+    insert into audit_log (action, employee_id, changed_by, record_date, old_shift, is_auto)
+    values ('delete', OLD.employee_id, current_employee_id(), OLD.date, OLD.shift_type, OLD.is_auto_generated);
+  end if;
+  return null;
+end;
+$$;
+
+drop trigger if exists attendance_audit on attendance_records;
+create trigger attendance_audit
+  after insert or update or delete on attendance_records
+  for each row execute function log_attendance_change();
+
+-- ════════════════════════════════════════════════════════════
 -- IF YOU ALREADY RAN THIS SCRIPT BEFORE — run only this:
 -- ════════════════════════════════════════════════════════════
 -- alter table employees add column if not exists username text unique;
+-- alter table attendance_records add column if not exists note text;
 
 -- ════════════════════════════════════════════════════════════
 -- SAMPLE DATA
