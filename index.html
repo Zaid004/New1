@@ -560,8 +560,9 @@ function EmpDashboard({me,employees,settings,onRefresh}) {
 
   const pool   = settings?.monthly_pool_amount||525000;
   const pct    = settings?.monthly_percentage||3.2;
+  const empOnlyIds = new Set(employees.filter(e=>e.role!=='admin').map(e=>e.id));
   const myRecs = recs.filter(r=>r.employee_id===me.id);
-  const allPts = recs.reduce((s,r)=>s+pts(r),0);
+  const allPts = recs.filter(r=>empOnlyIds.has(r.employee_id)).reduce((s,r)=>s+pts(r),0);
   const myPts  = myRecs.reduce((s,r)=>s+pts(r),0);
   const myDays = myRecs.reduce((s,r)=>s+days(r),0);
 
@@ -901,6 +902,8 @@ function AdminDashboard({employees,settings}) {
   const [vy,setVy]=useState(now.getFullYear());
   const [vm,setVm]=useState(now.getMonth());
   const [recs,setRecs]=useState([]);
+  const empOnly = employees.filter(e => e.role !== 'admin');
+  const empOnlyIds = new Set(empOnly.map(e => e.id));
 
   useEffect(()=>{
     const {from,to}=monthRange(vy,vm);
@@ -908,7 +911,7 @@ function AdminDashboard({employees,settings}) {
   },[vy,vm]);
 
   const pool   = settings?.monthly_pool_amount||525000;
-  const allPts = recs.reduce((s,r)=>s+pts(r),0);
+  const allPts = recs.filter(r=>empOnlyIds.has(r.employee_id)).reduce((s,r)=>s+pts(r),0);
 
   const exportExcel = () => {
     const wb = XLSX.utils.book_new();
@@ -945,14 +948,14 @@ function AdminDashboard({employees,settings}) {
       {allPts>0 && (
         <div className="rounded-2xl p-5 shadow-sm" style={{background:C.card}}>
           <div className="text-xs font-semibold mb-3" style={{color:C.txt,opacity:.5}}>النقاط مقارنةً</div>
-          <BarChart data={employees.map(emp=>{
+          <BarChart data={empOnly.map(emp=>{
             const ep=recs.filter(r=>r.employee_id===emp.id).reduce((s,r)=>s+pts(r),0);
             return {label:emp.name.split(' ')[0], value:ep, color:emp.color_hex};
           })}/>
         </div>
       )}
 
-      {employees.map(emp=>{
+      {empOnly.map(emp=>{
         const er=recs.filter(r=>r.employee_id===emp.id);
         const ep=er.reduce((s,r)=>s+pts(r),0);
         const ed=er.reduce((s,r)=>s+days(r),0);
@@ -987,7 +990,9 @@ function AdminDashboard({employees,settings}) {
 // ── PAYSLIPS (ADMIN) ──────────────────────────────────────────────────────────
 function PayslipsView({employees,settings}) {
   const now=new Date();
-  const [empId,setEmpId]=useState(employees[0]?.id||'');
+  const empOnly = employees.filter(e => e.role !== 'admin');
+  const empOnlyIds = new Set(empOnly.map(e => e.id));
+  const [empId,setEmpId]=useState(()=>empOnly[0]?.id||'');
   const [month,setMonth]=useState(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`);
   const [view,setView]=useState('monthly'); // 'monthly' | 'annual'
   const [recs,setRecs]=useState([]);
@@ -1009,7 +1014,7 @@ function PayslipsView({employees,settings}) {
       const months=Array.from({length:12},(_,i)=>{
         const mo=String(i+1).padStart(2,'0');
         const mRecs=all.filter(rec=>rec.date.startsWith(`${annualYear}-${mo}`));
-        const allP=mRecs.reduce((s,rec)=>s+pts(rec),0);
+        const allP=mRecs.filter(rec=>empOnlyIds.has(rec.employee_id)).reduce((s,rec)=>s+pts(rec),0);
         const empRecs=mRecs.filter(rec=>rec.employee_id===empId);
         const empP=empRecs.reduce((s,rec)=>s+pts(rec),0);
         const empD=empRecs.reduce((s,rec)=>s+days(rec),0);
@@ -1043,7 +1048,7 @@ function PayslipsView({employees,settings}) {
         setF({fixed:slip.fixed_amount||'',pct:slip.percentage_amount||'',sales:slip.sales_amount||'',
               bonus:slip.bonus||'',extra:slip.extra_amount||'',notes:slip.notes||''});
       } else {
-        const allP=r.reduce((s,x)=>s+pts(x),0);
+        const allP=r.filter(x=>empOnlyIds.has(x.employee_id)).reduce((s,x)=>s+pts(x),0);
         const empP=r.filter(x=>x.employee_id===empId).reduce((s,x)=>s+pts(x),0);
         const fs=allP>0?(empP/allP)*pool:0;
         setF({fixed:Math.round(fs),pct:'',sales:'',bonus:'',extra:'',notes:''});
@@ -1053,7 +1058,7 @@ function PayslipsView({employees,settings}) {
 
   useEffect(()=>{
     if(!recs.length) return;
-    const allP=recs.reduce((s,r)=>s+pts(r),0);
+    const allP=recs.filter(r=>empOnlyIds.has(r.employee_id)).reduce((s,r)=>s+pts(r),0);
     const empP=recs.filter(r=>r.employee_id===empId).reduce((s,r)=>s+pts(r),0);
     const salesAmt=parseFloat(f.sales)||0;
     const share=allP>0?(empP/allP)*(salesAmt*pct/100):0;
@@ -1140,7 +1145,7 @@ function PayslipsView({employees,settings}) {
 
   const emp=employees.find(e=>e.id===empId);
   const er=recs.filter(r=>r.employee_id===empId);
-  const allP=recs.reduce((s,r)=>s+pts(r),0);
+  const allP=recs.filter(r=>empOnlyIds.has(r.employee_id)).reduce((s,r)=>s+pts(r),0);
   const empP=er.reduce((s,r)=>s+pts(r),0);
   const empD=er.reduce((s,r)=>s+days(r),0);
 
@@ -1169,7 +1174,7 @@ function PayslipsView({employees,settings}) {
         <select value={empId} onChange={e=>setEmpId(e.target.value)}
           className="w-full p-3 rounded-xl border text-sm outline-none"
           style={{borderColor:C.border,color:C.txt,background:'var(--card)'}}>
-          {employees.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}
+          {empOnly.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}
         </select>
       </div>
 
