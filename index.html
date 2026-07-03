@@ -630,6 +630,8 @@ function EmpDashboard({me,employees,settings,onRefresh}) {
         </div>
       )}
 
+      <BoxkiMatcher/>
+
       {/* Color picker */}
       <button onClick={()=>setShowColor(v=>!v)}
         className="w-full p-4 rounded-2xl font-bold flex items-center justify-between"
@@ -731,6 +733,62 @@ function NotifButton() {
       <Ic n="bell" s={18} c={C.e2}/>
       <span style={{color:C.txt}}>تفعيل تنبيهات الحضور اليومية</span>
     </button>
+  );
+}
+
+// ── BOXKI MATCHER ─────────────────────────────────────────────────────────────
+function BoxkiMatcher() {
+  const [show,setShow]=useState(false);
+  const [amount,setAmount]=useState('');
+  const [orders,setOrders]=useState('');
+
+  const amt=parseFloat(amount)||0;
+  const ord=parseFloat(orders)||0;
+  const deduction=ord*5000;
+  const result=amt-deduction;
+  const hasResult=amt>0&&ord>0;
+
+  return (
+    <div>
+      <button onClick={()=>setShow(v=>!v)}
+        className="w-full p-4 rounded-2xl font-bold flex items-center justify-between"
+        style={{background:C.card}}>
+        <div className="flex items-center gap-3">
+          <Ic n="check" s={18} c={C.e2}/>
+          <span style={{color:C.txt}}>مطابقة بوكسي</span>
+        </div>
+        <Ic n={show?'chL':'chR'} s={18} c={C.primary}/>
+      </button>
+      {show&&(
+        <div className="rounded-2xl p-5 shadow-sm space-y-4" style={{background:C.card}}>
+          <div>
+            <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>المبلغ الكلي من بوكسي (د.ع)</label>
+            <input type="text" inputMode="numeric" value={fmtNum(amount)} onChange={e=>setAmount(parseNum(e.target.value))}
+              className="w-full p-3 rounded-xl border text-sm outline-none"
+              style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}} placeholder="0"/>
+          </div>
+          <div>
+            <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>عدد الطلبات</label>
+            <input type="text" inputMode="numeric" value={orders} onChange={e=>setOrders(parseNum(e.target.value))}
+              className="w-full p-3 rounded-xl border text-sm outline-none"
+              style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}} placeholder="0"/>
+          </div>
+          {hasResult&&(
+            <div className="space-y-2">
+              <div className="flex justify-between items-center text-sm px-1">
+                <span style={{color:C.txt,opacity:.6}}>خصم التوصيل ({ord} × 5,000)</span>
+                <span className="font-bold" style={{color:C.err}}>- {fmt(deduction)} د.ع</span>
+              </div>
+              <div className="p-4 rounded-2xl text-center" style={{background:C.primary}}>
+                <div className="text-white text-xs opacity-70 mb-1">صافي المبلغ</div>
+                <div className="text-white text-3xl font-black">{fmt(result)}</div>
+                <div className="text-white text-sm opacity-70">د.ع</div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1128,6 +1186,8 @@ function PayslipsView({employees,settings}) {
         </div>
       </div>
       </>}
+
+      <BoxkiMatcher/>
 
     </div>
   );
