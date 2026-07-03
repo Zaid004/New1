@@ -137,12 +137,17 @@ const Ic = ({n,s=20,c='currentColor'}) => (
   </svg>
 );
 const BoxkiIcon = ({s=22}) => (
-  <svg width={s} height={s} viewBox="0 0 28 32" fill="none">
-    <rect x="0" y="0" width="28" height="28" rx="6" fill="#F0D000"/>
-    <path d="M4,4 H24 Q26,4 26,6 V21 Q26,23 24,23 H10 L4,30 V23 Q2,23 2,21 V6 Q2,4 4,4 Z" fill="#1A1A1A"/>
-    <circle cx="10" cy="13" r="2" fill="white"/>
-    <circle cx="18" cy="13" r="2" fill="white"/>
-    <path d="M9,18 Q14,22 19,18" stroke="white" strokeWidth="1.8" strokeLinecap="round" fill="none"/>
+  <svg width={s} height={s} viewBox="0 0 60 60" fill="none">
+    <rect width="60" height="60" rx="10" fill="#D8DC4A"/>
+    {/* 3D shadow */}
+    <path d="M20,40 L4,55 L18,59 L34,40 Z" fill="#3A3848"/>
+    {/* Front rounded square */}
+    <rect x="20" y="4" width="36" height="36" rx="8" fill="#3A3848"/>
+    {/* Eyes */}
+    <circle cx="33" cy="17" r="3.2" fill="#D8DC4A"/>
+    <circle cx="45" cy="17" r="3.2" fill="#D8DC4A"/>
+    {/* Smile */}
+    <path d="M30,25 Q38,33 48,25" stroke="#D8DC4A" strokeWidth="2.8" strokeLinecap="round" fill="none"/>
   </svg>
 );
 
