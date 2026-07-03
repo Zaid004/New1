@@ -136,6 +136,15 @@ const Ic = ({n,s=20,c='currentColor'}) => (
     <path d={PATHS[n]||''} />
   </svg>
 );
+const BoxkiIcon = ({s=22}) => (
+  <svg width={s} height={s} viewBox="0 0 28 32" fill="none">
+    <rect x="0" y="0" width="28" height="28" rx="6" fill="#F0D000"/>
+    <path d="M4,4 H24 Q26,4 26,6 V21 Q26,23 24,23 H10 L4,30 V23 Q2,23 2,21 V6 Q2,4 4,4 Z" fill="#1A1A1A"/>
+    <circle cx="10" cy="13" r="2" fill="white"/>
+    <circle cx="18" cy="13" r="2" fill="white"/>
+    <path d="M9,18 Q14,22 19,18" stroke="white" strokeWidth="1.8" strokeLinecap="round" fill="none"/>
+  </svg>
+);
 
 // ── AUTH SCREEN ───────────────────────────────────────────────────────────────
 function AuthScreen() {
@@ -786,7 +795,7 @@ function BoxkiMatcher() {
         className="w-full p-4 rounded-2xl font-bold flex items-center justify-between"
         style={{background:C.card}}>
         <div className="flex items-center gap-3">
-          <Ic n="check" s={18} c={C.e2}/>
+          <BoxkiIcon s={24}/>
           <span style={{color:C.txt}}>مطابقة بوكسي</span>
         </div>
         <Ic n={show?'chL':'chR'} s={18} c={C.primary}/>
