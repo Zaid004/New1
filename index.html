@@ -286,7 +286,7 @@ function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone}) {
 
         {isAdmin ? (
           <div className="space-y-3">
-            {employees.map(emp=>{
+            {employees.filter(e=>e.role!=='admin').map(emp=>{
               const rec=getRec(emp.id);
               return (
                 <div key={emp.id} className="p-4 rounded-2xl" style={{background:C.soft}}>
@@ -356,7 +356,7 @@ function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone}) {
                 إلغاء الحضور
               </button>
             )}
-            {employees.filter(e=>e.id!==me.id).map(emp=>{
+            {employees.filter(e=>e.id!==me.id&&e.role!=='admin').map(emp=>{
               const rec=getRec(emp.id);
               if(!rec) return null;
               return (
