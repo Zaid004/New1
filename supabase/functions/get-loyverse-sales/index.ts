@@ -77,11 +77,13 @@ Deno.serve(async (req) => {
         };
 
         for (const r of data.receipts ?? []) {
-          if (r.receipt_type !== 'SALE') continue;
           const isDelivery = r.payments?.some(p => p.name?.includes('توصيل'));
-          if (isDelivery) {
+          if (!isDelivery) continue;
+          if (r.receipt_type === 'SALE') {
             deliveryTotal += r.total_money ?? 0;
             deliveryOrders++;
+          } else if (r.receipt_type === 'REFUND') {
+            deliveryTotal -= Math.abs(r.total_money ?? 0);
           }
         }
         cursor = data.cursor ?? null;
