@@ -738,9 +738,14 @@ function NotifButton() {
 
 // ── BOXKI MATCHER ─────────────────────────────────────────────────────────────
 function BoxkiMatcher() {
+  const getIraqToday = () => new Date(Date.now()+3*60*60*1000).toISOString().slice(0,10);
+  const toISO = dt => new Date(dt+':00.000+03:00').toISOString();
+
   const [show,setShow]=useState(false);
   const [amount,setAmount]=useState('');
   const [orders,setOrders]=useState('');
+  const [fromDt,setFromDt]=useState(()=>`${getIraqToday()}T00:00`);
+  const [toDt,setToDt]=useState(()=>`${getIraqToday()}T23:59`);
   const [loyLoading,setLoyLoading]=useState(false);
   const [loyData,setLoyData]=useState(null);
   const [loyErr,setLoyErr]=useState('');
@@ -757,13 +762,10 @@ function BoxkiMatcher() {
     setLoyLoading(true); setLoyData(null); setLoyErr('');
     try {
       const {data:{session}} = await sb.auth.getSession();
-      // Today in Iraq time (UTC+3)
-      const iraqNow = new Date(Date.now() + 3*60*60*1000);
-      const date = iraqNow.toISOString().split('T')[0];
       const res = await fetch(`${SUPA_URL}/functions/v1/get-loyverse-sales`, {
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':`Bearer ${session.access_token}`},
-        body: JSON.stringify({mode:'delivery', date}),
+        body: JSON.stringify({mode:'delivery', from:toISO(fromDt), to:toISO(toDt)}),
       });
       const data = await res.json();
       if(data.error){ setLoyErr(data.error); return; }
@@ -815,6 +817,26 @@ function BoxkiMatcher() {
                 <div className="text-white text-xs opacity-70 mb-1">صافي المبلغ</div>
                 <div className="text-white text-3xl font-black">{fmt(result)}</div>
                 <div className="text-white text-sm opacity-70">د.ع</div>
+              </div>
+
+              <div className="rounded-xl p-3 space-y-2" style={{background:C.soft}}>
+                <div className="text-xs font-semibold" style={{color:C.txt,opacity:.6}}>الفترة الزمنية</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <div className="text-xs mb-1" style={{color:C.txt,opacity:.5}}>من</div>
+                    <input type="datetime-local" value={fromDt}
+                      onChange={e=>{setFromDt(e.target.value);reset();}}
+                      className="w-full p-2 rounded-lg border text-xs outline-none"
+                      style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}}/>
+                  </div>
+                  <div>
+                    <div className="text-xs mb-1" style={{color:C.txt,opacity:.5}}>إلى</div>
+                    <input type="datetime-local" value={toDt}
+                      onChange={e=>{setToDt(e.target.value);reset();}}
+                      className="w-full p-2 rounded-lg border text-xs outline-none"
+                      style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}}/>
+                  </div>
+                </div>
               </div>
 
               <button onClick={matchLoyverse} disabled={loyLoading}

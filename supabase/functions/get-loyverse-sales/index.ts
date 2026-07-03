@@ -32,15 +32,10 @@ Deno.serve(async (req) => {
   const body = await req.json().catch(() => ({}));
   const { mode } = body;
 
-  // ── MODE: delivery reconciliation (single day) ─────────────────────────────
+  // ── MODE: delivery reconciliation (custom range) ───────────────────────────
   if (mode === 'delivery') {
-    const { date } = body;
-    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      return json({ error: 'date مطلوب بصيغة YYYY-MM-DD' }, 400);
-    }
-
-    const from = new Date(`${date}T00:00:00.000+03:00`).toISOString();
-    const to   = new Date(`${date}T23:59:59.999+03:00`).toISOString();
+    const { from, to } = body;
+    if (!from || !to) return json({ error: 'from و to مطلوبان' }, 400);
 
     let deliveryTotal = 0;
     let deliveryOrders = 0;
