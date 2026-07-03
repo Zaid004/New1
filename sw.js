@@ -1,4 +1,4 @@
-const CACHE = 'stacks-v2';
+const CACHE = 'stacks-v3';
 const SHELL = ['/index.html', '/icon.png', '/manifest.json'];
 
 self.addEventListener('install', e => {
