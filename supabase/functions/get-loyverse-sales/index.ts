@@ -16,7 +16,7 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
-  // ── Verify admin ───────────────────────────────────────────
+  // ── Verify user ────────────────────────────────────────────────────────────
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL') ?? '',
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
@@ -25,12 +25,75 @@ Deno.serve(async (req) => {
   const { data: { user }, error: authErr } = await supabase.auth.getUser(token);
   if (authErr || !user) return json({ error: 'غير مصرح' }, 401);
 
-  // ── Loyverse token ─────────────────────────────────────────
+  // ── Loyverse token ─────────────────────────────────────────────────────────
   const loyToken = Deno.env.get('LOYVERSE_TOKEN');
   if (!loyToken) return json({ error: 'LOYVERSE_TOKEN غير مضبوط في Supabase Secrets' }, 500);
 
-  // ── Parse month ────────────────────────────────────────────
   const body = await req.json().catch(() => ({}));
+  const { mode } = body;
+
+  // ── MODE: delivery reconciliation (single day) ─────────────────────────────
+  if (mode === 'delivery') {
+    const { date } = body;
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return json({ error: 'date مطلوب بصيغة YYYY-MM-DD' }, 400);
+    }
+
+    const from = new Date(`${date}T00:00:00.000+03:00`).toISOString();
+    const to   = new Date(`${date}T23:59:59.999+03:00`).toISOString();
+
+    let deliveryTotal = 0;
+    let deliveryOrders = 0;
+    let cursor: string | null = null;
+
+    try {
+      do {
+        const params = new URLSearchParams({
+          created_at_min: from,
+          created_at_max: to,
+          limit: '250',
+        });
+        if (cursor) params.set('cursor', cursor);
+
+        const res = await fetch(`https://api.loyverse.com/v1.0/receipts?${params}`, {
+          headers: { Authorization: `Bearer ${loyToken}` },
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          return json(
+            { error: (err as { errors?: { message: string }[] })?.errors?.[0]?.message ?? `Loyverse ${res.status}` },
+            502,
+          );
+        }
+
+        const data = await res.json() as {
+          receipts: {
+            total_money: number;
+            receipt_type: string;
+            payments: { name: string; money_amount: number }[];
+          }[];
+          cursor?: string;
+        };
+
+        for (const r of data.receipts ?? []) {
+          if (r.receipt_type !== 'SALE') continue;
+          const isDelivery = r.payments?.some(p => p.name?.includes('توصيل'));
+          if (isDelivery) {
+            deliveryTotal += r.total_money ?? 0;
+            deliveryOrders++;
+          }
+        }
+        cursor = data.cursor ?? null;
+      } while (cursor);
+
+      return json({ total: Math.round(deliveryTotal), orders: deliveryOrders });
+    } catch (e) {
+      return json({ error: (e as Error).message }, 500);
+    }
+  }
+
+  // ── MODE: monthly sales (default) ──────────────────────────────────────────
   const { month } = body;
   if (!month || !/^\d{4}-\d{2}$/.test(month)) {
     return json({ error: 'month مطلوب بصيغة YYYY-MM' }, 400);
@@ -43,10 +106,8 @@ Deno.serve(async (req) => {
   const from = new Date(`${y}-${m}-01T00:00:00.000+03:00`).toISOString();
   const to   = new Date(`${y}-${m}-${String(lastDay).padStart(2, '0')}T23:59:59.999+03:00`).toISOString();
 
-  // ── Fetch from Loyverse (paginated) ────────────────────────
   // total_money on each SALE receipt = what the customer actually paid (already net of any
-  // discount, whether stored as an explicit discount or a price override). No need to subtract
-  // discounts separately — subtracting them again would double-count.
+  // discount, whether stored as an explicit discount or a price override).
   let salesTotal  = 0;
   let refundTotal = 0;
   let cursor: string | null = null;
@@ -78,15 +139,13 @@ Deno.serve(async (req) => {
       };
 
       for (const r of data.receipts ?? []) {
-        if (r.receipt_type === 'SALE')   salesTotal  += r.total_money ?? 0;
+        if (r.receipt_type === 'SALE')        salesTotal  += r.total_money ?? 0;
         else if (r.receipt_type === 'REFUND') refundTotal += Math.abs(r.total_money ?? 0);
       }
       cursor = data.cursor ?? null;
-
     } while (cursor);
 
     return json({ total: Math.round(salesTotal - refundTotal) });
-
   } catch (e) {
     return json({ error: (e as Error).message }, 500);
   }
