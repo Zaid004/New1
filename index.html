@@ -93,7 +93,7 @@ const fmt = n => new Intl.NumberFormat('en').format(Math.round(Number(n)||0));
 // Get public IP via ipify (unique per internet connection/location)
 const getPublicIP = async () => {
   try {
-    const res = await fetch('https://api.ipify.org?format=json', {cache:'no-store'});
+    const res = await fetch('https://api4.ipify.org?format=json', {cache:'no-store'});
     const data = await res.json();
     return data.ip || null;
   } catch(e) { return null; }
