@@ -90,6 +90,18 @@ const DAYS   = ['أحد','اثن','ثلا','أرب','خمس','جمع','سبت'];
 
 const fmt = n => new Intl.NumberFormat('en').format(Math.round(Number(n)||0));
 
+// Check if a task applies to a given date string (YYYY-MM-DD)
+const taskApplies = (task, dateStr) => {
+  if (!task.is_active) return false;
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const jsDate = new Date(y, m - 1, d);
+  if (task.recurrence === 'daily')   return true;
+  if (task.recurrence === 'weekly')  return task.day_of_week === jsDate.getDay();
+  if (task.recurrence === 'monthly') return task.day_of_month === d;
+  if (task.recurrence === 'once')    return task.specific_date === dateStr;
+  return false;
+};
+
 // Get public IP via ipify (unique per internet connection/location)
 const getPublicIP = async () => {
   try {
@@ -139,6 +151,8 @@ const PATHS = {
   bar:'M18 20V10M12 20V4M6 20v-6',
   report:'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8',
   bell:'M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0',
+  plus:'M12 5v14M5 12h14',
+  task:'M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11',
 };
 const Ic = ({n,s=20,c='currentColor'}) => (
   <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -417,6 +431,8 @@ function CalendarView({me,employees,isAdmin,settings}) {
   const [vm,setVm]=useState(now.getMonth());
   const [recs,setRecs]=useState([]);
   const [modal,setModal]=useState(null);
+  const [tasks,setTasks]=useState([]);
+  const [completions,setCompletions]=useState([]);
 
   const load = async (y,m) => {
     const {from,to}=monthRange(y,m);
@@ -424,7 +440,35 @@ function CalendarView({me,employees,isAdmin,settings}) {
     setRecs(data||[]);
   };
 
-  useEffect(()=>{load(vy,vm);},[vy,vm]);
+  const loadCompletions = (y,m) => {
+    const {from,to}=monthRange(y,m);
+    sb.from('task_completions').select('*').gte('completed_date',from).lte('completed_date',to)
+      .then(({data})=>setCompletions(data||[]));
+  };
+
+  useEffect(()=>{load(vy,vm);loadCompletions(vy,vm);},[vy,vm]);
+  useEffect(()=>{
+    sb.from('tasks').select('*').eq('is_active',true).then(({data})=>setTasks(data||[]));
+  },[]);
+
+  const myTasksForDate = dateStr => tasks.filter(t=>
+    taskApplies(t,dateStr) && (!t.assigned_to || t.assigned_to===me.id)
+  );
+  const dayHasTasks = dateStr => isAdmin
+    ? tasks.some(t=>taskApplies(t,dateStr))
+    : myTasksForDate(dateStr).length>0;
+  const isCompleted = (taskId,dateStr) =>
+    completions.some(c=>c.task_id===taskId&&c.employee_id===me.id&&c.completed_date===dateStr);
+  const toggleComplete = async (taskId,dateStr) => {
+    const ex=completions.find(c=>c.task_id===taskId&&c.employee_id===me.id&&c.completed_date===dateStr);
+    if(ex){
+      await sb.from('task_completions').delete().eq('id',ex.id);
+      setCompletions(cs=>cs.filter(c=>c.id!==ex.id));
+    } else {
+      const {data}=await sb.from('task_completions').insert({task_id:taskId,employee_id:me.id,completed_date:dateStr}).select().single();
+      if(data) setCompletions(cs=>[...cs,data]);
+    }
+  };
 
   const prevMonth = () => { if(vm===0){setVy(y=>y-1);setVm(11);}else setVm(m=>m-1); };
   const nextMonth = () => { if(vm===11){setVy(y=>y+1);setVm(0);}else setVm(m=>m+1); };
@@ -473,8 +517,10 @@ function CalendarView({me,employees,isAdmin,settings}) {
         {cells.map((d,i)=>{
           if(!d) return <div key={i}/>;
           const dr=dayRecs(d);
-          const isToday=`${vy}-${String(vm+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`===todayStr();
+          const ds=`${vy}-${String(vm+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+          const isToday=ds===todayStr();
           const editable=canEdit(d);
+          const hasTasks=dayHasTasks(ds);
 
           let bg = C.soft;
           let overlay = null;
@@ -502,6 +548,7 @@ function CalendarView({me,employees,isAdmin,settings}) {
               onMouseEnter={e=>{if(editable)e.currentTarget.style.transform='scale(1.04)';}}
               onMouseLeave={e=>{e.currentTarget.style.transform='scale(1)';}}>
               {overlay}
+              {hasTasks&&<div style={{position:'absolute',top:3,right:3,width:6,height:6,borderRadius:'50%',background:'#F59E0B',zIndex:3,border:'1.5px solid rgba(255,255,255,0.8)'}}/>}
               <div style={{position:'relative',zIndex:1,padding:'4px 5px'}}>
                 <span className="text-xs font-bold leading-none" style={{color:dr.length>0?'#fff':C.txt}}>{d}</span>
               </div>
@@ -535,6 +582,39 @@ function CalendarView({me,employees,isAdmin,settings}) {
           <span className="text-xs" style={{color:C.txt,opacity:.7}}>مشترك</span>
         </div>
       </div>
+
+      {/* Employee: today's tasks */}
+      {!isAdmin && (()=>{
+        const today=todayStr();
+        const todayTasks=myTasksForDate(today);
+        if(!todayTasks.length) return null;
+        return (
+          <div className="mt-4 space-y-2">
+            <div className="flex items-center gap-2 px-1 mb-1">
+              <Ic n="task" s={15} c={C.primary}/>
+              <span className="text-xs font-bold uppercase tracking-widest" style={{color:C.primary}}>مهام اليوم</span>
+            </div>
+            {todayTasks.map(task=>{
+              const done=isCompleted(task.id,today);
+              return (
+                <div key={task.id} className="flex items-center gap-3 p-3 rounded-2xl shadow-sm" style={{background:C.card}}>
+                  <button onClick={()=>toggleComplete(task.id,today)}
+                    className="w-7 h-7 rounded-xl flex items-center justify-center flex-shrink-0 transition-all"
+                    style={{background:done?C.ok:C.soft,border:`2px solid ${done?C.ok:C.border}`}}>
+                    {done&&<Ic n="check" s={13} c="#fff"/>}
+                  </button>
+                  <span className="text-sm font-semibold flex-1" style={{color:C.txt,textDecoration:done?'line-through':'none',opacity:done?.5:1}}>
+                    {task.title}
+                  </span>
+                  <span className="text-xs px-2 py-0.5 rounded-full" style={{background:C.soft,color:C.txt,opacity:.6}}>
+                    {task.recurrence==='daily'?'يومي':task.recurrence==='weekly'?'أسبوعي':task.recurrence==='monthly'?'شهري':'مرة'}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
 
       {modal&&(
         <DayModal
@@ -1350,6 +1430,137 @@ function BarChart({data}) {
   );
 }
 
+// ── TASKS SECTION (inside EmployeesView, admin only) ─────────────────────────
+function TasksSection({employees}) {
+  const empOnly=employees.filter(e=>e.role!=='admin');
+  const [tasks,setTasks]=useState([]);
+  const [showAdd,setShowAdd]=useState(false);
+  const [busy,setBusy]=useState(false);
+  const initForm=()=>({title:'',recurrence:'daily',day_of_week:0,day_of_month:1,specific_date:todayStr(),assigned_to:''});
+  const [form,setForm]=useState(initForm);
+
+  useEffect(()=>{
+    sb.from('tasks').select('*').order('created_at',{ascending:false}).then(({data})=>setTasks(data||[]));
+  },[]);
+
+  const addTask = async () => {
+    if(!form.title.trim()) return;
+    setBusy(true);
+    const payload={
+      title:form.title.trim(), recurrence:form.recurrence, is_active:true,
+      assigned_to:form.assigned_to||null,
+      day_of_week:form.recurrence==='weekly'?parseInt(form.day_of_week):null,
+      day_of_month:form.recurrence==='monthly'?parseInt(form.day_of_month):null,
+      specific_date:form.recurrence==='once'?form.specific_date:null,
+    };
+    const {data}=await sb.from('tasks').insert(payload).select().single();
+    setBusy(false);
+    if(data){setTasks(ts=>[data,...ts]);setShowAdd(false);setForm(initForm());}
+  };
+
+  const deleteTask = async id => {
+    await sb.from('tasks').delete().eq('id',id);
+    setTasks(ts=>ts.filter(t=>t.id!==id));
+  };
+
+  const toggleActive = async task => {
+    await sb.from('tasks').update({is_active:!task.is_active}).eq('id',task.id);
+    setTasks(ts=>ts.map(t=>t.id===task.id?{...t,is_active:!t.is_active}:t));
+  };
+
+  const recLabel = t => {
+    if(t.recurrence==='daily')   return 'يومي';
+    if(t.recurrence==='weekly')  return `أسبوعي · ${DAYS[t.day_of_week]||''}`;
+    if(t.recurrence==='monthly') return `شهري · يوم ${t.day_of_month}`;
+    if(t.recurrence==='once')    return `مرة · ${t.specific_date||''}`;
+    return '';
+  };
+
+  return (
+    <div className="rounded-2xl p-5 shadow-sm space-y-3" style={{background:C.card}}>
+      <div className="flex items-center justify-between">
+        <h3 className="font-bold" style={{color:C.txt}}>المهام</h3>
+        <button onClick={()=>setShowAdd(s=>!s)}
+          className="w-8 h-8 rounded-xl flex items-center justify-center"
+          style={{background:showAdd?C.soft:C.primary}}>
+          <Ic n="plus" s={16} c={showAdd?C.txt:'#fff'}/>
+        </button>
+      </div>
+
+      {showAdd&&(
+        <div className="space-y-3 p-4 rounded-2xl" style={{background:C.soft}}>
+          <input type="text" value={form.title} onChange={e=>setForm(f=>({...f,title:e.target.value}))}
+            className="w-full p-3 rounded-xl border text-sm outline-none"
+            style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}}
+            placeholder="عنوان المهمة..."/>
+          <div className="grid grid-cols-2 gap-2">
+            {[['daily','يومي'],['weekly','أسبوعي'],['monthly','شهري'],['once','مرة واحدة']].map(([v,l])=>(
+              <button key={v} onClick={()=>setForm(f=>({...f,recurrence:v}))}
+                className="py-2 rounded-xl text-sm font-bold"
+                style={{background:form.recurrence===v?C.primary:C.card,color:form.recurrence===v?'#fff':C.txt}}>
+                {l}
+              </button>
+            ))}
+          </div>
+          {form.recurrence==='weekly'&&(
+            <select value={form.day_of_week} onChange={e=>setForm(f=>({...f,day_of_week:e.target.value}))}
+              className="w-full p-3 rounded-xl border text-sm outline-none"
+              style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}}>
+              {DAYS.map((d,i)=><option key={i} value={i}>{d}</option>)}
+            </select>
+          )}
+          {form.recurrence==='monthly'&&(
+            <input type="number" min="1" max="31" value={form.day_of_month}
+              onChange={e=>setForm(f=>({...f,day_of_month:e.target.value}))}
+              className="w-full p-3 rounded-xl border text-sm outline-none"
+              style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}}
+              placeholder="يوم الشهر (1-31)"/>
+          )}
+          {form.recurrence==='once'&&(
+            <input type="date" value={form.specific_date}
+              onChange={e=>setForm(f=>({...f,specific_date:e.target.value}))}
+              className="w-full p-3 rounded-xl border text-sm outline-none"
+              style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}}/>
+          )}
+          <select value={form.assigned_to} onChange={e=>setForm(f=>({...f,assigned_to:e.target.value}))}
+            className="w-full p-3 rounded-xl border text-sm outline-none"
+            style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}}>
+            <option value="">جميع الموظفين</option>
+            {empOnly.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}
+          </select>
+          <button onClick={addTask} disabled={busy||!form.title.trim()}
+            className="w-full py-3 rounded-xl font-bold text-white"
+            style={{background:busy||!form.title.trim()?'#999':C.primary}}>
+            {busy?'جاري الإضافة...':'إضافة المهمة'}
+          </button>
+        </div>
+      )}
+
+      {tasks.length===0&&!showAdd&&(
+        <div className="text-center py-3 text-sm" style={{color:C.txt,opacity:.4}}>لا توجد مهام بعد</div>
+      )}
+
+      {tasks.map(task=>(
+        <div key={task.id} className="flex items-center gap-2 p-3 rounded-2xl" style={{background:C.soft,opacity:task.is_active?1:.5}}>
+          <div className="flex-1 min-w-0">
+            <div className="font-semibold text-sm truncate" style={{color:C.txt}}>{task.title}</div>
+            <div className="text-xs mt-0.5" style={{color:C.txt,opacity:.5}}>
+              {recLabel(task)}{task.assigned_to&&` · ${employees.find(e=>e.id===task.assigned_to)?.name||''}`}
+            </div>
+          </div>
+          <button onClick={()=>toggleActive(task)} className="p-1.5 rounded-lg"
+            style={{background:task.is_active?'var(--ok-bg)':'var(--err-bg)'}}>
+            <Ic n={task.is_active?'check':'x'} s={13} c={task.is_active?C.ok:C.err}/>
+          </button>
+          <button onClick={()=>deleteTask(task.id)} className="p-1.5 rounded-lg" style={{background:'var(--err-bg)'}}>
+            <Ic n="trash" s={13} c={C.err}/>
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── SETTINGS SECTION (inside EmployeesView) ───────────────────────────────────
 function SettingsSection({settings, onSaved}) {
   const [pool, setPool] = useState(String(settings?.monthly_pool_amount||525000));
@@ -1637,6 +1848,14 @@ function EmployeesView({employees, settings, onRefresh}) {
       )}
 
       {/* Settings section */}
+      <div className="pt-2">
+        <div className="flex items-center gap-2 mb-3 px-1">
+          <Ic n="task" s={16} c={C.primary}/>
+          <span className="text-xs font-bold uppercase tracking-widest" style={{color:C.primary}}>إدارة المهام</span>
+        </div>
+        <TasksSection employees={employees}/>
+      </div>
+
       <div className="pt-2">
         <div className="flex items-center gap-2 mb-3 px-1">
           <Ic n="gear" s={16} c={C.primary}/>
