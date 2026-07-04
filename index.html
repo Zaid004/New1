@@ -1152,7 +1152,10 @@ function AdminDashboard({employees,settings}) {
   useEffect(()=>{
     const today=todayStr();
     sb.from('tasks').select('*').eq('is_active',true).then(({data})=>setTasks(data||[]));
-    sb.from('task_completions').select('*').eq('completed_date',today).then(({data})=>setTodayComps(data||[]));
+    const refreshComps=()=>sb.from('task_completions').select('*').eq('completed_date',today).then(({data})=>setTodayComps(data||[]));
+    refreshComps();
+    const timer=setInterval(refreshComps,30000);
+    return ()=>clearInterval(timer);
   },[]);
 
   const pool   = settings?.monthly_pool_amount||525000;
