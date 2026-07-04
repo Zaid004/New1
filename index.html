@@ -90,21 +90,14 @@ const DAYS   = ['أحد','اثن','ثلا','أرب','خمس','جمع','سبت'];
 
 const fmt = n => new Intl.NumberFormat('en').format(Math.round(Number(n)||0));
 
-// Detect local IPs via WebRTC (no external service needed)
-const getLocalIPs = () => new Promise(resolve => {
+// Get public IP via ipify (unique per internet connection/location)
+const getPublicIP = async () => {
   try {
-    const pc = new RTCPeerConnection({iceServers:[]});
-    const ips = new Set();
-    pc.createDataChannel('');
-    pc.onicecandidate = e => {
-      if (!e || !e.candidate) { pc.close(); resolve([...ips]); return; }
-      const m = /(\d+\.\d+\.\d+\.\d+)/.exec(e.candidate.candidate);
-      if (m && !m[1].startsWith('0.')) ips.add(m[1]);
-    };
-    pc.createOffer().then(o => pc.setLocalDescription(o));
-    setTimeout(() => { try{pc.close();}catch(e){} resolve([...ips]); }, 2000);
-  } catch(e) { resolve([]); }
-});
+    const res = await fetch('https://api.ipify.org?format=json', {cache:'no-store'});
+    const data = await res.json();
+    return data.ip || null;
+  } catch(e) { return null; }
+};
 const fmtNum = v => { if(v===''||v===undefined||v===null) return ''; const n=Number(String(v).replace(/,/g,'')); return isNaN(n)||n===0&&v===''?'':new Intl.NumberFormat('en').format(n); };
 const parseNum = v => String(v).replace(/[^0-9.]/g,'');
 const todayStr = () => new Date().toISOString().split('T')[0];
@@ -259,10 +252,13 @@ function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone,allowedNetwo
     setNetErr('');
     if (allowedNetwork?.trim()) {
       setBusy(true);
-      const ips = await getLocalIPs();
-      const prefix = allowedNetwork.trim();
-      const onNet = ips.some(ip => ip.startsWith(prefix));
-      if (!onNet) {
+      const currentIP = await getPublicIP();
+      if (!currentIP) {
+        setBusy(false);
+        setNetErr('تعذّر التحقق من الشبكة، تأكد من الاتصال بالإنترنت');
+        return;
+      }
+      if (currentIP !== allowedNetwork.trim()) {
         setBusy(false);
         setNetErr('تسجيل الحضور متاح فقط من شبكة المكتبة');
         return;
@@ -1390,12 +1386,12 @@ function SettingsSection({settings, onSaved}) {
           style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}} placeholder="3.2"/>
       </div>
       <div>
-        <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>شبكة المكتبة (بادئة IP)</label>
+        <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>IP المكتبة العام</label>
         <input type="text" value={net} onChange={e=>setNet(e.target.value)}
           className="w-full p-3 rounded-xl border text-sm outline-none"
           style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}}
-          placeholder="مثال: 192.168.1 — اتركه فارغاً لإلغاء التقييد"/>
-        <p className="text-xs mt-1" style={{color:C.txt,opacity:.45}}>الموظف لن يستطيع تسجيل الحضور إلا عند اتصاله بشبكة المكتبة</p>
+          placeholder="مثال: 87.100.25.4 — اتركه فارغاً لإلغاء التقييد"/>
+        <p className="text-xs mt-1" style={{color:C.txt,opacity:.45}}>اكتشف IP المكتبة من whatismyip.com أثناء اتصالك بشبكتها · الموظف لن يستطيع تسجيل الحضور خارجها</p>
       </div>
       {msg.text && <div className="p-3 rounded-xl text-sm text-center text-white" style={{background:msg.ok?C.ok:C.err}}>{msg.text}</div>}
       <button onClick={save} disabled={busy}
