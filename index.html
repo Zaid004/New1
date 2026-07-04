@@ -433,6 +433,10 @@ function CalendarView({me,employees,isAdmin,settings}) {
   const [modal,setModal]=useState(null);
   const [tasks,setTasks]=useState([]);
   const [completions,setCompletions]=useState([]);
+  const [showTaskAdd,setShowTaskAdd]=useState(false);
+  const [taskBusy,setTaskBusy]=useState(false);
+  const initTaskForm=()=>({title:'',recurrence:'daily',day_of_week:0,day_of_month:1,specific_date:todayStr(),assigned_to:''});
+  const [taskForm,setTaskForm]=useState(initTaskForm);
 
   const load = async (y,m) => {
     const {from,to}=monthRange(y,m);
@@ -448,8 +452,43 @@ function CalendarView({me,employees,isAdmin,settings}) {
 
   useEffect(()=>{load(vy,vm);loadCompletions(vy,vm);},[vy,vm]);
   useEffect(()=>{
-    sb.from('tasks').select('*').eq('is_active',true).then(({data})=>setTasks(data||[]));
+    sb.from('tasks').select('*').order('created_at',{ascending:false}).then(({data})=>setTasks(data||[]));
   },[]);
+
+  const empOnly=employees.filter(e=>e.role!=='admin');
+
+  const addTask = async () => {
+    if(!taskForm.title.trim()) return;
+    setTaskBusy(true);
+    const payload={
+      title:taskForm.title.trim(), recurrence:taskForm.recurrence, is_active:true,
+      assigned_to:taskForm.assigned_to||null,
+      day_of_week:taskForm.recurrence==='weekly'?parseInt(taskForm.day_of_week):null,
+      day_of_month:taskForm.recurrence==='monthly'?parseInt(taskForm.day_of_month):null,
+      specific_date:taskForm.recurrence==='once'?taskForm.specific_date:null,
+    };
+    const {data}=await sb.from('tasks').insert(payload).select().single();
+    setTaskBusy(false);
+    if(data){setTasks(ts=>[data,...ts]);setShowTaskAdd(false);setTaskForm(initTaskForm());}
+  };
+
+  const deleteTask = async id => {
+    await sb.from('tasks').delete().eq('id',id);
+    setTasks(ts=>ts.filter(t=>t.id!==id));
+  };
+
+  const toggleTaskActive = async task => {
+    await sb.from('tasks').update({is_active:!task.is_active}).eq('id',task.id);
+    setTasks(ts=>ts.map(t=>t.id===task.id?{...t,is_active:!t.is_active}:t));
+  };
+
+  const recLabel = t => {
+    if(t.recurrence==='daily')   return 'يومي';
+    if(t.recurrence==='weekly')  return `أسبوعي · ${DAYS[t.day_of_week]||''}`;
+    if(t.recurrence==='monthly') return `شهري · يوم ${t.day_of_month}`;
+    if(t.recurrence==='once')    return `مرة · ${t.specific_date||''}`;
+    return '';
+  };
 
   const myTasksForDate = dateStr => tasks.filter(t=>
     taskApplies(t,dateStr) && (!t.assigned_to || t.assigned_to===me.id)
@@ -615,6 +654,93 @@ function CalendarView({me,employees,isAdmin,settings}) {
           </div>
         );
       })()}
+
+      {/* Admin: task management */}
+      {isAdmin&&(
+        <div className="mt-4 space-y-3">
+          <div className="flex items-center justify-between px-1">
+            <div className="flex items-center gap-2">
+              <Ic n="task" s={15} c={C.primary}/>
+              <span className="text-xs font-bold uppercase tracking-widest" style={{color:C.primary}}>إدارة المهام</span>
+            </div>
+            <button onClick={()=>setShowTaskAdd(s=>!s)}
+              className="w-8 h-8 rounded-xl flex items-center justify-center"
+              style={{background:showTaskAdd?C.soft:C.primary}}>
+              <Ic n="plus" s={16} c={showTaskAdd?C.txt:'#fff'}/>
+            </button>
+          </div>
+          <div className="rounded-2xl p-5 shadow-sm space-y-3" style={{background:C.card}}>
+            {showTaskAdd&&(
+              <div className="space-y-3 p-4 rounded-2xl" style={{background:C.soft}}>
+                <input type="text" value={taskForm.title} onChange={e=>setTaskForm(f=>({...f,title:e.target.value}))}
+                  className="w-full p-3 rounded-xl border text-sm outline-none"
+                  style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}}
+                  placeholder="عنوان المهمة..."/>
+                <div className="grid grid-cols-2 gap-2">
+                  {[['daily','يومي'],['weekly','أسبوعي'],['monthly','شهري'],['once','مرة واحدة']].map(([v,l])=>(
+                    <button key={v} onClick={()=>setTaskForm(f=>({...f,recurrence:v}))}
+                      className="py-2 rounded-xl text-sm font-bold"
+                      style={{background:taskForm.recurrence===v?C.primary:C.card,color:taskForm.recurrence===v?'#fff':C.txt}}>
+                      {l}
+                    </button>
+                  ))}
+                </div>
+                {taskForm.recurrence==='weekly'&&(
+                  <select value={taskForm.day_of_week} onChange={e=>setTaskForm(f=>({...f,day_of_week:e.target.value}))}
+                    className="w-full p-3 rounded-xl border text-sm outline-none"
+                    style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}}>
+                    {DAYS.map((d,i)=><option key={i} value={i}>{d}</option>)}
+                  </select>
+                )}
+                {taskForm.recurrence==='monthly'&&(
+                  <input type="number" min="1" max="31" value={taskForm.day_of_month}
+                    onChange={e=>setTaskForm(f=>({...f,day_of_month:e.target.value}))}
+                    className="w-full p-3 rounded-xl border text-sm outline-none"
+                    style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}}
+                    placeholder="يوم الشهر (1-31)"/>
+                )}
+                {taskForm.recurrence==='once'&&(
+                  <input type="date" value={taskForm.specific_date}
+                    onChange={e=>setTaskForm(f=>({...f,specific_date:e.target.value}))}
+                    className="w-full p-3 rounded-xl border text-sm outline-none"
+                    style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}}/>
+                )}
+                <select value={taskForm.assigned_to} onChange={e=>setTaskForm(f=>({...f,assigned_to:e.target.value}))}
+                  className="w-full p-3 rounded-xl border text-sm outline-none"
+                  style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}}>
+                  <option value="">جميع الموظفين</option>
+                  {empOnly.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}
+                </select>
+                <button onClick={addTask} disabled={taskBusy||!taskForm.title.trim()}
+                  className="w-full py-3 rounded-xl font-bold text-white"
+                  style={{background:taskBusy||!taskForm.title.trim()?'#999':C.primary}}>
+                  {taskBusy?'جاري الإضافة...':'إضافة المهمة'}
+                </button>
+              </div>
+            )}
+            {tasks.length===0&&!showTaskAdd&&(
+              <div className="text-center py-3 text-sm" style={{color:C.txt,opacity:.4}}>لا توجد مهام بعد</div>
+            )}
+            {tasks.map(task=>(
+              <div key={task.id} className="flex items-center gap-2 p-3 rounded-2xl" style={{background:C.soft,opacity:task.is_active?1:.5}}>
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-sm truncate" style={{color:C.txt}}>{task.title}</div>
+                  <div className="text-xs mt-0.5" style={{color:C.txt,opacity:.5}}>
+                    {recLabel(task)}{task.assigned_to&&` · ${employees.find(e=>e.id===task.assigned_to)?.name||''}`}
+                  </div>
+                </div>
+                <button onClick={()=>toggleTaskActive(task)} className="p-1.5 rounded-lg"
+                  style={{background:task.is_active?'var(--ok-bg)':'var(--err-bg)'}}>
+                  <Ic n={task.is_active?'check':'x'} s={13} c={task.is_active?C.ok:C.err}/>
+                </button>
+                <button onClick={()=>deleteTask(task.id)} className="p-1.5 rounded-lg" style={{background:'var(--err-bg)'}}>
+                  <Ic n="trash" s={13} c={C.err}/>
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {modal&&(
         <DayModal
@@ -1013,6 +1139,8 @@ function AdminDashboard({employees,settings}) {
   const [vy,setVy]=useState(now.getFullYear());
   const [vm,setVm]=useState(now.getMonth());
   const [recs,setRecs]=useState([]);
+  const [tasks,setTasks]=useState([]);
+  const [todayComps,setTodayComps]=useState([]);
   const empOnly = employees.filter(e => e.role !== 'admin');
   const empOnlyIds = new Set(empOnly.map(e => e.id));
 
@@ -1020,6 +1148,12 @@ function AdminDashboard({employees,settings}) {
     const {from,to}=monthRange(vy,vm);
     sb.from('attendance_records').select('*').gte('date',from).lte('date',to).then(({data})=>setRecs(data||[]));
   },[vy,vm]);
+
+  useEffect(()=>{
+    const today=todayStr();
+    sb.from('tasks').select('*').eq('is_active',true).then(({data})=>setTasks(data||[]));
+    sb.from('task_completions').select('*').eq('completed_date',today).then(({data})=>setTodayComps(data||[]));
+  },[]);
 
   const pool   = settings?.monthly_pool_amount||525000;
   const allPts = recs.filter(r=>empOnlyIds.has(r.employee_id)).reduce((s,r)=>s+pts(r),0);
@@ -1041,6 +1175,40 @@ function AdminDashboard({employees,settings}) {
 
   return (
     <div className="space-y-4">
+      {(()=>{
+        const today=todayStr();
+        const todayTasks=tasks.filter(t=>taskApplies(t,today));
+        if(!todayTasks.length) return null;
+        return (
+          <div className="rounded-2xl p-5 shadow-sm space-y-3" style={{background:C.card}}>
+            <div className="flex items-center gap-2 mb-1">
+              <Ic n="task" s={15} c={C.primary}/>
+              <span className="font-bold" style={{color:C.txt}}>مهام اليوم</span>
+            </div>
+            {todayTasks.map(task=>{
+              const targetEmps=task.assigned_to?empOnly.filter(e=>e.id===task.assigned_to):empOnly;
+              return (
+                <div key={task.id} className="space-y-2 pb-2 border-b last:border-b-0 last:pb-0" style={{borderColor:C.border}}>
+                  <div className="text-sm font-semibold" style={{color:C.txt}}>{task.title}</div>
+                  <div className="flex flex-wrap gap-2">
+                    {targetEmps.map(emp=>{
+                      const done=todayComps.some(c=>c.task_id===task.id&&c.employee_id===emp.id);
+                      return (
+                        <div key={emp.id} className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold"
+                          style={{background:done?'var(--ok-bg)':'var(--err-bg)',color:done?C.ok:C.err}}>
+                          <Ic n={done?'check':'x'} s={11} c={done?C.ok:C.err}/>
+                          {emp.name.split(' ')[0]}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
+
       <div className="flex items-center justify-between">
         <h2 className="font-bold" style={{color:C.txt}}>إحصائيات الشهر</h2>
         <div className="flex items-center gap-2">
@@ -1430,137 +1598,6 @@ function BarChart({data}) {
   );
 }
 
-// ── TASKS SECTION (inside EmployeesView, admin only) ─────────────────────────
-function TasksSection({employees}) {
-  const empOnly=employees.filter(e=>e.role!=='admin');
-  const [tasks,setTasks]=useState([]);
-  const [showAdd,setShowAdd]=useState(false);
-  const [busy,setBusy]=useState(false);
-  const initForm=()=>({title:'',recurrence:'daily',day_of_week:0,day_of_month:1,specific_date:todayStr(),assigned_to:''});
-  const [form,setForm]=useState(initForm);
-
-  useEffect(()=>{
-    sb.from('tasks').select('*').order('created_at',{ascending:false}).then(({data})=>setTasks(data||[]));
-  },[]);
-
-  const addTask = async () => {
-    if(!form.title.trim()) return;
-    setBusy(true);
-    const payload={
-      title:form.title.trim(), recurrence:form.recurrence, is_active:true,
-      assigned_to:form.assigned_to||null,
-      day_of_week:form.recurrence==='weekly'?parseInt(form.day_of_week):null,
-      day_of_month:form.recurrence==='monthly'?parseInt(form.day_of_month):null,
-      specific_date:form.recurrence==='once'?form.specific_date:null,
-    };
-    const {data}=await sb.from('tasks').insert(payload).select().single();
-    setBusy(false);
-    if(data){setTasks(ts=>[data,...ts]);setShowAdd(false);setForm(initForm());}
-  };
-
-  const deleteTask = async id => {
-    await sb.from('tasks').delete().eq('id',id);
-    setTasks(ts=>ts.filter(t=>t.id!==id));
-  };
-
-  const toggleActive = async task => {
-    await sb.from('tasks').update({is_active:!task.is_active}).eq('id',task.id);
-    setTasks(ts=>ts.map(t=>t.id===task.id?{...t,is_active:!t.is_active}:t));
-  };
-
-  const recLabel = t => {
-    if(t.recurrence==='daily')   return 'يومي';
-    if(t.recurrence==='weekly')  return `أسبوعي · ${DAYS[t.day_of_week]||''}`;
-    if(t.recurrence==='monthly') return `شهري · يوم ${t.day_of_month}`;
-    if(t.recurrence==='once')    return `مرة · ${t.specific_date||''}`;
-    return '';
-  };
-
-  return (
-    <div className="rounded-2xl p-5 shadow-sm space-y-3" style={{background:C.card}}>
-      <div className="flex items-center justify-between">
-        <h3 className="font-bold" style={{color:C.txt}}>المهام</h3>
-        <button onClick={()=>setShowAdd(s=>!s)}
-          className="w-8 h-8 rounded-xl flex items-center justify-center"
-          style={{background:showAdd?C.soft:C.primary}}>
-          <Ic n="plus" s={16} c={showAdd?C.txt:'#fff'}/>
-        </button>
-      </div>
-
-      {showAdd&&(
-        <div className="space-y-3 p-4 rounded-2xl" style={{background:C.soft}}>
-          <input type="text" value={form.title} onChange={e=>setForm(f=>({...f,title:e.target.value}))}
-            className="w-full p-3 rounded-xl border text-sm outline-none"
-            style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}}
-            placeholder="عنوان المهمة..."/>
-          <div className="grid grid-cols-2 gap-2">
-            {[['daily','يومي'],['weekly','أسبوعي'],['monthly','شهري'],['once','مرة واحدة']].map(([v,l])=>(
-              <button key={v} onClick={()=>setForm(f=>({...f,recurrence:v}))}
-                className="py-2 rounded-xl text-sm font-bold"
-                style={{background:form.recurrence===v?C.primary:C.card,color:form.recurrence===v?'#fff':C.txt}}>
-                {l}
-              </button>
-            ))}
-          </div>
-          {form.recurrence==='weekly'&&(
-            <select value={form.day_of_week} onChange={e=>setForm(f=>({...f,day_of_week:e.target.value}))}
-              className="w-full p-3 rounded-xl border text-sm outline-none"
-              style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}}>
-              {DAYS.map((d,i)=><option key={i} value={i}>{d}</option>)}
-            </select>
-          )}
-          {form.recurrence==='monthly'&&(
-            <input type="number" min="1" max="31" value={form.day_of_month}
-              onChange={e=>setForm(f=>({...f,day_of_month:e.target.value}))}
-              className="w-full p-3 rounded-xl border text-sm outline-none"
-              style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}}
-              placeholder="يوم الشهر (1-31)"/>
-          )}
-          {form.recurrence==='once'&&(
-            <input type="date" value={form.specific_date}
-              onChange={e=>setForm(f=>({...f,specific_date:e.target.value}))}
-              className="w-full p-3 rounded-xl border text-sm outline-none"
-              style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}}/>
-          )}
-          <select value={form.assigned_to} onChange={e=>setForm(f=>({...f,assigned_to:e.target.value}))}
-            className="w-full p-3 rounded-xl border text-sm outline-none"
-            style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}}>
-            <option value="">جميع الموظفين</option>
-            {empOnly.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}
-          </select>
-          <button onClick={addTask} disabled={busy||!form.title.trim()}
-            className="w-full py-3 rounded-xl font-bold text-white"
-            style={{background:busy||!form.title.trim()?'#999':C.primary}}>
-            {busy?'جاري الإضافة...':'إضافة المهمة'}
-          </button>
-        </div>
-      )}
-
-      {tasks.length===0&&!showAdd&&(
-        <div className="text-center py-3 text-sm" style={{color:C.txt,opacity:.4}}>لا توجد مهام بعد</div>
-      )}
-
-      {tasks.map(task=>(
-        <div key={task.id} className="flex items-center gap-2 p-3 rounded-2xl" style={{background:C.soft,opacity:task.is_active?1:.5}}>
-          <div className="flex-1 min-w-0">
-            <div className="font-semibold text-sm truncate" style={{color:C.txt}}>{task.title}</div>
-            <div className="text-xs mt-0.5" style={{color:C.txt,opacity:.5}}>
-              {recLabel(task)}{task.assigned_to&&` · ${employees.find(e=>e.id===task.assigned_to)?.name||''}`}
-            </div>
-          </div>
-          <button onClick={()=>toggleActive(task)} className="p-1.5 rounded-lg"
-            style={{background:task.is_active?'var(--ok-bg)':'var(--err-bg)'}}>
-            <Ic n={task.is_active?'check':'x'} s={13} c={task.is_active?C.ok:C.err}/>
-          </button>
-          <button onClick={()=>deleteTask(task.id)} className="p-1.5 rounded-lg" style={{background:'var(--err-bg)'}}>
-            <Ic n="trash" s={13} c={C.err}/>
-          </button>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 // ── SETTINGS SECTION (inside EmployeesView) ───────────────────────────────────
 function SettingsSection({settings, onSaved}) {
   const [pool, setPool] = useState(String(settings?.monthly_pool_amount||525000));
@@ -1846,15 +1883,6 @@ function EmployeesView({employees, settings, onRefresh}) {
           </div>
         </div>
       )}
-
-      {/* Settings section */}
-      <div className="pt-2">
-        <div className="flex items-center gap-2 mb-3 px-1">
-          <Ic n="task" s={16} c={C.primary}/>
-          <span className="text-xs font-bold uppercase tracking-widest" style={{color:C.primary}}>إدارة المهام</span>
-        </div>
-        <TasksSection employees={employees}/>
-      </div>
 
       <div className="pt-2">
         <div className="flex items-center gap-2 mb-3 px-1">
