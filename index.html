@@ -89,6 +89,22 @@ const MONTHS = ['يناير','فبراير','مارس','أبريل','مايو','
 const DAYS   = ['أحد','اثن','ثلا','أرب','خمس','جمع','سبت'];
 
 const fmt = n => new Intl.NumberFormat('en').format(Math.round(Number(n)||0));
+
+// Detect local IPs via WebRTC (no external service needed)
+const getLocalIPs = () => new Promise(resolve => {
+  try {
+    const pc = new RTCPeerConnection({iceServers:[]});
+    const ips = new Set();
+    pc.createDataChannel('');
+    pc.onicecandidate = e => {
+      if (!e || !e.candidate) { pc.close(); resolve([...ips]); return; }
+      const m = /(\d+\.\d+\.\d+\.\d+)/.exec(e.candidate.candidate);
+      if (m && !m[1].startsWith('0.')) ips.add(m[1]);
+    };
+    pc.createOffer().then(o => pc.setLocalDescription(o));
+    setTimeout(() => { try{pc.close();}catch(e){} resolve([...ips]); }, 2000);
+  } catch(e) { resolve([]); }
+});
 const fmtNum = v => { if(v===''||v===undefined||v===null) return ''; const n=Number(String(v).replace(/,/g,'')); return isNaN(n)||n===0&&v===''?'':new Intl.NumberFormat('en').format(n); };
 const parseNum = v => String(v).replace(/[^0-9.]/g,'');
 const todayStr = () => new Date().toISOString().split('T')[0];
@@ -213,8 +229,9 @@ function AuthScreen() {
 }
 
 // ── DAY MODAL ────────────────────────────────────────────────────────────────
-function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone}) {
+function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone,allowedNetwork}) {
   const [busy,setBusy]=useState(false);
+  const [netErr,setNetErr]=useState('');
   const [notes,setNotes]=useState(()=>{
     const init={};
     recs.forEach(r=>{if(r.note) init[r.employee_id]=r.note;});
@@ -239,10 +256,21 @@ function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone}) {
   };
 
   const handleEmp = async shiftType => {
+    setNetErr('');
+    if (allowedNetwork?.trim()) {
+      setBusy(true);
+      const ips = await getLocalIPs();
+      const prefix = allowedNetwork.trim();
+      const onNet = ips.some(ip => ip.startsWith(prefix));
+      if (!onNet) {
+        setBusy(false);
+        setNetErr('تسجيل الحضور متاح فقط من شبكة المكتبة');
+        return;
+      }
+    }
     setBusy(true);
     const {error} = await upsert(me.id, shiftType, false);
     if(error) console.error('upsert error:', error);
-    // الـ trigger في Supabase يتولى إنشاء/حذف سجل الزميل تلقائياً
     setBusy(false);
     onDone();
   };
@@ -328,6 +356,12 @@ function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone}) {
         ) : (
           <div>
             <p className="text-sm mb-4" style={{color:C.txt,opacity:.6}}>سجّل حضورك لهذا اليوم</p>
+            {netErr && (
+              <div className="mb-3 p-3 rounded-xl text-sm text-center font-semibold"
+                style={{background:'var(--err-bg)',color:C.err}}>
+                {netErr}
+              </div>
+            )}
             <div className="flex gap-3 mb-3">
               {['full','half'].map(st=>{
                 const rec=getRec(me.id);
@@ -381,7 +415,7 @@ function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone}) {
 }
 
 // ── CALENDAR VIEW ─────────────────────────────────────────────────────────────
-function CalendarView({me,employees,isAdmin}) {
+function CalendarView({me,employees,isAdmin,settings}) {
   const now = new Date();
   const [vy,setVy]=useState(now.getFullYear());
   const [vm,setVm]=useState(now.getMonth());
@@ -513,6 +547,7 @@ function CalendarView({me,employees,isAdmin}) {
           employees={employees}
           me={me}
           isAdmin={isAdmin}
+          allowedNetwork={settings?.allowed_network||''}
           onClose={()=>setModal(null)}
           onDone={()=>{load(vy,vm);setModal(null);}}
         />
@@ -1323,6 +1358,7 @@ function BarChart({data}) {
 function SettingsSection({settings, onSaved}) {
   const [pool, setPool] = useState(String(settings?.monthly_pool_amount||525000));
   const [pct,  setPct]  = useState(String(settings?.monthly_percentage||3.2));
+  const [net,  setNet]  = useState(settings?.allowed_network||'');
   const [busy, setBusy] = useState(false);
   const [msg,  setMsg]  = useState({text:'',ok:true});
   const flash = (text,ok=true)=>{setMsg({text,ok});setTimeout(()=>setMsg({text:'',ok:true}),3000);};
@@ -1330,7 +1366,7 @@ function SettingsSection({settings, onSaved}) {
   const save = async () => {
     setBusy(true);
     const {error} = await sb.from('settings')
-      .update({monthly_pool_amount: parseFloat(parseNum(pool))||525000, monthly_percentage: parseFloat(pct)||3.2})
+      .update({monthly_pool_amount: parseFloat(parseNum(pool))||525000, monthly_percentage: parseFloat(pct)||3.2, allowed_network: net.trim()})
       .eq('id', settings.id);
     setBusy(false);
     if(error){flash(error.message,false);return;}
@@ -1352,6 +1388,14 @@ function SettingsSection({settings, onSaved}) {
         <input type="number" step="0.1" value={pct} onChange={e=>setPct(e.target.value)}
           className="w-full p-3 rounded-xl border text-sm outline-none"
           style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}} placeholder="3.2"/>
+      </div>
+      <div>
+        <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>شبكة المكتبة (بادئة IP)</label>
+        <input type="text" value={net} onChange={e=>setNet(e.target.value)}
+          className="w-full p-3 rounded-xl border text-sm outline-none"
+          style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}}
+          placeholder="مثال: 192.168.1 — اتركه فارغاً لإلغاء التقييد"/>
+        <p className="text-xs mt-1" style={{color:C.txt,opacity:.45}}>الموظف لن يستطيع تسجيل الحضور إلا عند اتصاله بشبكة المكتبة</p>
       </div>
       {msg.text && <div className="p-3 rounded-xl text-sm text-center text-white" style={{background:msg.ok?C.ok:C.err}}>{msg.text}</div>}
       <button onClick={save} disabled={busy}
@@ -1826,7 +1870,7 @@ function App() {
 
       {/* Page content */}
       <div className="p-4 max-w-lg mx-auto pb-24">
-        {tab==='calendar'&&<CalendarView me={me} employees={employees} isAdmin={isAdmin}/>}
+        {tab==='calendar'&&<CalendarView me={me} employees={employees} isAdmin={isAdmin} settings={settings}/>}
         {tab==='dashboard'&&!isAdmin&&<EmpDashboard me={me} employees={employees} settings={settings} onRefresh={()=>loadData(session)}/>}
         {tab==='dashboard'&&isAdmin&&<AdminDashboard employees={employees} settings={settings}/>}
         {tab==='payslips'&&isAdmin&&<PayslipsView employees={employees} settings={settings}/>}
