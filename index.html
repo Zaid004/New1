@@ -956,14 +956,22 @@ function EmpDashboard({me,employees,settings,onRefresh}) {
           </div>
           <div className="grid grid-cols-3 gap-2">
             {SALES_MILESTONES.map((m,i)=>{
-              const hit=salesAmt>=m.target;
+              const prog=Math.min(salesAmt/m.target,1);
+              const hit=prog>=1;
+              const R=18, circ=2*Math.PI*R, offset=circ*(1-prog);
+              const col=hit?C.ok:C.primary;
               return (
                 <div key={i} className="rounded-xl p-2.5 text-center"
                   style={{background:hit?C.ok+'22':C.soft,border:`1.5px solid ${hit?C.ok:C.border}`}}>
-                  <div className="flex justify-center mb-1">
-                    <div className="w-7 h-7 rounded-full flex items-center justify-center font-black text-sm"
-                      style={{background:hit?C.ok:'transparent',border:`2px solid ${hit?C.ok:C.border}`,color:'#fff'}}>
-                      {hit?'✓':''}
+                  <div className="flex justify-center mb-1" style={{position:'relative',width:44,height:44,margin:'0 auto'}}>
+                    <svg width={44} height={44} style={{transform:'rotate(-90deg)'}}>
+                      <circle cx={22} cy={22} r={R} fill="none" stroke={hit?C.ok+'44':C.border} strokeWidth={3.5}/>
+                      <circle cx={22} cy={22} r={R} fill="none" stroke={col} strokeWidth={3.5}
+                        strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round"
+                        style={{transition:'stroke-dashoffset .4s ease'}}/>
+                    </svg>
+                    <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                      <span style={{fontSize:hit?15:9,fontWeight:900,color:col}}>{hit?'✓':Math.round(prog*100)+'%'}</span>
                     </div>
                   </div>
                   <div className="text-xs font-bold leading-tight" style={{color:hit?C.ok:C.txt}}>{m.label}</div>
@@ -1901,14 +1909,22 @@ function PayslipsView({employees,settings}) {
         </div>
         <div className="grid grid-cols-3 gap-2">
           {SALES_MILESTONES.map((m,i)=>{
-            const hit=salesAmtAdmin>=m.target;
+            const prog=Math.min(salesAmtAdmin/m.target,1);
+            const hit=prog>=1;
+            const R=18, circ=2*Math.PI*R, offset=circ*(1-prog);
+            const col=hit?C.ok:C.primary;
             return (
               <div key={i} className="rounded-xl p-2.5 text-center"
                 style={{background:hit?C.ok+'22':C.soft,border:`1.5px solid ${hit?C.ok:C.border}`}}>
-                <div className="flex justify-center mb-1">
-                  <div className="w-7 h-7 rounded-full flex items-center justify-center font-black text-sm"
-                    style={{background:hit?C.ok:'transparent',border:`2px solid ${hit?C.ok:C.border}`,color:'#fff'}}>
-                    {hit?'✓':''}
+                <div className="flex justify-center mb-1" style={{position:'relative',width:44,height:44,margin:'0 auto'}}>
+                  <svg width={44} height={44} style={{transform:'rotate(-90deg)'}}>
+                    <circle cx={22} cy={22} r={R} fill="none" stroke={hit?C.ok+'44':C.border} strokeWidth={3.5}/>
+                    <circle cx={22} cy={22} r={R} fill="none" stroke={col} strokeWidth={3.5}
+                      strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round"
+                      style={{transition:'stroke-dashoffset .4s ease'}}/>
+                  </svg>
+                  <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                    <span style={{fontSize:hit?15:9,fontWeight:900,color:col}}>{hit?'✓':Math.round(prog*100)+'%'}</span>
                   </div>
                 </div>
                 <div className="text-xs font-bold leading-tight" style={{color:hit?C.ok:C.txt}}>{m.label}</div>
