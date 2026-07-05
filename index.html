@@ -820,12 +820,12 @@ function EmpDashboard({me,employees,settings,onRefresh}) {
     const data=await res.json();
     setDelBusy(false);
     if(data.error){setDelErr(data.error);return;}
-    const myName=(me.name||'').toLowerCase();
-    const myUser=(me.username||'').toLowerCase();
-    const mine=data.stats.find(s=>{
-      const emp=s.employee.toLowerCase();
-      return myName.includes(emp)||emp.includes(myName)||myUser.includes(emp)||emp.includes(myUser);
-    });
+    const mine = me.loyverse_pos_name
+      ? data.stats.find(s => s.pos_name?.toLowerCase() === me.loyverse_pos_name.toLowerCase())
+      : data.stats.find(s => {
+          const emp=s.employee.toLowerCase(), myN=(me.name||'').toLowerCase(), myU=(me.username||'').toLowerCase();
+          return myN.includes(emp)||emp.includes(myN)||myU.includes(emp)||emp.includes(myU);
+        });
     if(!mine){setDelResult({orders:0,bonus:0});return;}
     setDelResult(mine);
   };
@@ -863,12 +863,12 @@ function EmpDashboard({me,employees,settings,onRefresh}) {
     const data=await res.json();
     setDelCalcBusy(false);
     if(data.error){setDelCalcMsg('خطأ: '+data.error);setTimeout(()=>setDelCalcMsg(''),4000);return;}
-    const myName=(me.name||'').toLowerCase();
-    const myUser=(me.username||'').toLowerCase();
-    const mine=data.stats?.find(s=>{
-      const emp=s.employee.toLowerCase();
-      return myName.includes(emp)||emp.includes(myName)||myUser.includes(emp)||emp.includes(myUser);
-    });
+    const mine = me.loyverse_pos_name
+      ? data.stats?.find(s => s.pos_name?.toLowerCase() === me.loyverse_pos_name.toLowerCase())
+      : data.stats?.find(s => {
+          const emp=s.employee.toLowerCase(), myN=(me.name||'').toLowerCase(), myU=(me.username||'').toLowerCase();
+          return myN.includes(emp)||emp.includes(myN)||myU.includes(emp)||emp.includes(myU);
+        });
     if(!mine||mine.orders===0){setDelCalcMsg('لا توجد طلبات توصيل هذا الشهر');setTimeout(()=>setDelCalcMsg(''),4000);return;}
     setExtra(String(mine.bonus));
     setDelCalcMsg(`${mine.orders} طلب × 400 = ${fmt(mine.bonus)} د.ع`);
@@ -2071,7 +2071,7 @@ function SettingsSection({settings, onSaved}) {
 function EmployeesView({employees, settings, onRefresh}) {
   const COLORS = ['#6B5876','#A8825B','#7A8B6F','#B0594F','#5876A8','#8B6F7A'];
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({name:'',username:'',password:'',color_hex:'#A8825B',role:'employee'});
+  const [form, setForm] = useState({name:'',username:'',password:'',color_hex:'#A8825B',role:'employee',loyverse_pos_name:''});
   const [resetTarget, setResetTarget] = useState(null);
   const [newPass, setNewPass] = useState('');
   const [editTarget, setEditTarget] = useState(null);
@@ -2089,7 +2089,7 @@ function EmployeesView({employees, settings, onRefresh}) {
     setBusy(false);
     if(res.error){ flash(res.error, false); return; }
     flash('تم إضافة الموظف بنجاح');
-    setForm({name:'',username:'',password:'',color_hex:'#A8825B',role:'employee'});
+    setForm({name:'',username:'',password:'',color_hex:'#A8825B',role:'employee',loyverse_pos_name:''});
     setShowAdd(false);
     onRefresh();
   };
@@ -2116,7 +2116,7 @@ function EmployeesView({employees, settings, onRefresh}) {
 
   const openEdit = emp => {
     setEditTarget(emp);
-    setEditForm({name: emp.name, username: emp.username||'', color_hex: emp.color_hex, role: emp.role});
+    setEditForm({name: emp.name, username: emp.username||'', color_hex: emp.color_hex, role: emp.role, loyverse_pos_name: emp.loyverse_pos_name||''});
   };
 
   const saveEdit = async () => {
@@ -2150,6 +2150,7 @@ function EmployeesView({employees, settings, onRefresh}) {
               <div className="font-bold" style={{color:C.txt}}>{emp.name}</div>
               <div className="text-xs" style={{color:C.txt,opacity:.45}}>
                 {emp.username ? `@${emp.username}` : ''} · {emp.role==='admin'?'مدير':'موظف'}
+                {emp.loyverse_pos_name ? ` · POS: ${emp.loyverse_pos_name}` : ''}
               </div>
             </div>
           </div>
@@ -2193,6 +2194,13 @@ function EmployeesView({employees, settings, onRefresh}) {
                 placeholder={ph} autoCapitalize="none" autoCorrect="off"/>
             </div>
           ))}
+          <div>
+            <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>اسم جهاز POS في Loyverse <span style={{opacity:.5}}>(اختياري)</span></label>
+            <input type="text" value={form.loyverse_pos_name} onChange={e=>setForm(p=>({...p,loyverse_pos_name:e.target.value}))}
+              className="w-full p-3 rounded-xl border text-sm outline-none"
+              style={{borderColor:C.border,background:'var(--input-bg)'}}
+              placeholder="مثال: Mustafa" autoCapitalize="none" autoCorrect="off"/>
+          </div>
           <div>
             <label className="text-xs font-semibold block mb-2" style={{color:C.txt}}>اللون</label>
             <div className="flex gap-2">
@@ -2266,6 +2274,13 @@ function EmployeesView({employees, settings, onRefresh}) {
                   autoCapitalize="none" autoCorrect="off"/>
               </div>
             ))}
+            <div>
+              <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>اسم جهاز POS في Loyverse <span style={{opacity:.5}}>(اختياري)</span></label>
+              <input type="text" value={editForm.loyverse_pos_name||''} onChange={e=>setEditForm(p=>({...p,loyverse_pos_name:e.target.value}))}
+                className="w-full p-3 rounded-xl border text-sm outline-none"
+                style={{borderColor:C.border,background:'var(--input-bg)'}}
+                placeholder="مثال: Mustafa" autoCapitalize="none" autoCorrect="off"/>
+            </div>
             <div>
               <label className="text-xs font-semibold block mb-2" style={{color:C.txt}}>اللون</label>
               <div className="flex gap-2">

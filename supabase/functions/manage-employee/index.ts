@@ -28,7 +28,7 @@ Deno.serve(async (req) => {
 
   // ── CREATE ────────────────────────────────────────────────────────────────
   if (action === 'create') {
-    const { name, username, password, color_hex, role } = body;
+    const { name, username, password, color_hex, role, loyverse_pos_name } = body;
     if (!name || !username || !password) {
       return new Response(JSON.stringify({ error: 'الاسم واسم المستخدم وكلمة المرور مطلوبة' }), { status: 400, headers: corsHeaders });
     }
@@ -53,6 +53,7 @@ Deno.serve(async (req) => {
       color_hex: color_hex || '#A8825B',
       auth_user_id: newUser.user.id,
       role: role || 'employee',
+      loyverse_pos_name: loyverse_pos_name?.trim() || null,
     });
     if (empErr) {
       await supabaseAdmin.auth.admin.deleteUser(newUser.user.id);
@@ -96,7 +97,7 @@ Deno.serve(async (req) => {
 
   // ── UPDATE EMPLOYEE ───────────────────────────────────────────────────────────
   if (action === 'update') {
-    const { employee_id, name, username, color_hex, role } = body;
+    const { employee_id, name, username, color_hex, role, loyverse_pos_name } = body;
     if (!employee_id) return new Response(JSON.stringify({ error: 'employee_id مطلوب' }), { status: 400, headers: corsHeaders });
 
     const { data: emp } = await supabaseAdmin
@@ -107,6 +108,7 @@ Deno.serve(async (req) => {
     if (name) updates.name = name.trim();
     if (color_hex) updates.color_hex = color_hex;
     if (role) updates.role = role;
+    updates.loyverse_pos_name = loyverse_pos_name?.trim() || null;
 
     if (username && username.trim().toLowerCase() !== emp.username) {
       const newUsername = username.trim().toLowerCase();

@@ -97,14 +97,18 @@ Deno.serve(async (req) => {
     };
     if (!from || !to) return json({ error: 'from و to مطلوبان' }, 400);
 
-    const DEVICE_EMP: Record<string, string> = {
-      'Mustafa': 'dreamer',
-      'Janah': 'janah',
-    };
     const BONUS_PER_ORDER = 400;
 
-    // 1. Resolve POS device IDs → employee display names
-    const deviceNameMap: Record<string, string> = {};
+    // 1. Load employee POS mappings from DB
+    const posToEmp: Record<string, { name: string }> = {};
+    const { data: emps } = await supabase.from('employees').select('name, loyverse_pos_name');
+    for (const e of emps ?? []) {
+      if (e.loyverse_pos_name) posToEmp[e.loyverse_pos_name.toLowerCase()] = { name: e.name };
+    }
+
+    // 2. Resolve POS device IDs → { displayName, posName }
+    type DevInfo = { displayName: string; posName: string };
+    const deviceMap: Record<string, DevInfo> = {};
     try {
       const devRes = await fetch('https://api.loyverse.com/v1.0/pos_devices?limit=50', {
         headers: { Authorization: `Bearer ${loyToken}` },
@@ -112,13 +116,14 @@ Deno.serve(async (req) => {
       if (devRes.ok) {
         const devData = await devRes.json() as { pos_devices?: { id: string; name: string }[] };
         for (const d of devData.pos_devices ?? []) {
-          deviceNameMap[d.id] = DEVICE_EMP[d.name] ?? d.name;
+          const empRecord = posToEmp[d.name.toLowerCase()];
+          deviceMap[d.id] = { displayName: empRecord?.name ?? d.name, posName: d.name };
         }
       }
-    } catch { /* will fall back to raw device IDs */ }
+    } catch { /* fall back to raw device IDs */ }
 
-    // 2. Fetch receipts and aggregate
-    type DevStat = { employee: string; orders: number; sales_total: number };
+    // 3. Fetch receipts and aggregate
+    type DevStat = { displayName: string; posName: string; orders: number; sales_total: number };
     const stats: Record<string, DevStat> = {};
     let cursor: string | null = null;
 
@@ -153,12 +158,9 @@ Deno.serve(async (req) => {
           if (!matched) continue;
 
           const devId = r.pos_device_id ?? 'unknown';
+          const devInfo = deviceMap[devId] ?? { displayName: devId, posName: devId };
           if (!stats[devId]) {
-            stats[devId] = {
-              employee: deviceNameMap[devId] ?? devId,
-              orders: 0,
-              sales_total: 0,
-            };
+            stats[devId] = { displayName: devInfo.displayName, posName: devInfo.posName, orders: 0, sales_total: 0 };
           }
           stats[devId].orders++;
           stats[devId].sales_total += r.total_money ?? 0;
@@ -167,7 +169,8 @@ Deno.serve(async (req) => {
       } while (cursor);
 
       const result = Object.values(stats).map(s => ({
-        employee: s.employee,
+        employee: s.displayName,
+        pos_name: s.posName,
         orders: s.orders,
         sales_total: Math.round(s.sales_total),
         bonus: s.orders * BONUS_PER_ORDER,
