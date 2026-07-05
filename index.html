@@ -1201,7 +1201,7 @@ function BoxkiMatcher() {
       setLoyData(data);
       const netAmt = Math.round(amt - ord*5000);
       const matched = data.total === netAmt;
-      sb.from('boxki_match_log').insert({
+      const {error: logErr} = await sb.from('boxki_match_log').insert({
         auth_user_id: session.user.id,
         boxki_amount: amt,
         boxki_orders: ord,
@@ -1212,6 +1212,7 @@ function BoxkiMatcher() {
         period_from: toISO(fromDt),
         period_to: toISO(toDt),
       });
+      if(logErr) setLoyErr('خطأ في تسجيل البوكسي: ' + logErr.message);
     } catch(e) {
       setLoyErr('خطأ في الاتصال');
     } finally {
