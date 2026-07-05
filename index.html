@@ -90,6 +90,14 @@ const DAYS   = ['أحد','اثن','ثلا','أرب','خمس','جمع','سبت'];
 
 const fmt = n => new Intl.NumberFormat('en').format(Math.round(Number(n)||0));
 
+const SALES_MILESTONES = [
+  {target:12_000_000, bonus:25_000,  label:'١٢ مليون'},
+  {target:15_000_000, bonus:50_000,  label:'١٥ مليون'},
+  {target:18_000_000, bonus:100_000, label:'١٨ مليون'},
+];
+const calcMilestoneBonus = sales =>
+  SALES_MILESTONES.reduce((sum,m) => sales >= m.target ? sum + m.bonus : sum, 0);
+
 // Check if a task applies to a given date string (YYYY-MM-DD)
 const taskApplies = (task, dateStr) => {
   if (!task.is_active) return false;
@@ -880,11 +888,12 @@ function EmpDashboard({me,employees,settings,onRefresh}) {
   const myPts  = myRecs.reduce((s,r)=>s+pts(r),0);
   const myDays = myRecs.reduce((s,r)=>s+days(r),0);
 
-  const fixedShare = allPts>0?(myPts/allPts)*pool:0;
-  const salesAmt   = parseFloat(sales)||0;
-  const pctShare   = allPts>0?(myPts/allPts)*(salesAmt*pct/100):0;
-  const extraAmt   = parseFloat(extra)||0;
-  const total      = fixedShare+pctShare+extraAmt;
+  const fixedShare    = allPts>0?(myPts/allPts)*pool:0;
+  const salesAmt      = parseFloat(sales)||0;
+  const pctShare      = allPts>0?(myPts/allPts)*(salesAmt*pct/100):0;
+  const extraAmt      = parseFloat(extra)||0;
+  const milestoneBonus= calcMilestoneBonus(salesAmt);
+  const total         = fixedShare+pctShare+extraAmt+milestoneBonus;
 
   const saveColor = async () => {
     setColorBusy(true); setColorMsg('');
@@ -945,6 +954,26 @@ function EmpDashboard({me,employees,settings,onRefresh}) {
               style={{background:loyMsg.startsWith('خطأ')?'var(--err-bg)':'var(--ok-bg)',
                       color:loyMsg.startsWith('خطأ')?C.err:C.ok}}>{loyMsg}</div>}
           </div>
+          <div className="grid grid-cols-3 gap-2">
+            {SALES_MILESTONES.map((m,i)=>{
+              const hit=salesAmt>=m.target;
+              return (
+                <div key={i} className="rounded-xl p-2.5 text-center"
+                  style={{background:hit?C.ok+'22':C.soft,border:`1.5px solid ${hit?C.ok:C.border}`}}>
+                  <div className="flex justify-center mb-1">
+                    <div className="w-7 h-7 rounded-full flex items-center justify-center font-black text-sm"
+                      style={{background:hit?C.ok:'transparent',border:`2px solid ${hit?C.ok:C.border}`,color:'#fff'}}>
+                      {hit?'✓':''}
+                    </div>
+                  </div>
+                  <div className="text-xs font-bold leading-tight" style={{color:hit?C.ok:C.txt}}>{m.label}</div>
+                  <div className="text-xs" style={{color:hit?C.ok:C.txt,opacity:hit?1:.5}}>+{fmt(m.bonus)}</div>
+                </div>
+              );
+            })}
+          </div>
+          {milestoneBonus>0&&<div className="text-xs font-bold text-center py-1.5 rounded-lg"
+            style={{background:C.ok+'22',color:C.ok}}>بونص المبيعات: +{fmt(milestoneBonus)} د.ع</div>}
           <div>
             <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>مبلغ إضافي (اختياري)</label>
             <input type="text" inputMode="numeric" value={fmtNum(extra)} onChange={e=>setExtra(parseNum(e.target.value))}
@@ -1080,7 +1109,7 @@ function PayslipArchive({empId}) {
       .then(({data})=>{setSlips(data||[]);setLoading(false);});
   },[show]);
 
-  const total = s => (s.fixed_amount||0)+(s.percentage_amount||0)+(s.bonus||0)+(s.extra_amount||0);
+  const total = s => (s.fixed_amount||0)+(s.percentage_amount||0)+(s.bonus||0)+(s.extra_amount||0)+calcMilestoneBonus(s.sales_amount||0);
 
   return (
     <div>
@@ -1627,7 +1656,9 @@ function PayslipsView({employees,settings}) {
     setF(p=>({...p,pct:Math.round(share)}));
   },[f.sales,recs,empId]);
 
-  const total=(parseFloat(f.fixed)||0)+(parseFloat(f.pct)||0)+(parseFloat(f.bonus)||0)+(parseFloat(f.extra)||0);
+  const salesAmtAdmin  = parseFloat(f.sales)||0;
+  const milestoneBonusAdmin = calcMilestoneBonus(salesAmtAdmin);
+  const total=(parseFloat(f.fixed)||0)+(parseFloat(f.pct)||0)+(parseFloat(f.bonus)||0)+(parseFloat(f.extra)||0)+milestoneBonusAdmin;
 
   const fetchLoyverse = async () => {
     setLoyBusy(true); setLoyMsg('');
@@ -1868,6 +1899,26 @@ function PayslipsView({employees,settings}) {
             </div>
           ))}
         </div>
+        <div className="grid grid-cols-3 gap-2">
+          {SALES_MILESTONES.map((m,i)=>{
+            const hit=salesAmtAdmin>=m.target;
+            return (
+              <div key={i} className="rounded-xl p-2.5 text-center"
+                style={{background:hit?C.ok+'22':C.soft,border:`1.5px solid ${hit?C.ok:C.border}`}}>
+                <div className="flex justify-center mb-1">
+                  <div className="w-7 h-7 rounded-full flex items-center justify-center font-black text-sm"
+                    style={{background:hit?C.ok:'transparent',border:`2px solid ${hit?C.ok:C.border}`,color:'#fff'}}>
+                    {hit?'✓':''}
+                  </div>
+                </div>
+                <div className="text-xs font-bold leading-tight" style={{color:hit?C.ok:C.txt}}>{m.label}</div>
+                <div className="text-xs" style={{color:hit?C.ok:C.txt,opacity:hit?1:.5}}>+{fmt(m.bonus)}</div>
+              </div>
+            );
+          })}
+        </div>
+        {milestoneBonusAdmin>0&&<div className="text-xs font-bold text-center py-1.5 rounded-lg"
+          style={{background:C.ok+'22',color:C.ok}}>بونص المبيعات: +{fmt(milestoneBonusAdmin)} د.ع</div>}
         {delPicker&&(
           <div className="rounded-xl overflow-hidden border" style={{borderColor:C.border}}>
             <div className="px-3 py-2 text-xs font-bold" style={{background:C.soft,color:C.txt}}>اختر الموظف</div>
