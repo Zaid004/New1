@@ -1710,14 +1710,14 @@ function PayslipsView({employees,settings}) {
                   </button>
                 </div>
               ) : key==='bonus' ? (
-                <div className="flex gap-1.5">
+                <div className="space-y-1.5">
                   <input type="text" inputMode="numeric" value={fmtNum(f[key])} onChange={e=>setF(p=>({...p,[key]:parseNum(e.target.value)}))}
-                    className="flex-1 p-2.5 rounded-xl border text-sm outline-none"
+                    className="w-full p-2.5 rounded-xl border text-sm outline-none"
                     style={{borderColor:C.border,background:'var(--input-bg)'}} placeholder="0"/>
-                  <button onClick={fetchDeliveryBonus} disabled={delBusy} title="جلب مكافأة التوصيل"
-                    className="px-2 rounded-xl text-xs font-black flex-shrink-0"
-                    style={{background:delBusy?'#999':C.primary,color:'#fff'}}>
-                    {delBusy?'..':'🚚'}
+                  <button onClick={fetchDeliveryBonus} disabled={delBusy}
+                    className="w-full py-1.5 rounded-xl text-xs font-bold"
+                    style={{background:C.soft,color:delBusy?'#999':C.primary}}>
+                    {delBusy?'جاري الجلب...':'عدد الطلبات'}
                   </button>
                 </div>
               ) : (
