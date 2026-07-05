@@ -1420,6 +1420,8 @@ function PayslipsView({employees,settings}) {
   const [saved,setSaved]=useState(false);
   const [loyBusy,setLoyBusy]=useState(false);
   const [loyMsg,setLoyMsg]=useState('');
+  const [delBusy,setDelBusy]=useState(false);
+  const [delMsg,setDelMsg]=useState('');
 
   // Annual report state
   const [annualYear,setAnnualYear]=useState(new Date().getFullYear());
@@ -1500,6 +1502,31 @@ function PayslipsView({employees,settings}) {
     setF(p=>({...p, sales: String(data.total)}));
     setLoyMsg(`تم جلب ${fmt(data.total)} د.ع`);
     setTimeout(()=>setLoyMsg(''),3000);
+  };
+
+  const fetchDeliveryBonus = async () => {
+    setDelBusy(true); setDelMsg('');
+    const [yr,mo]=month.split('-');
+    const lastD=new Date(parseInt(yr),parseInt(mo),0).getDate();
+    const from=new Date(`${yr}-${mo}-01T00:00:00.000+03:00`).toISOString();
+    const to  =new Date(`${yr}-${mo}-${String(lastD).padStart(2,'0')}T23:59:59.999+03:00`).toISOString();
+    const {data:{session}}=await sb.auth.getSession();
+    const res=await fetch(`${SUPA_URL}/functions/v1/get-loyverse-sales`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':`Bearer ${session.access_token}`},
+      body:JSON.stringify({mode:'delivery_stats',from,to,payment_filters:['توصيل','ماستر توصيل']}),
+    });
+    const data=await res.json();
+    setDelBusy(false);
+    if(data.error){setDelMsg('خطأ: '+data.error);setTimeout(()=>setDelMsg(''),4000);return;}
+    const empName=employees.find(e=>e.id===empId)?.name||'';
+    const matched=data.stats.find(s=>
+      s.employee.split(' ').some(w=>w.length>2&&empName.includes(w))
+    );
+    if(!matched){setDelMsg('لا توجد بيانات توصيل لهذا الموظف');setTimeout(()=>setDelMsg(''),3000);return;}
+    setF(p=>({...p,bonus:matched.bonus}));
+    setDelMsg(`${matched.orders} طلب × 400 = ${fmt(matched.bonus)} د.ع`);
+    setTimeout(()=>setDelMsg(''),5000);
   };
 
   const save = async () => {
@@ -1673,6 +1700,17 @@ function PayslipsView({employees,settings}) {
                     {loyBusy?'..':'L'}
                   </button>
                 </div>
+              ) : key==='bonus' ? (
+                <div className="flex gap-1.5">
+                  <input type="text" inputMode="numeric" value={fmtNum(f[key])} onChange={e=>setF(p=>({...p,[key]:parseNum(e.target.value)}))}
+                    className="flex-1 p-2.5 rounded-xl border text-sm outline-none"
+                    style={{borderColor:C.border,background:'var(--input-bg)'}} placeholder="0"/>
+                  <button onClick={fetchDeliveryBonus} disabled={delBusy} title="جلب مكافأة التوصيل"
+                    className="px-2 rounded-xl text-xs font-black flex-shrink-0"
+                    style={{background:delBusy?'#999':C.primary,color:'#fff'}}>
+                    {delBusy?'..':'🚚'}
+                  </button>
+                </div>
               ) : (
                 <input type="text" inputMode="numeric" value={fmtNum(f[key])} onChange={e=>setF(p=>({...p,[key]:parseNum(e.target.value)}))}
                   className="w-full p-2.5 rounded-xl border text-sm outline-none"
@@ -1681,6 +1719,13 @@ function PayslipsView({employees,settings}) {
             </div>
           ))}
         </div>
+        {delMsg && (
+          <div className="p-2.5 rounded-xl text-xs font-semibold text-center"
+            style={{background:delMsg.startsWith('خطأ')||delMsg.startsWith('لا ')?'var(--err-bg)':'var(--ok-bg)',
+                    color:delMsg.startsWith('خطأ')||delMsg.startsWith('لا ')?C.err:C.ok}}>
+            {delMsg}
+          </div>
+        )}
         {loyMsg && (
           <div className="p-2.5 rounded-xl text-xs font-semibold text-center"
             style={{background:loyMsg.startsWith('خطأ')?'var(--err-bg)':'var(--ok-bg)',
