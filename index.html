@@ -1269,6 +1269,143 @@ function AdminDashboard({employees,settings}) {
   );
 }
 
+// ── DELIVERY BONUS STATS ──────────────────────────────────────────────────────
+function DeliveryStats() {
+  const PAYMENT_OPTIONS = ['توصيل','ماستر توصيل'];
+  const [dateMode,setDateMode]=useState('yesterday');
+  const [customFrom,setCustomFrom]=useState(todayStr());
+  const [customTo,setCustomTo]=useState(todayStr());
+  const [selPayments,setSelPayments]=useState(['توصيل','ماستر توصيل']);
+  const [busy,setBusy]=useState(false);
+  const [result,setResult]=useState(null);
+  const [err,setErr]=useState('');
+
+  const getRange = () => {
+    const toISO = (dateStr, end=false) =>
+      new Date(`${dateStr}T${end?'23:59:59.999':'00:00:00.000'}+03:00`).toISOString();
+    const today = todayStr();
+    const yest  = (()=>{const d=new Date();d.setDate(d.getDate()-1);return d.toISOString().split('T')[0];})();
+    if(dateMode==='today')     return {from:toISO(today),      to:toISO(today,true)};
+    if(dateMode==='yesterday') return {from:toISO(yest),       to:toISO(yest,true)};
+    if(dateMode==='week'){
+      const d=new Date();
+      const daysBack=(d.getDay()+1)%7; // Saturday as week start
+      const ws=new Date(d);ws.setDate(d.getDate()-daysBack);
+      const wsStr=ws.toISOString().split('T')[0];
+      return {from:toISO(wsStr), to:toISO(today,true)};
+    }
+    if(dateMode==='month'){
+      const d=new Date();
+      const ms=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`;
+      return {from:toISO(ms), to:toISO(today,true)};
+    }
+    return {from:toISO(customFrom), to:toISO(customTo,true)};
+  };
+
+  const runQuery = async () => {
+    if(!selPayments.length){setErr('اختر طريقة دفع واحدة على الأقل');return;}
+    setBusy(true);setErr('');setResult(null);
+    const {from,to}=getRange();
+    const {data:{session}}=await sb.auth.getSession();
+    const res=await fetch(`${SUPA_URL}/functions/v1/get-loyverse-sales`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':`Bearer ${session.access_token}`},
+      body:JSON.stringify({mode:'delivery_stats',from,to,payment_filters:selPayments}),
+    });
+    const data=await res.json();
+    setBusy(false);
+    if(data.error){setErr(data.error);return;}
+    setResult(data);
+  };
+
+  const togglePay = p => setSelPayments(ps=>ps.includes(p)?ps.filter(x=>x!==p):[...ps,p]);
+
+  return (
+    <div className="space-y-4">
+      {/* Date range */}
+      <div className="rounded-2xl p-4 shadow-sm space-y-3" style={{background:C.card}}>
+        <div className="text-xs font-bold uppercase tracking-widest mb-1" style={{color:C.primary}}>نطاق التاريخ</div>
+        <div className="grid grid-cols-2 gap-2">
+          {[['today','اليوم'],['yesterday','البارحة'],['week','هذا الأسبوع'],['month','هذا الشهر'],['custom','مخصص']].map(([v,l])=>(
+            <button key={v} onClick={()=>setDateMode(v)}
+              className="py-2 rounded-xl text-sm font-bold"
+              style={{background:dateMode===v?C.primary:C.soft,color:dateMode===v?'#fff':C.txt}}>
+              {l}
+            </button>
+          ))}
+        </div>
+        {dateMode==='custom'&&(
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>من</label>
+              <input type="date" value={customFrom} onChange={e=>setCustomFrom(e.target.value)}
+                className="w-full p-2.5 rounded-xl border text-sm outline-none"
+                style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}}/>
+            </div>
+            <div>
+              <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>إلى</label>
+              <input type="date" value={customTo} onChange={e=>setCustomTo(e.target.value)}
+                className="w-full p-2.5 rounded-xl border text-sm outline-none"
+                style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}}/>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Payment methods */}
+      <div className="rounded-2xl p-4 shadow-sm space-y-3" style={{background:C.card}}>
+        <div className="text-xs font-bold uppercase tracking-widest mb-1" style={{color:C.primary}}>طريقة الدفع</div>
+        <div className="flex gap-2 flex-wrap">
+          {PAYMENT_OPTIONS.map(p=>{
+            const sel=selPayments.includes(p);
+            return (
+              <button key={p} onClick={()=>togglePay(p)}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold"
+                style={{background:sel?C.primary:C.soft,color:sel?'#fff':C.txt}}>
+                {sel&&<Ic n="check" s={13} c="#fff"/>}
+                {p}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {err&&<div className="p-3 rounded-xl text-sm text-center text-white" style={{background:C.err}}>{err}</div>}
+
+      <button onClick={runQuery} disabled={busy}
+        className="w-full py-3 rounded-xl font-bold text-white"
+        style={{background:busy?'#999':C.primary}}>
+        {busy?'جاري الاستعلام...':'استعلام'}
+      </button>
+
+      {result&&(
+        <div className="rounded-2xl shadow-sm overflow-hidden" style={{background:C.card}}>
+          <div className="px-4 py-3 text-xs font-bold" style={{background:C.soft}}>
+            <div className="grid grid-cols-3" style={{color:C.txt,opacity:.6}}>
+              <span>الموظف</span><span className="text-center">الطلبات</span><span className="text-left">المكافأة</span>
+            </div>
+          </div>
+          {result.stats.map((s,i)=>(
+            <div key={i} className="grid grid-cols-3 px-4 py-3.5 border-b text-sm" style={{borderColor:C.border}}>
+              <span className="font-bold" style={{color:C.txt}}>{s.employee}</span>
+              <span className="text-center font-black text-lg" style={{color:C.primary}}>{s.orders}</span>
+              <span className="text-left font-bold" style={{color:C.ok}}>{fmt(s.bonus)} <span className="text-xs opacity-60">د.ع</span></span>
+            </div>
+          ))}
+          <div className="grid grid-cols-3 px-4 py-3 text-sm font-black" style={{background:C.soft}}>
+            <span style={{color:C.txt}}>المجموع</span>
+            <span className="text-center" style={{color:C.primary}}>{result.total_orders}</span>
+            <span className="text-left" style={{color:C.ok}}>{fmt(result.total_bonus)} <span className="text-xs font-bold opacity-60">د.ع</span></span>
+          </div>
+          <div className="px-4 py-2 text-center text-xs" style={{color:C.txt,opacity:.4}}>
+            {result.bonus_per_order} د.ع × طلب
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── PAYSLIPS (ADMIN) ──────────────────────────────────────────────────────────
 function PayslipsView({employees,settings}) {
   const now=new Date();
@@ -1440,7 +1577,7 @@ function PayslipsView({employees,settings}) {
     <div className="space-y-4">
       {/* View toggle */}
       <div className="flex gap-2 p-1 rounded-2xl" style={{background:C.soft}}>
-        {[['monthly','كشف الشهر'],['annual','التقرير السنوي']].map(([v,l])=>(
+        {[['monthly','كشف الشهر'],['annual','التقرير السنوي'],['delivery','مكافأة التوصيل']].map(([v,l])=>(
           <button key={v} onClick={()=>setView(v)}
             className="flex-1 py-2 rounded-xl text-sm font-bold transition-all"
             style={{background:view===v?C.card:'transparent',color:view===v?C.primary:C.txt,
@@ -1577,7 +1714,9 @@ function PayslipsView({employees,settings}) {
       </div>
       </>}
 
-      <BoxkiMatcher/>
+      {view==='delivery'&&<DeliveryStats/>}
+
+      {view!=='delivery'&&<BoxkiMatcher/>}
 
     </div>
   );

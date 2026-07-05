@@ -90,6 +90,97 @@ Deno.serve(async (req) => {
     }
   }
 
+  // ── MODE: delivery bonus stats per POS device ─────────────────────────────
+  if (mode === 'delivery_stats') {
+    const { from, to, payment_filters = [] } = body as {
+      from: string; to: string; payment_filters: string[];
+    };
+    if (!from || !to) return json({ error: 'from و to مطلوبان' }, 400);
+
+    const DEVICE_EMP: Record<string, string> = {
+      'Mustafa': 'Dreamer',
+      'Janah': 'Janah',
+    };
+    const BONUS_PER_ORDER = 400;
+
+    // 1. Resolve POS device IDs → employee display names
+    const deviceNameMap: Record<string, string> = {};
+    try {
+      const devRes = await fetch('https://api.loyverse.com/v1.0/pos_devices?limit=50', {
+        headers: { Authorization: `Bearer ${loyToken}` },
+      });
+      if (devRes.ok) {
+        const devData = await devRes.json() as { pos_devices?: { id: string; name: string }[] };
+        for (const d of devData.pos_devices ?? []) {
+          deviceNameMap[d.id] = DEVICE_EMP[d.name] ?? d.name;
+        }
+      }
+    } catch { /* will fall back to raw device IDs */ }
+
+    // 2. Fetch receipts and aggregate
+    type DevStat = { employee: string; orders: number; sales_total: number };
+    const stats: Record<string, DevStat> = {};
+    let cursor: string | null = null;
+
+    try {
+      do {
+        const params = new URLSearchParams({ created_at_min: from, created_at_max: to, limit: '250' });
+        if (cursor) params.set('cursor', cursor);
+
+        const res = await fetch(`https://api.loyverse.com/v1.0/receipts?${params}`, {
+          headers: { Authorization: `Bearer ${loyToken}` },
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          return json({ error: (err as { errors?: { message: string }[] })?.errors?.[0]?.message ?? `Loyverse ${res.status}` }, 502);
+        }
+
+        const data = await res.json() as {
+          receipts: {
+            total_money: number;
+            receipt_type: string;
+            pos_device_id: string;
+            payments: { name: string; money_amount: number }[];
+          }[];
+          cursor?: string;
+        };
+
+        for (const r of data.receipts ?? []) {
+          if (r.receipt_type !== 'SALE') continue;
+          const filters = payment_filters as string[];
+          const matched = filters.length === 0
+            || r.payments?.some(p => filters.some(f => p.name?.includes(f)));
+          if (!matched) continue;
+
+          const devId = r.pos_device_id ?? 'unknown';
+          if (!stats[devId]) {
+            stats[devId] = {
+              employee: deviceNameMap[devId] ?? devId,
+              orders: 0,
+              sales_total: 0,
+            };
+          }
+          stats[devId].orders++;
+          stats[devId].sales_total += r.total_money ?? 0;
+        }
+        cursor = data.cursor ?? null;
+      } while (cursor);
+
+      const result = Object.values(stats).map(s => ({
+        employee: s.employee,
+        orders: s.orders,
+        sales_total: Math.round(s.sales_total),
+        bonus: s.orders * BONUS_PER_ORDER,
+      }));
+      const totalOrders = result.reduce((s, r) => s + r.orders, 0);
+      const totalBonus  = result.reduce((s, r) => s + r.bonus,  0);
+
+      return json({ stats: result, total_orders: totalOrders, total_bonus: totalBonus, bonus_per_order: BONUS_PER_ORDER });
+    } catch (e) {
+      return json({ error: (e as Error).message }, 500);
+    }
+  }
+
   // ── MODE: monthly sales (default) ──────────────────────────────────────────
   const { month } = body;
   if (!month || !/^\d{4}-\d{2}$/.test(month)) {
