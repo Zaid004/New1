@@ -1519,9 +1519,9 @@ function PayslipsView({employees,settings}) {
     const data=await res.json();
     setDelBusy(false);
     if(data.error){setDelMsg('خطأ: '+data.error);setTimeout(()=>setDelMsg(''),4000);return;}
-    const empName=employees.find(e=>e.id===empId)?.name||'';
+    const empName=(employees.find(e=>e.id===empId)?.name||'').toLowerCase();
     const matched=data.stats.find(s=>
-      s.employee.split(' ').some(w=>w.length>2&&empName.includes(w))
+      empName.includes(s.employee.toLowerCase())
     );
     if(!matched){setDelMsg('لا توجد بيانات توصيل لهذا الموظف');setTimeout(()=>setDelMsg(''),3000);return;}
     setF(p=>({...p,bonus:matched.bonus}));

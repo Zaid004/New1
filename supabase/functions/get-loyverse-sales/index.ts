@@ -98,8 +98,8 @@ Deno.serve(async (req) => {
     if (!from || !to) return json({ error: 'from و to مطلوبان' }, 400);
 
     const DEVICE_EMP: Record<string, string> = {
-      'Mustafa': 'مصطفى هشام',
-      'Janah': 'محمد جناح',
+      'Mustafa': 'dreamer',
+      'Janah': 'janah',
     };
     const BONUS_PER_ORDER = 400;
 
