@@ -810,8 +810,12 @@ function EmpDashboard({me,employees,settings,onRefresh}) {
     const data=await res.json();
     setDelBusy(false);
     if(data.error){setDelErr(data.error);return;}
-    const myName=me.name.toLowerCase();
-    const mine=data.stats.find(s=>myName.includes(s.employee.toLowerCase())||s.employee.toLowerCase().includes(myName));
+    const myName=(me.name||'').toLowerCase();
+    const myUser=(me.username||'').toLowerCase();
+    const mine=data.stats.find(s=>{
+      const emp=s.employee.toLowerCase();
+      return myName.includes(emp)||emp.includes(myName)||myUser.includes(emp)||emp.includes(myUser);
+    });
     if(!mine){setDelResult({orders:0,bonus:0});return;}
     setDelResult(mine);
   };
