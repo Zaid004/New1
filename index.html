@@ -772,6 +772,49 @@ function EmpDashboard({me,employees,settings,onRefresh}) {
   const [colorMsg,setColorMsg]=useState('');
   const [loyBusy,setLoyBusy]=useState(false);
   const [loyMsg,setLoyMsg]=useState('');
+  const [showDel,setShowDel]=useState(false);
+  const [delDateMode,setDelDateMode]=useState('yesterday');
+  const [delFrom,setDelFrom]=useState(todayStr());
+  const [delTo,setDelTo]=useState(todayStr());
+  const [delBusy,setDelBusy]=useState(false);
+  const [delResult,setDelResult]=useState(null);
+  const [delErr,setDelErr]=useState('');
+
+  const getDelRange = () => {
+    const toISO=(ds,end=false)=>new Date(`${ds}T${end?'23:59:59.999':'00:00:00.000'}+03:00`).toISOString();
+    const today=todayStr();
+    const yest=(()=>{const d=new Date();d.setDate(d.getDate()-1);return d.toISOString().split('T')[0];})();
+    if(delDateMode==='today')     return {from:toISO(today),     to:toISO(today,true)};
+    if(delDateMode==='yesterday') return {from:toISO(yest),      to:toISO(yest,true)};
+    if(delDateMode==='week'){
+      const d=new Date(),ws=new Date(d);
+      ws.setDate(d.getDate()-(d.getDay()+1)%7);
+      return {from:toISO(ws.toISOString().split('T')[0]),to:toISO(today,true)};
+    }
+    if(delDateMode==='month'){
+      const d=new Date();
+      return {from:toISO(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`),to:toISO(today,true)};
+    }
+    return {from:toISO(delFrom),to:toISO(delTo,true)};
+  };
+
+  const fetchMyDelivery = async () => {
+    setDelBusy(true); setDelErr(''); setDelResult(null);
+    const {from,to}=getDelRange();
+    const {data:{session}}=await sb.auth.getSession();
+    const res=await fetch(`${SUPA_URL}/functions/v1/get-loyverse-sales`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':`Bearer ${session.access_token}`},
+      body:JSON.stringify({mode:'delivery_stats',from,to,payment_filters:['توصيل','ماستر توصيل']}),
+    });
+    const data=await res.json();
+    setDelBusy(false);
+    if(data.error){setDelErr(data.error);return;}
+    const myName=me.name.toLowerCase();
+    const mine=data.stats.find(s=>myName.includes(s.employee.toLowerCase())||s.employee.toLowerCase().includes(myName));
+    if(!mine){setDelResult({orders:0,bonus:0});return;}
+    setDelResult(mine);
+  };
 
   const fetchLoyverse = async () => {
     setLoyBusy(true); setLoyMsg('');
@@ -879,6 +922,61 @@ function EmpDashboard({me,employees,settings,onRefresh}) {
             <div className="text-white text-3xl font-black">{fmt(total)}</div>
             <div className="text-white text-sm opacity-70">د.ع</div>
           </div>
+        </div>
+      )}
+
+      <button onClick={()=>{setShowDel(v=>!v);setDelResult(null);setDelErr('');}}
+        className="w-full p-4 rounded-2xl font-bold flex items-center justify-between"
+        style={{background:C.card}}>
+        <span style={{color:C.txt}}>مكافأة التوصيل</span>
+        <Ic n={showDel?'chL':'chR'} s={18} c={C.primary}/>
+      </button>
+
+      {showDel&&(
+        <div className="rounded-2xl p-5 shadow-sm space-y-3" style={{background:C.card}}>
+          <div className="grid grid-cols-2 gap-2">
+            {[['today','اليوم'],['yesterday','البارحة'],['week','هذا الأسبوع'],['month','هذا الشهر'],['custom','مخصص']].map(([v,l])=>(
+              <button key={v} onClick={()=>{setDelDateMode(v);setDelResult(null);}}
+                className="py-2 rounded-xl text-sm font-bold"
+                style={{background:delDateMode===v?C.primary:C.soft,color:delDateMode===v?'#fff':C.txt}}>
+                {l}
+              </button>
+            ))}
+          </div>
+          {delDateMode==='custom'&&(
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>من</label>
+                <input type="date" value={delFrom} onChange={e=>{setDelFrom(e.target.value);setDelResult(null);}}
+                  className="w-full p-2.5 rounded-xl border text-sm outline-none"
+                  style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}}/>
+              </div>
+              <div>
+                <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>إلى</label>
+                <input type="date" value={delTo} onChange={e=>{setDelTo(e.target.value);setDelResult(null);}}
+                  className="w-full p-2.5 rounded-xl border text-sm outline-none"
+                  style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}}/>
+              </div>
+            </div>
+          )}
+          {delErr&&<div className="p-2.5 rounded-xl text-xs text-center text-white" style={{background:C.err}}>{delErr}</div>}
+          <button onClick={fetchMyDelivery} disabled={delBusy}
+            className="w-full py-3 rounded-xl font-bold text-white"
+            style={{background:delBusy?'#999':C.primary}}>
+            {delBusy?'جاري الاستعلام...':'استعلام'}
+          </button>
+          {delResult&&(
+            <div className="grid grid-cols-2 gap-3 pt-1">
+              <div className="rounded-2xl p-4 text-center" style={{background:C.soft}}>
+                <div className="text-3xl font-black" style={{color:C.primary}}>{delResult.orders}</div>
+                <div className="text-xs mt-1" style={{color:C.txt,opacity:.5}}>طلب توصيل</div>
+              </div>
+              <div className="rounded-2xl p-4 text-center" style={{background:C.soft}}>
+                <div className="text-2xl font-black" style={{color:C.ok}}>{fmt(delResult.bonus)}</div>
+                <div className="text-xs mt-1" style={{color:C.txt,opacity:.5}}>د.ع مكافأة</div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
