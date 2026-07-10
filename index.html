@@ -1233,21 +1233,23 @@ function BoxkiMatcher() {
       });
       if(logErr) setLoyErr('خطأ في تسجيل البوكسي: ' + logErr.message);
 
-      // Telegram notification
-      const {data: empRow} = await sb.from('employees').select('name').eq('auth_user_id', session.user.id).maybeSingle();
-      const empName = empRow?.name || 'موظف';
-      const fmtAmt = n => n.toLocaleString('ar-IQ');
-      const icon = matched ? '✅' : '⚠️';
-      const statusTxt = matched ? 'مطابق' : `فرق ${fmtAmt(Math.abs(netAmt - data.total))} د.ع`;
-      const msgLines = [
-        `${icon} <b>مطابقة بوكسي</b>`,
-        `👤 ${empName}`,
-        `📦 الطلبات: ${ord}`,
-        `💰 بوكسي: ${fmtAmt(netAmt)} د.ع`,
-        `🏪 لويفرز: ${fmtAmt(data.total)} د.ع`,
-        `📊 الحالة: ${statusTxt}`,
-      ];
-      sendTelegram(msgLines.join('\n'));
+      // Telegram notification — only for employees, not admins
+      const {data: empRow} = await sb.from('employees').select('name, role').eq('auth_user_id', session.user.id).maybeSingle();
+      if (empRow && empRow.role !== 'admin') {
+        const empName = empRow.name || 'موظف';
+        const fmtAmt = n => n.toLocaleString('ar-IQ');
+        const icon = matched ? '✅' : '⚠️';
+        const statusTxt = matched ? 'مطابق' : `فرق ${fmtAmt(Math.abs(netAmt - data.total))} د.ع`;
+        const msgLines = [
+          `${icon} <b>مطابقة بوكسي</b>`,
+          `👤 ${empName}`,
+          `📦 الطلبات: ${ord}`,
+          `💰 بوكسي: ${fmtAmt(netAmt)} د.ع`,
+          `🏪 لويفرز: ${fmtAmt(data.total)} د.ع`,
+          `📊 الحالة: ${statusTxt}`,
+        ];
+        sendTelegram(msgLines.join('\n'));
+      }
     } catch(e) {
       setLoyErr('خطأ في الاتصال');
     } finally {

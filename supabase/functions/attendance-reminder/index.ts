@@ -31,17 +31,18 @@ Deno.serve(async (_req) => {
   const chatId   = Deno.env.get('TELEGRAM_CHAT_ID');
   if (!botToken || !chatId) return json({ error: 'Telegram secrets غير مضبوطة' }, 500);
 
-  const names = absent.map((e: { name: string }) => `• ${e.name}`).join('\n');
-  const message = `⏰ <b>تذكير الحضور</b>\n\nالموظفون الذين لم يسجلوا حضورهم حتى الساعة ١٢ ظهراً:\n\n${names}`;
-
   try {
-    const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: chatId, text: message, parse_mode: 'HTML' }),
-    });
-    const data = await res.json() as { ok: boolean; description?: string };
-    if (!data.ok) return json({ error: data.description }, 502);
+    for (const e of absent as { name: string }[]) {
+      await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: `⏰ عيني ${e.name} شوكت تسجل حضور؟`,
+          parse_mode: 'HTML',
+        }),
+      });
+    }
     return json({ success: true, absent: absent.length });
   } catch (e) {
     return json({ error: (e as Error).message }, 500);
