@@ -32,17 +32,15 @@ Deno.serve(async (_req) => {
   if (!botToken || !chatId) return json({ error: 'Telegram secrets غير مضبوطة' }, 500);
 
   try {
-    for (const e of absent as { name: string }[]) {
-      await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: chatId,
-          text: `⏰ عيني ${e.name} شوكت تسجل حضور؟`,
-          parse_mode: 'HTML',
-        }),
-      });
-    }
+    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: `⏰ عيني شباب شوكت تسجلون حضور؟`,
+        parse_mode: 'HTML',
+      }),
+    });
     return json({ success: true, absent: absent.length });
   } catch (e) {
     return json({ error: (e as Error).message }, 500);
