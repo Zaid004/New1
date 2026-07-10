@@ -122,12 +122,23 @@ Deno.serve(async (req) => {
       }
     } catch { /* fall back to raw device IDs */ }
 
-    // 3. Fetch receipts and aggregate
+    // 3. Fetch ALL receipts first, then process
+    type RawReceipt = {
+      receipt_number: string;
+      total_money: number;
+      receipt_type: string;
+      pos_device_id: string;
+      refund_for?: string;
+      payments: { name: string; money_amount: number }[];
+    };
     type DevStat = { displayName: string; posName: string; orders: number; sales_total: number };
+
+    const allReceipts: RawReceipt[] = [];
     const stats: Record<string, DevStat> = {};
     let cursor: string | null = null;
 
     try {
+      // Collect all receipts across pages
       do {
         const params = new URLSearchParams({ created_at_min: from, created_at_max: to, limit: '250' });
         if (cursor) params.set('cursor', cursor);
@@ -140,33 +151,52 @@ Deno.serve(async (req) => {
           return json({ error: (err as { errors?: { message: string }[] })?.errors?.[0]?.message ?? `Loyverse ${res.status}` }, 502);
         }
 
-        const data = await res.json() as {
-          receipts: {
-            total_money: number;
-            receipt_type: string;
-            pos_device_id: string;
-            payments: { name: string; money_amount: number }[];
-          }[];
-          cursor?: string;
-        };
-
-        for (const r of data.receipts ?? []) {
-          if (r.receipt_type !== 'SALE') continue;
-          const filters = payment_filters as string[];
-          const matched = filters.length === 0
-            || r.payments?.some(p => filters.some(f => p.name?.includes(f)));
-          if (!matched) continue;
-
-          const devId = r.pos_device_id ?? 'unknown';
-          const devInfo = deviceMap[devId] ?? { displayName: devId, posName: devId };
-          if (!stats[devId]) {
-            stats[devId] = { displayName: devInfo.displayName, posName: devInfo.posName, orders: 0, sales_total: 0 };
-          }
-          stats[devId].orders++;
-          stats[devId].sales_total += r.total_money ?? 0;
-        }
+        const data = await res.json() as { receipts: RawReceipt[]; cursor?: string };
+        allReceipts.push(...(data.receipts ?? []));
         cursor = data.cursor ?? null;
       } while (cursor);
+
+      const filters = payment_filters as string[];
+
+      // Build map: receipt_number → pos_device_id for SALE receipts with matching payment
+      const saleDeviceMap: Record<string, string> = {};
+      for (const r of allReceipts) {
+        if (r.receipt_type !== 'SALE') continue;
+        const matched = filters.length === 0 || r.payments?.some(p => filters.some(f => p.name?.includes(f)));
+        if (!matched) continue;
+        saleDeviceMap[r.receipt_number] = r.pos_device_id ?? 'unknown';
+      }
+
+      // Process SALEs
+      for (const r of allReceipts) {
+        if (r.receipt_type !== 'SALE') continue;
+        const matched = filters.length === 0 || r.payments?.some(p => filters.some(f => p.name?.includes(f)));
+        if (!matched) continue;
+
+        const devId = r.pos_device_id ?? 'unknown';
+        const devInfo = deviceMap[devId] ?? { displayName: devId, posName: devId };
+        if (!stats[devId]) {
+          stats[devId] = { displayName: devInfo.displayName, posName: devInfo.posName, orders: 0, sales_total: 0 };
+        }
+        stats[devId].orders++;
+        stats[devId].sales_total += r.total_money ?? 0;
+      }
+
+      // Process REFUNDs — deduct from the ORIGINAL seller, not the refunder
+      for (const r of allReceipts) {
+        if (r.receipt_type !== 'REFUND') continue;
+        const matched = filters.length === 0 || r.payments?.some(p => filters.some(f => p.name?.includes(f)));
+        if (!matched) continue;
+
+        // Find original sale's device
+        const originalDevId = r.refund_for ? saleDeviceMap[r.refund_for] : undefined;
+        const targetDevId = originalDevId ?? r.pos_device_id ?? 'unknown';
+
+        if (stats[targetDevId]) {
+          stats[targetDevId].orders = Math.max(0, stats[targetDevId].orders - 1);
+          stats[targetDevId].sales_total -= Math.abs(r.total_money ?? 0);
+        }
+      }
 
       const result = Object.values(stats).map(s => ({
         employee: s.displayName,
