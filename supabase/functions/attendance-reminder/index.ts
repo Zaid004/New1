@@ -41,7 +41,7 @@ Deno.serve(async (_req) => {
         parse_mode: 'HTML',
       }),
     });
-    return json({ success: true, absent: absent.length });
+    return json({ success: true });
   } catch (e) {
     return json({ error: (e as Error).message }, 500);
   }
