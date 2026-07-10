@@ -65,6 +65,19 @@ const SUPA_URL = window.__SUPABASE_URL__ || 'https://djzvuuqgqsniabgibfnq.supaba
 const SUPA_KEY = window.__SUPABASE_ANON_KEY__ || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRqenZ1dXFncXNuaWFiZ2liZm5xIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4NDY1NzksImV4cCI6MjA5ODQyMjU3OX0.A2Jc1WRjM3iOVfHiyM4JU3I_N8kRWKSzFvNDdcusbDA';
 const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
 
+// Telegram notification helper
+const sendTelegram = async (message) => {
+  try {
+    const {data:{session}} = await sb.auth.getSession();
+    if (!session) return;
+    await fetch(`${SUPA_URL}/functions/v1/send-telegram`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json','Authorization':`Bearer ${session.access_token}`},
+      body: JSON.stringify({message}),
+    });
+  } catch(_) {}
+};
+
 // Edge Function helper (admin operations)
 const callFn = async (action, payload) => {
   const {data:{session}} = await sb.auth.getSession();
@@ -289,6 +302,12 @@ function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone,allowedNetwo
     setBusy(true);
     const {error} = await upsert(me.id, shiftType, false);
     if(error) console.error('upsert error:', error);
+    else {
+      const shiftLabel = shiftType === 'morning' ? '🌅 صباحي' : shiftType === 'evening' ? '🌆 مسائي' : '🕐 ' + shiftType;
+      const now = new Date(Date.now()+3*60*60*1000);
+      const timeStr = now.toTimeString().slice(0,5);
+      sendTelegram(`📋 <b>تسجيل حضور</b>\n👤 ${me.name}\n${shiftLabel}\n🕐 ${timeStr}`);
+    }
     setBusy(false);
     onDone();
   };
@@ -1213,6 +1232,22 @@ function BoxkiMatcher() {
         period_to: toISO(toDt),
       });
       if(logErr) setLoyErr('خطأ في تسجيل البوكسي: ' + logErr.message);
+
+      // Telegram notification
+      const {data: empRow} = await sb.from('employees').select('name').eq('auth_user_id', session.user.id).maybeSingle();
+      const empName = empRow?.name || 'موظف';
+      const fmtAmt = n => n.toLocaleString('ar-IQ');
+      const icon = matched ? '✅' : '⚠️';
+      const statusTxt = matched ? 'مطابق' : `فرق ${fmtAmt(Math.abs(netAmt - data.total))} د.ع`;
+      const msgLines = [
+        `${icon} <b>مطابقة بوكسي</b>`,
+        `👤 ${empName}`,
+        `📦 الطلبات: ${ord}`,
+        `💰 بوكسي: ${fmtAmt(netAmt)} د.ع`,
+        `🏪 لويفرز: ${fmtAmt(data.total)} د.ع`,
+        `📊 الحالة: ${statusTxt}`,
+      ];
+      sendTelegram(msgLines.join('\n'));
     } catch(e) {
       setLoyErr('خطأ في الاتصال');
     } finally {
