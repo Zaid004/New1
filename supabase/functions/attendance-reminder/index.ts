@@ -20,11 +20,11 @@ Deno.serve(async (_req) => {
     supabase.from('attendance').select('employee_id').eq('date', today),
   ]);
 
-  const presentIds = new Set((attendance ?? []).map((a: { employee_id: string }) => a.employee_id));
-  const absent = (employees ?? []).filter((e: { id: string; name: string }) => !presentIds.has(e.id));
+  const presentCount = (attendance ?? []).length;
 
-  if (absent.length === 0) {
-    return json({ message: 'جميع الموظفين سجلوا حضورهم' });
+  // If anyone has registered, no need to send a reminder
+  if (presentCount > 0) {
+    return json({ message: 'تم تسجيل حضور على الأقل موظف واحد' });
   }
 
   const botToken = Deno.env.get('TELEGRAM_BOT_TOKEN');
