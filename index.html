@@ -303,10 +303,13 @@ function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone,allowedNetwo
     const {error} = await upsert(me.id, shiftType, false);
     if(error) console.error('upsert error:', error);
     else {
-      const shiftLabel = shiftType === 'morning' ? '🌅 صباحي' : shiftType === 'evening' ? '🌆 مسائي' : '🕐 ' + shiftType;
-      const now = new Date(Date.now()+3*60*60*1000);
-      const timeStr = now.toTimeString().slice(0,5);
-      sendTelegram(`📋 <b>تسجيل حضور</b>\n👤 ${me.name}\n${shiftLabel}\n🕐 ${timeStr}`);
+      const {data: ns} = await sb.from('notification_settings').select('checkin_notify_enabled').eq('id',1).maybeSingle();
+      if (ns?.checkin_notify_enabled !== false) {
+        const shiftLabel = shiftType === 'morning' ? '🌅 صباحي' : shiftType === 'evening' ? '🌆 مسائي' : '🕐 ' + shiftType;
+        const now = new Date(Date.now()+3*60*60*1000);
+        const timeStr = now.toTimeString().slice(0,5);
+        sendTelegram(`📋 <b>تسجيل حضور</b>\n👤 ${me.name}\n${shiftLabel}\n🕐 ${timeStr}`);
+      }
     }
     setBusy(false);
     onDone();
@@ -1233,9 +1236,12 @@ function BoxkiMatcher() {
       });
       if(logErr) setLoyErr('خطأ في تسجيل البوكسي: ' + logErr.message);
 
-      // Telegram notification — only for employees, not admins
-      const {data: empRow} = await sb.from('employees').select('name, role').eq('auth_user_id', session.user.id).maybeSingle();
-      if (empRow && empRow.role !== 'admin') {
+      // Telegram notification — only for employees, not admins, and if enabled
+      const [{data: empRow}, {data: ns}] = await Promise.all([
+        sb.from('employees').select('name, role').eq('auth_user_id', session.user.id).maybeSingle(),
+        sb.from('notification_settings').select('boxki_notify_enabled').eq('id',1).maybeSingle(),
+      ]);
+      if (empRow && empRow.role !== 'admin' && ns?.boxki_notify_enabled !== false) {
         const empName = empRow.name || 'موظف';
         const fmtAmt = n => n.toLocaleString('ar-IQ');
         const icon = matched ? '✅' : '⚠️';
@@ -2465,6 +2471,149 @@ function BoxkiLogView({employees}) {
   );
 }
 
+// ── NOTIFICATION SETTINGS (ADMIN) ─────────────────────────────────────────────
+function NotificationSettingsView() {
+  const DAYS_AR = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+  const DEFAULT = {
+    reminder_enabled: true,
+    reminder_times: ['12:00'],
+    reminder_days: [0,1,2,3,4,5],
+    reminder_threshold: 1,
+    reminder_message: 'عيني شباب شوكت تسجلون حضور؟',
+    boxki_notify_enabled: true,
+    checkin_notify_enabled: true,
+  };
+  const [s, setS] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    sb.from('notification_settings').select('*').eq('id',1).maybeSingle()
+      .then(({data}) => setS(data ? {...DEFAULT,...data} : {...DEFAULT}));
+  }, []);
+
+  const upd = patch => setS(prev => ({...prev, ...patch}));
+
+  const save = async () => {
+    setSaving(true);
+    await sb.from('notification_settings').upsert({...s, id:1});
+    setSaving(false); setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  const toggleDay = d => {
+    const days = s.reminder_days.includes(d)
+      ? s.reminder_days.filter(x => x !== d)
+      : [...s.reminder_days, d].sort((a,b)=>a-b);
+    upd({reminder_days: days});
+  };
+
+  const updateTime = (i, v) => {
+    const times = [...s.reminder_times]; times[i] = v; upd({reminder_times: times});
+  };
+  const addTime    = () => upd({reminder_times: [...s.reminder_times, '12:00']});
+  const removeTime = i  => upd({reminder_times: s.reminder_times.filter((_,j)=>j!==i)});
+
+  if (!s) return <div className="p-6 text-center" style={{color:C.txt2}}>جار التحميل...</div>;
+
+  const Toggle = ({on, onChange, label}) => (
+    <div className="flex items-center justify-between py-2">
+      <span className="font-bold text-sm" style={{color:C.txt}}>{label}</span>
+      <button onClick={onChange}
+        className="w-12 h-6 rounded-full transition-colors relative"
+        style={{background: on ? C.ok : C.border}}>
+        <span className="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all"
+          style={{left: on ? '26px' : '2px'}}/>
+      </button>
+    </div>
+  );
+
+  return (
+    <div className="space-y-4 pb-8" style={{direction:'rtl'}}>
+
+      {/* ── تذكير الحضور ── */}
+      <div className="rounded-2xl p-4 space-y-3" style={{background:C.card,border:`1px solid ${C.border}`}}>
+        <div className="text-base font-bold mb-1" style={{color:C.txt}}>⏰ تذكير الحضور</div>
+        <Toggle on={s.reminder_enabled} onChange={()=>upd({reminder_enabled:!s.reminder_enabled})} label="تفعيل التذكير"/>
+
+        {s.reminder_enabled && <>
+          {/* أوقات */}
+          <div>
+            <div className="text-xs mb-2" style={{color:C.txt2}}>أوقات الإرسال</div>
+            {s.reminder_times.map((t,i) => (
+              <div key={i} className="flex items-center gap-2 mb-2">
+                <input type="time" value={t} onChange={e=>updateTime(i,e.target.value)}
+                  className="flex-1 p-2 rounded-xl text-sm"
+                  style={{background:C.soft,color:C.txt,border:`1px solid ${C.border}`}}/>
+                {s.reminder_times.length > 1 &&
+                  <button onClick={()=>removeTime(i)}
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold"
+                    style={{background:C.danger+'22',color:C.danger}}>✕</button>}
+              </div>
+            ))}
+            <button onClick={addTime}
+              className="text-sm px-3 py-1.5 rounded-xl"
+              style={{background:C.primary+'22',color:C.primary}}>+ إضافة وقت</button>
+          </div>
+
+          {/* أيام */}
+          <div>
+            <div className="text-xs mb-2" style={{color:C.txt2}}>أيام الإرسال</div>
+            <div className="flex flex-wrap gap-2">
+              {DAYS_AR.map((d,i) => {
+                const on = s.reminder_days.includes(i);
+                return (
+                  <button key={i} onClick={()=>toggleDay(i)}
+                    className="px-3 py-1 rounded-xl text-xs font-bold transition-colors"
+                    style={{background: on ? C.primary : C.soft, color: on ? '#fff' : C.txt2}}>
+                    {d}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* العتبة */}
+          <div>
+            <div className="text-xs mb-2" style={{color:C.txt2}}>أرسل التذكير إذا عدد المسجلين أقل من</div>
+            <div className="flex items-center gap-3">
+              <input type="number" min="1" max="20" value={s.reminder_threshold}
+                onChange={e=>upd({reminder_threshold:parseInt(e.target.value)||1})}
+                className="w-20 p-2 rounded-xl text-center text-sm font-bold"
+                style={{background:C.soft,color:C.txt,border:`1px solid ${C.border}`}}/>
+              <span className="text-xs" style={{color:C.txt2}}>موظف</span>
+            </div>
+          </div>
+
+          {/* نص الرسالة */}
+          <div>
+            <div className="text-xs mb-2" style={{color:C.txt2}}>نص الرسالة</div>
+            <textarea rows={2} value={s.reminder_message}
+              onChange={e=>upd({reminder_message:e.target.value})}
+              className="w-full p-3 rounded-xl text-sm resize-none"
+              style={{background:C.soft,color:C.txt,border:`1px solid ${C.border}`}}/>
+          </div>
+        </>}
+      </div>
+
+      {/* ── إشعارات أخرى ── */}
+      <div className="rounded-2xl p-4" style={{background:C.card,border:`1px solid ${C.border}`}}>
+        <div className="text-base font-bold mb-2" style={{color:C.txt}}>إشعارات أخرى</div>
+        <Toggle on={s.checkin_notify_enabled} onChange={()=>upd({checkin_notify_enabled:!s.checkin_notify_enabled})} label="إشعار تسجيل الحضور"/>
+        <div style={{height:1,background:C.border,margin:'4px 0'}}/>
+        <Toggle on={s.boxki_notify_enabled} onChange={()=>upd({boxki_notify_enabled:!s.boxki_notify_enabled})} label="إشعار مطابقة بوكسي"/>
+      </div>
+
+      {/* ── حفظ ── */}
+      <button onClick={save} disabled={saving}
+        className="w-full p-4 rounded-2xl font-bold text-white"
+        style={{background: saved ? C.ok : C.primary}}>
+        {saving ? 'جار الحفظ...' : saved ? 'تم الحفظ ✓' : 'حفظ الإعدادات'}
+      </button>
+    </div>
+  );
+}
+
 // ── AUDIT LOG (ADMIN) ─────────────────────────────────────────────────────────
 function AuditLogView({employees}) {
   const [tab, setTab] = useState('audit');
@@ -2653,6 +2802,7 @@ function App() {
       {id:'payslips',label:'الرواتب',icon:'file'},
       {id:'employees',label:'الموظفون',icon:'user'},
       {id:'audit',label:'السجل',icon:'clock'},
+      {id:'notif',label:'الإشعارات',icon:'bell'},
     ]:[]),
   ];
 
@@ -2703,6 +2853,7 @@ function App() {
         {tab==='payslips'&&isAdmin&&<PayslipsView employees={employees} settings={settings}/>}
         {tab==='employees'&&isAdmin&&<EmployeesView employees={employees} settings={settings} onRefresh={()=>loadData(session)}/>}
         {tab==='audit'&&isAdmin&&<AuditLogView employees={employees}/>}
+        {tab==='notif'&&isAdmin&&<NotificationSettingsView/>}
       </div>
 
       {/* Bottom nav */}
