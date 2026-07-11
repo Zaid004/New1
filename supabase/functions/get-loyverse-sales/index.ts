@@ -79,6 +79,7 @@ Deno.serve(async (req) => {
             deliveryOrders++;
           } else if (r.receipt_type === 'REFUND') {
             deliveryTotal -= Math.abs(r.total_money ?? 0);
+            deliveryOrders = Math.max(0, deliveryOrders - 1);
           }
         }
         cursor = data.cursor ?? null;
