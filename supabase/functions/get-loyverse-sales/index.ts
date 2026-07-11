@@ -41,6 +41,16 @@ Deno.serve(async (req) => {
     let deliveryOrders = 0;
     let cursor: string | null = null;
 
+    // Collect all receipts first to match REFUNDs to their original SALEs
+    type DeliveryReceipt = {
+      receipt_number: string;
+      total_money: number;
+      receipt_type: string;
+      refund_for?: string;
+      payments: { name: string; money_amount: number }[];
+    };
+    const allReceipts: DeliveryReceipt[] = [];
+
     try {
       do {
         const params = new URLSearchParams({
@@ -62,28 +72,30 @@ Deno.serve(async (req) => {
           );
         }
 
-        const data = await res.json() as {
-          receipts: {
-            total_money: number;
-            receipt_type: string;
-            payments: { name: string; money_amount: number }[];
-          }[];
-          cursor?: string;
-        };
-
-        for (const r of data.receipts ?? []) {
-          const isDelivery = r.payments?.some(p => p.name?.includes('توصيل'));
-          if (!isDelivery) continue;
-          if (r.receipt_type === 'SALE') {
-            deliveryTotal += r.total_money ?? 0;
-            deliveryOrders++;
-          } else if (r.receipt_type === 'REFUND') {
-            deliveryTotal -= Math.abs(r.total_money ?? 0);
-            deliveryOrders = Math.max(0, deliveryOrders - 1);
-          }
-        }
+        const data = await res.json() as { receipts: DeliveryReceipt[]; cursor?: string };
+        allReceipts.push(...(data.receipts ?? []));
         cursor = data.cursor ?? null;
       } while (cursor);
+
+      // Build set of delivery SALE receipt numbers within this period
+      const periodSaleNumbers = new Set<string>();
+      for (const r of allReceipts) {
+        const isDelivery = r.payments?.some(p => p.name?.includes('توصيل'));
+        if (!isDelivery || r.receipt_type !== 'SALE') continue;
+        deliveryTotal += r.total_money ?? 0;
+        deliveryOrders++;
+        periodSaleNumbers.add(r.receipt_number);
+      }
+
+      // Only subtract REFUNDs whose original SALE is within the same period
+      for (const r of allReceipts) {
+        const isDelivery = r.payments?.some(p => p.name?.includes('توصيل'));
+        if (!isDelivery || r.receipt_type !== 'REFUND') continue;
+        if (r.refund_for && periodSaleNumbers.has(r.refund_for)) {
+          deliveryTotal -= Math.abs(r.total_money ?? 0);
+          deliveryOrders = Math.max(0, deliveryOrders - 1);
+        }
+      }
 
       return json({ total: Math.round(deliveryTotal), orders: deliveryOrders });
     } catch (e) {
