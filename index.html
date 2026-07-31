@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Stacks Stationery — نظام الحضور</title>
+<title>Stacks Stationery — Attendance System</title>
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#6B5876">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -57,7 +57,7 @@ const requestNotifPermission = async () => {
 };
 const showNotif = (title, body) => {
   if(Notification.permission === 'granted')
-    new Notification(title, {body, icon:'/icon.svg', dir:'rtl', lang:'ar', tag:'attendance'});
+    new Notification(title, {body, icon:'/icon.svg', dir:'ltr', lang:'en', tag:'attendance'});
 };
 
 // ── CONFIG (replace with your Supabase credentials) ──────────────────────────
@@ -97,16 +97,16 @@ const C = {
 };
 
 // ── HELPERS ──────────────────────────────────────────────────────────────────
-const MONTHS = ['يناير','فبراير','مارس','أبريل','مايو','يونيو',
-                'يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
-const DAYS   = ['أحد','اثن','ثلا','أرب','خمس','جمع','سبت'];
+const MONTHS = ['January','February','March','April','May','June',
+                'July','August','September','October','November','December'];
+const DAYS   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
 const fmt = n => new Intl.NumberFormat('en').format(Math.round(Number(n)||0));
 
 const SALES_MILESTONES = [
-  {target:12_000_000, bonus:25_000,  label:'١٢ مليون'},
-  {target:15_000_000, bonus:50_000,  label:'١٥ مليون'},
-  {target:18_000_000, bonus:100_000, label:'١٨ مليون'},
+  {target:12_000_000, bonus:25_000,  label:'12M'},
+  {target:15_000_000, bonus:50_000,  label:'15M'},
+  {target:18_000_000, bonus:100_000, label:'18M'},
 ];
 const calcMilestoneBonus = sales =>
   SALES_MILESTONES.reduce((sum,m) => sales >= m.target ? sum + m.bonus : sum, 0);
@@ -203,14 +203,14 @@ function AuthScreen() {
   const [busy,setBusy]=useState(false);
 
   const login = async () => {
-    if(!username.trim()||!pass){setErr('أدخل اسم المستخدم وكلمة المرور');return;}
+    if(!username.trim()||!pass){setErr('Please enter username and password');return;}
     setBusy(true); setErr('');
     try {
       const email=`${username.trim().toLowerCase()}@stacks-internal.app`;
       const {error} = await sb.auth.signInWithPassword({email,password:pass});
-      if(error) setErr('اسم المستخدم أو كلمة المرور غير صحيحة');
+      if(error) setErr('Incorrect username or password');
     } catch(e) {
-      setErr('خطأ في الاتصال، حاول مجدداً');
+      setErr('Connection error, please try again');
     } finally {
       setBusy(false);
     }
@@ -225,19 +225,19 @@ function AuthScreen() {
           <div className="text-xs mt-1" style={{color:C.txt,opacity:.5}}>Stationery</div>
         </div>
         <div className="rounded-3xl shadow-sm p-8" style={{background:C.card}}>
-          <h2 className="font-bold text-lg mb-6" style={{color:C.txt}}>تسجيل الدخول</h2>
+          <h2 className="font-bold text-lg mb-6" style={{color:C.txt}}>Sign In</h2>
           {err && <div className="mb-4 p-3 rounded-xl text-sm text-center text-white" style={{background:C.err}}>{err}</div>}
           <div className="space-y-4">
             <div>
-              <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>اسم المستخدم</label>
+              <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>Username</label>
               <input type="text" value={username} onChange={e=>setUsername(e.target.value)}
                 onKeyDown={e=>e.key==='Enter'&&login()}
                 className="w-full p-3 rounded-xl border text-sm outline-none"
                 style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}}
-                placeholder="مثال: ahmad" autoCapitalize="none" autoCorrect="off" />
+                placeholder="e.g. ahmad" autoCapitalize="none" autoCorrect="off" />
             </div>
             <div>
-              <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>كلمة المرور</label>
+              <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>Password</label>
               <input type="password" value={pass} onChange={e=>setPass(e.target.value)}
                 onKeyDown={e=>e.key==='Enter'&&login()}
                 className="w-full p-3 rounded-xl border text-sm outline-none"
@@ -247,7 +247,7 @@ function AuthScreen() {
             <button onClick={login} disabled={busy}
               className="w-full p-3 rounded-xl text-white font-bold transition-opacity"
               style={{background:C.primary,opacity:busy?.7:1}}>
-              {busy?'جاري الدخول...':'دخول'}
+              {busy?'Signing in...':'Sign In'}
             </button>
           </div>
         </div>
@@ -290,12 +290,12 @@ function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone,allowedNetwo
       const currentIP = await getPublicIP();
       if (!currentIP) {
         setBusy(false);
-        setNetErr('تعذّر التحقق من الشبكة، تأكد من الاتصال بالإنترنت');
+        setNetErr('Could not verify network, check your internet connection');
         return;
       }
       if (currentIP !== allowedNetwork.trim()) {
         setBusy(false);
-        setNetErr('تسجيل الحضور متاح فقط من شبكة المكتبة');
+        setNetErr('Attendance can only be recorded from the store network');
         return;
       }
     }
@@ -305,10 +305,10 @@ function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone,allowedNetwo
     else {
       const {data: ns} = await sb.from('notification_settings').select('checkin_notify_enabled').eq('id',1).maybeSingle();
       if (ns?.checkin_notify_enabled !== false) {
-        const shiftLabel = shiftType === 'morning' ? '🌅 صباحي' : shiftType === 'evening' ? '🌆 مسائي' : '🕐 ' + shiftType;
+        const shiftLabel = shiftType === 'morning' ? '🌅 Morning' : shiftType === 'evening' ? '🌆 Evening' : '🕐 ' + shiftType;
         const now = new Date(Date.now()+3*60*60*1000);
         const timeStr = now.toTimeString().slice(0,5);
-        sendTelegram(`📋 <b>تسجيل حضور</b>\n👤 ${me.name}\n${shiftLabel}\n🕐 ${timeStr}`);
+        sendTelegram(`📋 <b>Check-in</b>\n👤 ${me.name}\n${shiftLabel}\n🕐 ${timeStr}`);
       }
     }
     setBusy(false);
@@ -321,7 +321,7 @@ function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone,allowedNetwo
     if(r){
       const {error} = await sb.from('attendance_records').delete().eq('id', r.id);
       if(error) console.error('delete error:', error);
-      // الـ trigger يحذف سجل الزميل التلقائي تلقائياً
+      // the trigger auto-deletes the auto-generated record
     }
     setBusy(false);
     onDone();
@@ -361,19 +361,19 @@ function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone,allowedNetwo
                   <div className="flex items-center gap-2 mb-3">
                     <div className="w-3 h-3 rounded-full" style={{background:emp.color_hex}}/>
                     <span className="font-semibold text-sm" style={{color:C.txt}}>{emp.name}</span>
-                    {rec?.is_auto_generated&&<span className="text-xs px-2 py-0.5 rounded-full" style={{background:'#E8DDE5',color:C.primary}}>تلقائي</span>}
-                    {rec&&<span className="text-xs px-2 py-0.5 rounded-full mr-auto" style={{background:emp.color_hex+'22',color:emp.color_hex}}>{rec.shift_type==='full'?'كامل':'نص'}</span>}
+                    {rec?.is_auto_generated&&<span className="text-xs px-2 py-0.5 rounded-full" style={{background:'#E8DDE5',color:C.primary}}>Auto</span>}
+                    {rec&&<span className="text-xs px-2 py-0.5 rounded-full mr-auto" style={{background:emp.color_hex+'22',color:emp.color_hex}}>{rec.shift_type==='full'?'Full':'Half'}</span>}
                   </div>
                   <div className="flex gap-2 mb-2">
                     <button onClick={()=>handleAdmin(emp.id,'full')}
                       className="flex-1 py-2 rounded-xl text-xs font-bold"
                       style={{background:rec?.shift_type==='full'?emp.color_hex:'#EEE8F0',color:rec?.shift_type==='full'?'#fff':C.txt}}>
-                      شفت كامل
+                      Full Shift
                     </button>
                     <button onClick={()=>handleAdmin(emp.id,'half')}
                       className="flex-1 py-2 rounded-xl text-xs font-bold"
                       style={{background:rec?.shift_type==='half'?emp.color_hex:'#EEE8F0',color:rec?.shift_type==='half'?'#fff':C.txt}}>
-                      نص شفت
+                      Half Shift
                     </button>
                     {rec&&(
                       <button onClick={()=>handleAdmin(emp.id,'del')}
@@ -388,14 +388,14 @@ function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone,allowedNetwo
                     onChange={e=>setNotes(n=>({...n,[emp.id]:e.target.value}))}
                     className="w-full p-2 rounded-lg border text-xs outline-none"
                     style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}}
-                    placeholder="ملاحظة..."/>
+                    placeholder="Note..."/>
                 </div>
               );
             })}
           </div>
         ) : (
           <div>
-            <p className="text-sm mb-4" style={{color:C.txt,opacity:.6}}>سجّل حضورك لهذا اليوم</p>
+            <p className="text-sm mb-4" style={{color:C.txt,opacity:.6}}>Record your attendance for this day</p>
             {netErr && (
               <div className="mb-3 p-3 rounded-xl text-sm text-center font-semibold"
                 style={{background:'var(--err-bg)',color:C.err}}>
@@ -410,8 +410,8 @@ function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone,allowedNetwo
                   <button key={st} onClick={()=>handleEmp(st)}
                     className="flex-1 py-4 rounded-2xl font-bold flex flex-col items-center gap-1"
                     style={{background:active?C.primary:C.soft,color:active?'#fff':C.txt}}>
-                    <span>{st==='full'?'شفت كامل':'نص شفت'}</span>
-                    <span className="text-xs opacity-70">{st==='full'?'نقطتان':'نقطة'}</span>
+                    <span>{st==='full'?'Full Shift':'Half Shift'}</span>
+                    <span className="text-xs opacity-70">{st==='full'?'2 pts':'1 pt'}</span>
                   </button>
                 );
               })}
@@ -422,12 +422,12 @@ function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone,allowedNetwo
               rows={2}
               className="w-full p-2.5 rounded-xl border text-sm outline-none resize-none mb-3"
               style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}}
-              placeholder="ملاحظة اختيارية..."/>
+              placeholder="Optional note..."/>
             {getRec(me.id) && (
               <button onClick={removeMyRecord}
                 className="w-full py-2 rounded-xl text-sm font-bold mb-4"
                 style={{background:'var(--err-bg)',color:C.err}}>
-                إلغاء الحضور
+                Cancel Attendance
               </button>
             )}
             {employees.filter(e=>e.id!==me.id&&e.role!=='admin').map(emp=>{
@@ -438,8 +438,8 @@ function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone,allowedNetwo
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full" style={{background:emp.color_hex}}/>
                     <span style={{color:C.txt,opacity:.7}}>{emp.name}:</span>
-                    <span className="font-semibold" style={{color:C.txt}}>{rec.shift_type==='full'?'شفت كامل':'نص شفت'}</span>
-                    {rec.is_auto_generated&&<span className="text-xs opacity-40">(تلقائي)</span>}
+                    <span className="font-semibold" style={{color:C.txt}}>{rec.shift_type==='full'?'Full Shift':'Half Shift'}</span>
+                    {rec.is_auto_generated&&<span className="text-xs opacity-40">(auto)</span>}
                   </div>
                   {rec.note&&<div className="text-xs mt-1.5 pr-4" style={{color:C.txt,opacity:.55}}>{rec.note}</div>}
                 </div>
@@ -448,7 +448,7 @@ function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone,allowedNetwo
           </div>
         )}
 
-        {busy&&<div className="mt-4 text-center text-sm" style={{color:C.primary}}>جاري الحفظ...</div>}
+        {busy&&<div className="mt-4 text-center text-sm" style={{color:C.primary}}>Saving...</div>}
       </div>
     </div>
   );
@@ -513,10 +513,10 @@ function CalendarView({me,employees,isAdmin,settings}) {
   };
 
   const recLabel = t => {
-    if(t.recurrence==='daily')   return 'يومي';
-    if(t.recurrence==='weekly')  return `أسبوعي · ${DAYS[t.day_of_week]||''}`;
-    if(t.recurrence==='monthly') return `شهري · يوم ${t.day_of_month}`;
-    if(t.recurrence==='once')    return `مرة · ${t.specific_date||''}`;
+    if(t.recurrence==='daily')   return 'Daily';
+    if(t.recurrence==='weekly')  return `Weekly · ${DAYS[t.day_of_week]||''}`;
+    if(t.recurrence==='monthly') return `Monthly · Day ${t.day_of_month}`;
+    if(t.recurrence==='once')    return `Once · ${t.specific_date||''}`;
     return '';
   };
 
@@ -627,7 +627,7 @@ function CalendarView({me,employees,isAdmin,settings}) {
                     const emp=employees.find(e=>e.id===r.employee_id);
                     return (
                       <div key={r.id} className="text-white leading-tight" style={{fontSize:9,fontWeight:700}}>
-                        {emp?.name?.split(' ')[0]} · {r.shift_type==='full'?'ك':'ن'}
+                        {emp?.name?.split(' ')[0]} · {r.shift_type==='full'?'F':'H'}
                       </div>
                     );
                   })}
@@ -648,7 +648,7 @@ function CalendarView({me,employees,isAdmin,settings}) {
         ))}
         <div className="flex items-center gap-1.5">
           <div className="w-8 h-3 rounded" style={{background:`linear-gradient(to right, ${C.e1} 50%, ${C.e2} 50%)`}}/>
-          <span className="text-xs" style={{color:C.txt,opacity:.7}}>مشترك</span>
+          <span className="text-xs" style={{color:C.txt,opacity:.7}}>Shared</span>
         </div>
       </div>
 
@@ -661,7 +661,7 @@ function CalendarView({me,employees,isAdmin,settings}) {
           <div className="mt-4 space-y-2">
             <div className="flex items-center gap-2 px-1 mb-1">
               <Ic n="task" s={15} c={C.primary}/>
-              <span className="text-xs font-bold uppercase tracking-widest" style={{color:C.primary}}>مهام اليوم</span>
+              <span className="text-xs font-bold uppercase tracking-widest" style={{color:C.primary}}>Today's Tasks</span>
             </div>
             {todayTasks.map(task=>{
               const done=isCompleted(task.id,today);
@@ -676,7 +676,7 @@ function CalendarView({me,employees,isAdmin,settings}) {
                     {task.title}
                   </span>
                   <span className="text-xs px-2 py-0.5 rounded-full" style={{background:C.soft,color:C.txt,opacity:.6}}>
-                    {task.recurrence==='daily'?'يومي':task.recurrence==='weekly'?'أسبوعي':task.recurrence==='monthly'?'شهري':'مرة'}
+                    {task.recurrence==='daily'?'Daily':task.recurrence==='weekly'?'Weekly':task.recurrence==='monthly'?'Monthly':'Once'}
                   </span>
                 </div>
               );
@@ -691,7 +691,7 @@ function CalendarView({me,employees,isAdmin,settings}) {
           <div className="flex items-center justify-between px-1">
             <div className="flex items-center gap-2">
               <Ic n="task" s={15} c={C.primary}/>
-              <span className="text-xs font-bold uppercase tracking-widest" style={{color:C.primary}}>إدارة المهام</span>
+              <span className="text-xs font-bold uppercase tracking-widest" style={{color:C.primary}}>Task Management</span>
             </div>
             <button onClick={()=>setShowTaskAdd(s=>!s)}
               className="w-8 h-8 rounded-xl flex items-center justify-center"
@@ -705,9 +705,9 @@ function CalendarView({me,employees,isAdmin,settings}) {
                 <input type="text" value={taskForm.title} onChange={e=>setTaskForm(f=>({...f,title:e.target.value}))}
                   className="w-full p-3 rounded-xl border text-sm outline-none"
                   style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}}
-                  placeholder="عنوان المهمة..."/>
+                  placeholder="Task title..."/>
                 <div className="grid grid-cols-2 gap-2">
-                  {[['daily','يومي'],['weekly','أسبوعي'],['monthly','شهري'],['once','مرة واحدة']].map(([v,l])=>(
+                  {[['daily','Daily'],['weekly','Weekly'],['monthly','Monthly'],['once','One Time']].map(([v,l])=>(
                     <button key={v} onClick={()=>setTaskForm(f=>({...f,recurrence:v}))}
                       className="py-2 rounded-xl text-sm font-bold"
                       style={{background:taskForm.recurrence===v?C.primary:C.card,color:taskForm.recurrence===v?'#fff':C.txt}}>
@@ -727,7 +727,7 @@ function CalendarView({me,employees,isAdmin,settings}) {
                     onChange={e=>setTaskForm(f=>({...f,day_of_month:e.target.value}))}
                     className="w-full p-3 rounded-xl border text-sm outline-none"
                     style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}}
-                    placeholder="يوم الشهر (1-31)"/>
+                    placeholder="Day of month (1-31)"/>
                 )}
                 {taskForm.recurrence==='once'&&(
                   <input type="date" value={taskForm.specific_date}
@@ -738,18 +738,18 @@ function CalendarView({me,employees,isAdmin,settings}) {
                 <select value={taskForm.assigned_to} onChange={e=>setTaskForm(f=>({...f,assigned_to:e.target.value}))}
                   className="w-full p-3 rounded-xl border text-sm outline-none"
                   style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}}>
-                  <option value="">جميع الموظفين</option>
+                  <option value="">All employees</option>
                   {empOnly.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}
                 </select>
                 <button onClick={addTask} disabled={taskBusy||!taskForm.title.trim()}
                   className="w-full py-3 rounded-xl font-bold text-white"
                   style={{background:taskBusy||!taskForm.title.trim()?'#999':C.primary}}>
-                  {taskBusy?'جاري الإضافة...':'إضافة المهمة'}
+                  {taskBusy?'Adding...':'Add Task'}
                 </button>
               </div>
             )}
             {tasks.length===0&&!showTaskAdd&&(
-              <div className="text-center py-3 text-sm" style={{color:C.txt,opacity:.4}}>لا توجد مهام بعد</div>
+              <div className="text-center py-3 text-sm" style={{color:C.txt,opacity:.4}}>No tasks yet</div>
             )}
             {tasks.map(task=>(
               <div key={task.id} className="flex items-center gap-2 p-3 rounded-2xl" style={{background:C.soft,opacity:task.is_active?1:.5}}>
@@ -863,9 +863,9 @@ function EmpDashboard({me,employees,settings,onRefresh}) {
     });
     const data = await res.json();
     setLoyBusy(false);
-    if(data.error){ setLoyMsg('خطأ: '+data.error); setTimeout(()=>setLoyMsg(''),4000); return; }
+    if(data.error){ setLoyMsg('Error: '+data.error); setTimeout(()=>setLoyMsg(''),4000); return; }
     setSales(String(data.total));
-    setLoyMsg(`تم جلب ${fmt(data.total)} د.ع`);
+    setLoyMsg(`Fetched ${fmt(data.total)} IQD`);
     setTimeout(()=>setLoyMsg(''),3000);
   };
 
@@ -884,16 +884,16 @@ function EmpDashboard({me,employees,settings,onRefresh}) {
     });
     const data=await res.json();
     setDelCalcBusy(false);
-    if(data.error){setDelCalcMsg('خطأ: '+data.error);setTimeout(()=>setDelCalcMsg(''),4000);return;}
+    if(data.error){setDelCalcMsg('Error: '+data.error);setTimeout(()=>setDelCalcMsg(''),4000);return;}
     const mine = me.loyverse_pos_name
       ? data.stats?.find(s => s.pos_name?.toLowerCase() === me.loyverse_pos_name.toLowerCase())
       : data.stats?.find(s => {
           const emp=s.employee.toLowerCase(), myN=(me.name||'').toLowerCase(), myU=(me.username||'').toLowerCase();
           return myN.includes(emp)||emp.includes(myN)||myU.includes(emp)||emp.includes(myU);
         });
-    if(!mine||mine.orders===0){setDelCalcMsg('لا توجد طلبات توصيل هذا الشهر');setTimeout(()=>setDelCalcMsg(''),4000);return;}
+    if(!mine||mine.orders===0){setDelCalcMsg('No delivery orders this month');setTimeout(()=>setDelCalcMsg(''),4000);return;}
     setExtra(String(mine.bonus));
-    setDelCalcMsg(`${mine.orders} طلب × 400 = ${fmt(mine.bonus)} د.ع`);
+    setDelCalcMsg(`${mine.orders} orders × 400 = ${fmt(mine.bonus)} IQD`);
     setTimeout(()=>setDelCalcMsg(''),5000);
   };
 
@@ -921,8 +921,8 @@ function EmpDashboard({me,employees,settings,onRefresh}) {
     setColorBusy(true); setColorMsg('');
     const {error} = await sb.rpc('update_my_color', {new_color: myColor});
     setColorBusy(false);
-    if(error){ setColorMsg('حدث خطأ، حاول مجدداً'); return; }
-    setColorMsg('تم تحديث اللون');
+    if(error){ setColorMsg('An error occurred, please try again'); return; }
+    setColorMsg('Color updated');
     if(onRefresh) onRefresh();
     setTimeout(()=>setColorMsg(''),2500);
   };
@@ -931,20 +931,20 @@ function EmpDashboard({me,employees,settings,onRefresh}) {
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3">
         <div className="rounded-2xl p-5 shadow-sm" style={{background:C.card}}>
-          <div className="text-xs font-semibold mb-1" style={{color:C.txt,opacity:.5}}>أيام {MONTHS[now.getMonth()]}</div>
+          <div className="text-xs font-semibold mb-1" style={{color:C.txt,opacity:.5}}>{MONTHS[now.getMonth()]} Days</div>
           <div className="text-4xl font-black" style={{color:C.primary}}>{myDays}</div>
         </div>
         <div className="rounded-2xl p-5 shadow-sm" style={{background:C.card}}>
-          <div className="text-xs font-semibold mb-1" style={{color:C.txt,opacity:.5}}>النقاط</div>
+          <div className="text-xs font-semibold mb-1" style={{color:C.txt,opacity:.5}}>Points</div>
           <div className="text-4xl font-black" style={{color:C.e2}}>{myPts}</div>
-          <div className="text-xs" style={{color:C.txt,opacity:.4}}>من {allPts}</div>
+          <div className="text-xs" style={{color:C.txt,opacity:.4}}>of {allPts}</div>
         </div>
       </div>
 
       <button onClick={()=>setShowCalc(v=>!v)}
         className="w-full p-4 rounded-2xl font-bold text-white flex items-center justify-between"
         style={{background:C.primary}}>
-        <span>حاسبة الراتب التقديرية</span>
+        <span>Salary Estimator</span>
         <Ic n={showCalc?'chL':'chR'} s={18} c="#fff"/>
       </button>
 
@@ -952,29 +952,29 @@ function EmpDashboard({me,employees,settings,onRefresh}) {
         <div className="rounded-2xl p-5 shadow-sm space-y-4" style={{background:C.card}}>
           <div className="grid grid-cols-2 gap-3">
             <div className="p-3 rounded-xl" style={{background:C.soft}}>
-              <div className="text-xs mb-1" style={{color:C.txt,opacity:.5}}>الحصة الثابتة</div>
-              <div className="font-bold text-sm" style={{color:C.txt}}>{fmt(fixedShare)} د.ع</div>
+              <div className="text-xs mb-1" style={{color:C.txt,opacity:.5}}>Fixed Share</div>
+              <div className="font-bold text-sm" style={{color:C.txt}}>{fmt(fixedShare)} IQD</div>
             </div>
             <div className="p-3 rounded-xl" style={{background:C.soft}}>
-              <div className="text-xs mb-1" style={{color:C.txt,opacity:.5}}>حصة النسبة ({pct}%)</div>
-              <div className="font-bold text-sm" style={{color:C.txt}}>{fmt(pctShare)} د.ع</div>
+              <div className="text-xs mb-1" style={{color:C.txt,opacity:.5}}>Sales Share ({pct}%)</div>
+              <div className="font-bold text-sm" style={{color:C.txt}}>{fmt(pctShare)} IQD</div>
             </div>
           </div>
           <div>
-            <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>حجم المبيعات (د.ع)</label>
+            <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>Sales Volume (IQD)</label>
             <div className="flex gap-1.5">
               <input type="text" inputMode="numeric" value={fmtNum(sales)} onChange={e=>setSales(parseNum(e.target.value))}
                 className="flex-1 p-3 rounded-xl border text-sm outline-none"
                 style={{borderColor:C.border}} placeholder="0"/>
-              <button onClick={fetchLoyverse} disabled={loyBusy} title="جلب من Loyverse"
+              <button onClick={fetchLoyverse} disabled={loyBusy} title="Fetch from Loyverse"
                 className="px-3 rounded-xl text-xs font-black text-white flex-shrink-0"
                 style={{background:loyBusy?'#999':C.ok}}>
                 {loyBusy?'..':'L'}
               </button>
             </div>
             {loyMsg&&<div className="mt-1.5 text-xs font-semibold text-center py-1.5 rounded-lg"
-              style={{background:loyMsg.startsWith('خطأ')?'var(--err-bg)':'var(--ok-bg)',
-                      color:loyMsg.startsWith('خطأ')?C.err:C.ok}}>{loyMsg}</div>}
+              style={{background:loyMsg.startsWith('Error')?'var(--err-bg)':'var(--ok-bg)',
+                      color:loyMsg.startsWith('Error')?C.err:C.ok}}>{loyMsg}</div>}
           </div>
           <div className="grid grid-cols-3 gap-2">
             {SALES_MILESTONES.map((m,i)=>{
@@ -1003,25 +1003,25 @@ function EmpDashboard({me,employees,settings,onRefresh}) {
             })}
           </div>
           {milestoneBonus>0&&<div className="text-xs font-bold text-center py-1.5 rounded-lg"
-            style={{background:C.ok+'22',color:C.ok}}>بونص المبيعات: +{fmt(milestoneBonus)} د.ع</div>}
+            style={{background:C.ok+'22',color:C.ok}}>Sales Bonus: +{fmt(milestoneBonus)} IQD</div>}
           <div>
-            <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>مبلغ إضافي (اختياري)</label>
+            <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>Extra Amount (optional)</label>
             <input type="text" inputMode="numeric" value={fmtNum(extra)} onChange={e=>setExtra(parseNum(e.target.value))}
               className="w-full p-3 rounded-xl border text-sm outline-none"
               style={{borderColor:C.border}} placeholder="0"/>
             <button onClick={fetchCalcDelivery} disabled={delCalcBusy}
               className="mt-2 w-full py-2 rounded-xl text-xs font-bold"
               style={{background:C.soft,color:delCalcBusy?'#999':C.primary}}>
-              {delCalcBusy?'جاري الجلب...':'مكافأة التوصيل (هذا الشهر)'}
+              {delCalcBusy?'Fetching...':'Delivery Bonus (this month)'}
             </button>
             {delCalcMsg&&<div className="mt-1.5 text-xs font-semibold text-center py-1.5 rounded-lg"
-              style={{background:delCalcMsg.startsWith('خطأ')||delCalcMsg.startsWith('لا')?C.soft:'var(--ok-bg)',
-                      color:delCalcMsg.startsWith('خطأ')||delCalcMsg.startsWith('لا')?C.txt:C.ok}}>{delCalcMsg}</div>}
+              style={{background:delCalcMsg.startsWith('Error')||delCalcMsg.startsWith('No')?C.soft:'var(--ok-bg)',
+                      color:delCalcMsg.startsWith('Error')||delCalcMsg.startsWith('No')?C.txt:C.ok}}>{delCalcMsg}</div>}
           </div>
           <div className="p-4 rounded-2xl text-center" style={{background:C.primary}}>
-            <div className="text-white text-xs opacity-70 mb-1">الإجمالي التقديري</div>
+            <div className="text-white text-xs opacity-70 mb-1">Estimated Total</div>
             <div className="text-white text-3xl font-black">{fmt(total)}</div>
-            <div className="text-white text-sm opacity-70">د.ع</div>
+            <div className="text-white text-sm opacity-70">IQD</div>
           </div>
         </div>
       )}
@@ -1029,14 +1029,14 @@ function EmpDashboard({me,employees,settings,onRefresh}) {
       <button onClick={()=>{setShowDel(v=>!v);setDelResult(null);setDelErr('');}}
         className="w-full p-4 rounded-2xl font-bold flex items-center justify-between"
         style={{background:C.card}}>
-        <span style={{color:C.txt}}>مكافأة التوصيل</span>
+        <span style={{color:C.txt}}>Delivery Bonus</span>
         <Ic n={showDel?'chL':'chR'} s={18} c={C.primary}/>
       </button>
 
       {showDel&&(
         <div className="rounded-2xl p-5 shadow-sm space-y-3" style={{background:C.card}}>
           <div className="grid grid-cols-2 gap-2">
-            {[['today','اليوم'],['yesterday','البارحة'],['week','هذا الأسبوع'],['month','هذا الشهر'],['custom','مخصص']].map(([v,l])=>(
+            {[['today','Today'],['yesterday','Yesterday'],['week','This Week'],['month','This Month'],['custom','Custom']].map(([v,l])=>(
               <button key={v} onClick={()=>{setDelDateMode(v);setDelResult(null);}}
                 className="py-2 rounded-xl text-sm font-bold"
                 style={{background:delDateMode===v?C.primary:C.soft,color:delDateMode===v?'#fff':C.txt}}>
@@ -1047,13 +1047,13 @@ function EmpDashboard({me,employees,settings,onRefresh}) {
           {delDateMode==='custom'&&(
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>من</label>
+                <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>From</label>
                 <input type="date" value={delFrom} onChange={e=>{setDelFrom(e.target.value);setDelResult(null);}}
                   className="w-full p-2.5 rounded-xl border text-sm outline-none"
                   style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}}/>
               </div>
               <div>
-                <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>إلى</label>
+                <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>To</label>
                 <input type="date" value={delTo} onChange={e=>{setDelTo(e.target.value);setDelResult(null);}}
                   className="w-full p-2.5 rounded-xl border text-sm outline-none"
                   style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}}/>
@@ -1064,17 +1064,17 @@ function EmpDashboard({me,employees,settings,onRefresh}) {
           <button onClick={fetchMyDelivery} disabled={delBusy}
             className="w-full py-3 rounded-xl font-bold text-white"
             style={{background:delBusy?'#999':C.primary}}>
-            {delBusy?'جاري الاستعلام...':'استعلام'}
+            {delBusy?'Querying...':'Query'}
           </button>
           {delResult&&(
             <div className="grid grid-cols-2 gap-3 pt-1">
               <div className="rounded-2xl p-4 text-center" style={{background:C.soft}}>
                 <div className="text-3xl font-black" style={{color:C.primary}}>{delResult.orders}</div>
-                <div className="text-xs mt-1" style={{color:C.txt,opacity:.5}}>طلب توصيل</div>
+                <div className="text-xs mt-1" style={{color:C.txt,opacity:.5}}>delivery orders</div>
               </div>
               <div className="rounded-2xl p-4 text-center" style={{background:C.soft}}>
                 <div className="text-2xl font-black" style={{color:C.ok}}>{fmt(delResult.bonus)}</div>
-                <div className="text-xs mt-1" style={{color:C.txt,opacity:.5}}>د.ع مكافأة</div>
+                <div className="text-xs mt-1" style={{color:C.txt,opacity:.5}}>IQD bonus</div>
               </div>
             </div>
           )}
@@ -1089,7 +1089,7 @@ function EmpDashboard({me,employees,settings,onRefresh}) {
         style={{background:C.card}}>
         <div className="flex items-center gap-3">
           <div className="w-7 h-7 rounded-lg" style={{background:myColor}}/>
-          <span style={{color:C.txt}}>لون ملفك الشخصي</span>
+          <span style={{color:C.txt}}>Profile Color</span>
         </div>
         <Ic n={showColor?'chL':'chR'} s={18} c={C.primary}/>
       </button>
@@ -1104,14 +1104,14 @@ function EmpDashboard({me,employees,settings,onRefresh}) {
             ))}
           </div>
           {colorMsg && (
-            <div className="text-center text-sm font-semibold" style={{color: colorMsg.includes('خطأ')?C.err:C.ok}}>
+            <div className="text-center text-sm font-semibold" style={{color: colorMsg.includes('error')?C.err:C.ok}}>
               {colorMsg}
             </div>
           )}
           <button onClick={saveColor} disabled={colorBusy}
             className="w-full py-3 rounded-xl font-bold text-white"
             style={{background:colorBusy?'#999':C.ok}}>
-            {colorBusy?'جاري الحفظ...':'حفظ اللون'}
+            {colorBusy?'Saving...':'Save Color'}
           </button>
         </div>
       )}
@@ -1148,14 +1148,14 @@ function PayslipArchive({empId}) {
         style={{background:C.card}}>
         <div className="flex items-center gap-3">
           <Ic n="report" s={18} c={C.e2}/>
-          <span style={{color:C.txt}}>كشوفات الرواتب السابقة</span>
+          <span style={{color:C.txt}}>Previous Payslips</span>
         </div>
         <Ic n={show?'chL':'chR'} s={18} c={C.primary}/>
       </button>
       {show && (
         <div className="rounded-2xl shadow-sm overflow-hidden" style={{background:C.card}}>
-          {loading && <div className="p-6 text-center text-sm" style={{color:C.txt,opacity:.4}}>جاري التحميل...</div>}
-          {!loading && slips.length===0 && <div className="p-6 text-center text-sm" style={{color:C.txt,opacity:.4}}>لا توجد كشوفات بعد</div>}
+          {loading && <div className="p-6 text-center text-sm" style={{color:C.txt,opacity:.4}}>Loading...</div>}
+          {!loading && slips.length===0 && <div className="p-6 text-center text-sm" style={{color:C.txt,opacity:.4}}>No payslips yet</div>}
           {slips.map(s=>{
             const d=new Date(s.month+'T00:00:00');
             return (
@@ -1163,7 +1163,7 @@ function PayslipArchive({empId}) {
                 <div className="font-semibold text-sm" style={{color:C.txt}}>
                   {MONTHS[d.getMonth()]} {d.getFullYear()}
                 </div>
-                <div className="font-black text-sm" style={{color:C.ok}}>{fmt(total(s))} <span className="font-normal text-xs">د.ع</span></div>
+                <div className="font-black text-sm" style={{color:C.ok}}>{fmt(total(s))} <span className="font-normal text-xs">IQD</span></div>
               </div>
             );
           })}
@@ -1182,7 +1182,7 @@ function NotifButton() {
       className="w-full p-4 rounded-2xl font-bold flex items-center gap-3"
       style={{background:C.card}}>
       <Ic n="bell" s={18} c={C.e2}/>
-      <span style={{color:C.txt}}>تفعيل تنبيهات الحضور اليومية</span>
+      <span style={{color:C.txt}}>Enable daily attendance alerts</span>
     </button>
   );
 }
@@ -1234,7 +1234,7 @@ function BoxkiMatcher() {
         period_from: toISO(fromDt),
         period_to: toISO(toDt),
       });
-      if(logErr) setLoyErr('خطأ في تسجيل البوكسي: ' + logErr.message);
+      if(logErr) setLoyErr('Boxki log error: ' + logErr.message);
 
       // Telegram notification — only for employees, not admins, and if enabled
       const [{data: empRow}, {data: ns}] = await Promise.all([
@@ -1242,22 +1242,22 @@ function BoxkiMatcher() {
         sb.from('notification_settings').select('boxki_notify_enabled').eq('id',1).maybeSingle(),
       ]);
       if (empRow && empRow.role !== 'admin' && ns?.boxki_notify_enabled !== false) {
-        const empName = empRow.name || 'موظف';
-        const fmtAmt = n => n.toLocaleString('ar-IQ');
+        const empName = empRow.name || 'Employee';
+        const fmtAmt = n => n.toLocaleString('en-US');
         const icon = matched ? '✅' : '⚠️';
-        const statusTxt = matched ? 'مطابق' : `فرق ${fmtAmt(Math.abs(netAmt - data.total))} د.ع`;
+        const statusTxt = matched ? 'Matched' : `Diff ${fmtAmt(Math.abs(netAmt - data.total))} IQD`;
         const msgLines = [
-          `${icon} <b>مطابقة بوكسي</b>`,
+          `${icon} <b>Boxki Match</b>`,
           `👤 ${empName}`,
-          `📦 الطلبات: ${ord}`,
-          `💰 بوكسي: ${fmtAmt(netAmt)} د.ع`,
-          `🏪 لويفرز: ${fmtAmt(data.total)} د.ع`,
-          `📊 الحالة: ${statusTxt}`,
+          `📦 Orders: ${ord}`,
+          `💰 Boxki: ${fmtAmt(netAmt)} IQD`,
+          `🏪 Loyverse: ${fmtAmt(data.total)} IQD`,
+          `📊 Status: ${statusTxt}`,
         ];
         sendTelegram(msgLines.join('\n'));
       }
     } catch(e) {
-      setLoyErr('خطأ في الاتصال');
+      setLoyErr('Connection error');
     } finally {
       setLoyLoading(false);
     }
@@ -1273,21 +1273,21 @@ function BoxkiMatcher() {
         style={{background:C.card}}>
         <div className="flex items-center gap-3">
           <BoxkiIcon s={24}/>
-          <span style={{color:C.txt}}>مطابقة بوكسي</span>
+          <span style={{color:C.txt}}>Boxki Match</span>
         </div>
         <Ic n={show?'chL':'chR'} s={18} c={C.primary}/>
       </button>
       {show&&(
         <div className="rounded-2xl p-5 shadow-sm space-y-4" style={{background:C.card}}>
           <div>
-            <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>المبلغ الكلي من بوكسي (د.ع)</label>
+            <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>Total amount from Boxki (IQD)</label>
             <input type="text" inputMode="numeric" value={fmtNum(amount)}
               onChange={e=>{setAmount(parseNum(e.target.value));reset();}}
               className="w-full p-3 rounded-xl border text-sm outline-none"
               style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}} placeholder="0"/>
           </div>
           <div>
-            <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>عدد الطلبات</label>
+            <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>Number of Orders</label>
             <input type="text" inputMode="numeric" value={orders}
               onChange={e=>{setOrders(parseNum(e.target.value));reset();}}
               className="w-full p-3 rounded-xl border text-sm outline-none"
@@ -1296,27 +1296,27 @@ function BoxkiMatcher() {
           {hasResult&&(
             <div className="space-y-3">
               <div className="flex justify-between items-center text-sm px-1">
-                <span style={{color:C.txt,opacity:.6}}>خصم التوصيل ({ord} × 5,000)</span>
-                <span className="font-bold" style={{color:C.err}}>- {fmt(deduction)} د.ع</span>
+                <span style={{color:C.txt,opacity:.6}}>Delivery Deduction ({ord} × 5,000)</span>
+                <span className="font-bold" style={{color:C.err}}>- {fmt(deduction)} IQD</span>
               </div>
               <div className="p-4 rounded-2xl text-center" style={{background:C.primary}}>
-                <div className="text-white text-xs opacity-70 mb-1">صافي المبلغ</div>
+                <div className="text-white text-xs opacity-70 mb-1">Net Amount</div>
                 <div className="text-white text-3xl font-black">{fmt(result)}</div>
-                <div className="text-white text-sm opacity-70">د.ع</div>
+                <div className="text-white text-sm opacity-70">IQD</div>
               </div>
 
               <div className="rounded-xl p-3 space-y-2" style={{background:C.soft}}>
-                <div className="text-xs font-semibold" style={{color:C.txt,opacity:.6}}>الفترة الزمنية</div>
+                <div className="text-xs font-semibold" style={{color:C.txt,opacity:.6}}>Time Period</div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <div className="text-xs mb-1" style={{color:C.txt,opacity:.5}}>من</div>
+                    <div className="text-xs mb-1" style={{color:C.txt,opacity:.5}}>From</div>
                     <input type="datetime-local" value={fromDt}
                       onChange={e=>{setFromDt(e.target.value);reset();}}
                       className="w-full p-2 rounded-lg border text-xs outline-none"
                       style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}}/>
                   </div>
                   <div>
-                    <div className="text-xs mb-1" style={{color:C.txt,opacity:.5}}>إلى</div>
+                    <div className="text-xs mb-1" style={{color:C.txt,opacity:.5}}>To</div>
                     <input type="datetime-local" value={toDt}
                       onChange={e=>{setToDt(e.target.value);reset();}}
                       className="w-full p-2 rounded-lg border text-xs outline-none"
@@ -1328,7 +1328,7 @@ function BoxkiMatcher() {
               <button onClick={matchLoyverse} disabled={loyLoading}
                 className="w-full py-3 rounded-xl font-bold text-white text-sm"
                 style={{background:loyLoading?'#999':C.e2}}>
-                {loyLoading?'جاري الجلب...':'مطابقة مع Loyverse'}
+                {loyLoading?'Fetching...':'Match with Loyverse'}
               </button>
 
               {loyErr&&(
@@ -1340,19 +1340,19 @@ function BoxkiMatcher() {
               {loyData&&(
                 <div className="space-y-2">
                   <div className="flex justify-between items-center text-sm px-1">
-                    <span style={{color:C.txt,opacity:.6}}>Loyverse توصيل — {loyData.orders} طلب</span>
-                    <span className="font-bold" style={{color:C.txt}}>{fmt(loyData.total)} د.ع</span>
+                    <span style={{color:C.txt,opacity:.6}}>Loyverse Delivery — {loyData.orders} orders</span>
+                    <span className="font-bold" style={{color:C.txt}}>{fmt(loyData.total)} IQD</span>
                   </div>
                   <div className="p-4 rounded-2xl text-center"
                     style={{background:isMatch?'var(--ok-bg)':'var(--err-bg)'}}>
                     {isMatch?(
-                      <div className="text-xl font-black" style={{color:C.ok}}>مطابق ✓</div>
+                      <div className="text-xl font-black" style={{color:C.ok}}>Matched ✓</div>
                     ):(
                       <>
-                        <div className="text-sm font-semibold mb-1" style={{color:C.err}}>فرق</div>
-                        <div className="text-2xl font-black" style={{color:C.err}}>{fmt(Math.abs(diff))} د.ع</div>
+                        <div className="text-sm font-semibold mb-1" style={{color:C.err}}>Difference</div>
+                        <div className="text-2xl font-black" style={{color:C.err}}>{fmt(Math.abs(diff))} IQD</div>
                         <div className="text-xs mt-1" style={{color:C.err,opacity:.8}}>
-                          {diff>0?'بوكسي أكثر من Loyverse':'Loyverse أكثر من بوكسي'}
+                          {diff>0?'Boxki exceeds Loyverse':'Loyverse exceeds Boxki'}
                         </div>
                       </>
                     )}
@@ -1398,16 +1398,16 @@ function AdminDashboard({employees,settings}) {
   const exportExcel = () => {
     const wb = XLSX.utils.book_new();
     const rows = [
-      ['الموظف','التاريخ','نوع الشفت','أيام','نقاط'],
+      ['Employee','Date','Shift Type','Days','Points'],
       ...recs.sort((a,b)=>a.date.localeCompare(b.date)).map(r=>{
         const emp=employees.find(e=>e.id===r.employee_id);
-        return [emp?.name||'',r.date,r.shift_type==='full'?'كامل':'نص',days(r),pts(r)];
+        return [emp?.name||'',r.date,r.shift_type==='full'?'Full':'Half',days(r),pts(r)];
       })
     ];
     const ws=XLSX.utils.aoa_to_sheet(rows);
     ws['!cols']=[{wch:20},{wch:12},{wch:10},{wch:8},{wch:8}];
-    XLSX.utils.book_append_sheet(wb,ws,'الحضور');
-    XLSX.writeFile(wb,`حضور-${MONTHS[vm]}-${vy}.xlsx`);
+    XLSX.utils.book_append_sheet(wb,ws,'Attendance');
+    XLSX.writeFile(wb,`attendance-${MONTHS[vm]}-${vy}.xlsx`);
   };
 
   return (
@@ -1420,7 +1420,7 @@ function AdminDashboard({employees,settings}) {
           <div className="rounded-2xl p-5 shadow-sm space-y-3" style={{background:C.card}}>
             <div className="flex items-center gap-2 mb-1">
               <Ic n="task" s={15} c={C.primary}/>
-              <span className="font-bold" style={{color:C.txt}}>مهام اليوم</span>
+              <span className="font-bold" style={{color:C.txt}}>Today's Tasks</span>
             </div>
             {todayTasks.map(task=>{
               const targetEmps=task.assigned_to?empOnly.filter(e=>e.id===task.assigned_to):empOnly;
@@ -1447,9 +1447,9 @@ function AdminDashboard({employees,settings}) {
       })()}
 
       <div className="flex items-center justify-between">
-        <h2 className="font-bold" style={{color:C.txt}}>إحصائيات الشهر</h2>
+        <h2 className="font-bold" style={{color:C.txt}}>Monthly Statistics</h2>
         <div className="flex items-center gap-2">
-          <button onClick={exportExcel} className="p-1.5 rounded-lg" style={{background:C.soft}} title="تصدير Excel">
+          <button onClick={exportExcel} className="p-1.5 rounded-lg" style={{background:C.soft}} title="Export Excel">
             <Ic n="dl" s={16} c={C.ok}/>
           </button>
           <button onClick={()=>{if(vm===0){setVy(y=>y-1);setVm(11);}else setVm(m=>m-1)}}
@@ -1463,7 +1463,7 @@ function AdminDashboard({employees,settings}) {
       {/* Bar chart */}
       {allPts>0 && (
         <div className="rounded-2xl p-5 shadow-sm" style={{background:C.card}}>
-          <div className="text-xs font-semibold mb-3" style={{color:C.txt,opacity:.5}}>النقاط مقارنةً</div>
+          <div className="text-xs font-semibold mb-3" style={{color:C.txt,opacity:.5}}>Points Comparison</div>
           <BarChart data={empOnly.map(emp=>{
             const ep=recs.filter(r=>r.employee_id===emp.id).reduce((s,r)=>s+pts(r),0);
             return {label:emp.name.split(' ')[0], value:ep, color:emp.color_hex};
@@ -1485,11 +1485,11 @@ function AdminDashboard({employees,settings}) {
               </div>
               <div>
                 <div className="font-bold" style={{color:C.txt}}>{emp.name}</div>
-                <div className="text-xs" style={{color:C.txt,opacity:.4}}>{emp.role==='admin'?'مدير':'موظف'}</div>
+                <div className="text-xs" style={{color:C.txt,opacity:.4}}>{emp.role==='admin'?'Admin':'Employee'}</div>
               </div>
             </div>
             <div className="grid grid-cols-3 gap-2 text-center">
-              {[['أيام',ed,C.primary],['نقاط',ep,C.e2],['ثابت (تقديري)',fmt(fs)+' د.ع',C.ok]].map(([l,v,col])=>(
+              {[['Days',ed,C.primary],['Points',ep,C.e2],['Fixed (est.)',fmt(fs)+' IQD',C.ok]].map(([l,v,col])=>(
                 <div key={l} className="p-2 rounded-xl" style={{background:C.soft}}>
                   <div className="font-black text-base leading-tight" style={{color:col}}>{v}</div>
                   <div className="text-xs mt-0.5" style={{color:C.txt,opacity:.5}}>{l}</div>
@@ -1506,6 +1506,7 @@ function AdminDashboard({employees,settings}) {
 // ── DELIVERY BONUS STATS ──────────────────────────────────────────────────────
 function DeliveryStats() {
   const PAYMENT_OPTIONS = ['توصيل','ماستر توصيل'];
+  const PAYMENT_LABELS = {'توصيل':'Delivery','ماستر توصيل':'Master Delivery'};
   const [dateMode,setDateMode]=useState('yesterday');
   const [customFrom,setCustomFrom]=useState(todayStr());
   const [customTo,setCustomTo]=useState(todayStr());
@@ -1537,7 +1538,7 @@ function DeliveryStats() {
   };
 
   const runQuery = async () => {
-    if(!selPayments.length){setErr('اختر طريقة دفع واحدة على الأقل');return;}
+    if(!selPayments.length){setErr('Select at least one payment method');return;}
     setBusy(true);setErr('');setResult(null);
     const {from,to}=getRange();
     const {data:{session}}=await sb.auth.getSession();
@@ -1558,9 +1559,9 @@ function DeliveryStats() {
     <div className="space-y-4">
       {/* Date range */}
       <div className="rounded-2xl p-4 shadow-sm space-y-3" style={{background:C.card}}>
-        <div className="text-xs font-bold uppercase tracking-widest mb-1" style={{color:C.primary}}>نطاق التاريخ</div>
+        <div className="text-xs font-bold uppercase tracking-widest mb-1" style={{color:C.primary}}>Date Range</div>
         <div className="grid grid-cols-2 gap-2">
-          {[['today','اليوم'],['yesterday','البارحة'],['week','هذا الأسبوع'],['month','هذا الشهر'],['custom','مخصص']].map(([v,l])=>(
+          {[['today','Today'],['yesterday','Yesterday'],['week','This Week'],['month','This Month'],['custom','Custom']].map(([v,l])=>(
             <button key={v} onClick={()=>setDateMode(v)}
               className="py-2 rounded-xl text-sm font-bold"
               style={{background:dateMode===v?C.primary:C.soft,color:dateMode===v?'#fff':C.txt}}>
@@ -1571,13 +1572,13 @@ function DeliveryStats() {
         {dateMode==='custom'&&(
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>من</label>
+              <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>From</label>
               <input type="date" value={customFrom} onChange={e=>setCustomFrom(e.target.value)}
                 className="w-full p-2.5 rounded-xl border text-sm outline-none"
                 style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}}/>
             </div>
             <div>
-              <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>إلى</label>
+              <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>To</label>
               <input type="date" value={customTo} onChange={e=>setCustomTo(e.target.value)}
                 className="w-full p-2.5 rounded-xl border text-sm outline-none"
                 style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}}/>
@@ -1588,7 +1589,7 @@ function DeliveryStats() {
 
       {/* Payment methods */}
       <div className="rounded-2xl p-4 shadow-sm space-y-3" style={{background:C.card}}>
-        <div className="text-xs font-bold uppercase tracking-widest mb-1" style={{color:C.primary}}>طريقة الدفع</div>
+        <div className="text-xs font-bold uppercase tracking-widest mb-1" style={{color:C.primary}}>Payment Method</div>
         <div className="flex gap-2 flex-wrap">
           {PAYMENT_OPTIONS.map(p=>{
             const sel=selPayments.includes(p);
@@ -1597,7 +1598,7 @@ function DeliveryStats() {
                 className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold"
                 style={{background:sel?C.primary:C.soft,color:sel?'#fff':C.txt}}>
                 {sel&&<Ic n="check" s={13} c="#fff"/>}
-                {p}
+                {PAYMENT_LABELS[p]||p}
               </button>
             );
           })}
@@ -1609,30 +1610,30 @@ function DeliveryStats() {
       <button onClick={runQuery} disabled={busy}
         className="w-full py-3 rounded-xl font-bold text-white"
         style={{background:busy?'#999':C.primary}}>
-        {busy?'جاري الاستعلام...':'استعلام'}
+        {busy?'Querying...':'Query'}
       </button>
 
       {result&&(
         <div className="rounded-2xl shadow-sm overflow-hidden" style={{background:C.card}}>
           <div className="px-4 py-3 text-xs font-bold" style={{background:C.soft}}>
             <div className="grid grid-cols-3" style={{color:C.txt,opacity:.6}}>
-              <span>الموظف</span><span className="text-center">الطلبات</span><span className="text-left">المكافأة</span>
+              <span>Employee</span><span className="text-center">Orders</span><span className="text-left">Bonus</span>
             </div>
           </div>
           {result.stats.map((s,i)=>(
             <div key={i} className="grid grid-cols-3 px-4 py-3.5 border-b text-sm" style={{borderColor:C.border}}>
               <span className="font-bold" style={{color:C.txt}}>{s.employee}</span>
               <span className="text-center font-black text-lg" style={{color:C.primary}}>{s.orders}</span>
-              <span className="text-left font-bold" style={{color:C.ok}}>{fmt(s.bonus)} <span className="text-xs opacity-60">د.ع</span></span>
+              <span className="text-left font-bold" style={{color:C.ok}}>{fmt(s.bonus)} <span className="text-xs opacity-60">IQD</span></span>
             </div>
           ))}
           <div className="grid grid-cols-3 px-4 py-3 text-sm font-black" style={{background:C.soft}}>
-            <span style={{color:C.txt}}>المجموع</span>
+            <span style={{color:C.txt}}>Total</span>
             <span className="text-center" style={{color:C.primary}}>{result.total_orders}</span>
-            <span className="text-left" style={{color:C.ok}}>{fmt(result.total_bonus)} <span className="text-xs font-bold opacity-60">د.ع</span></span>
+            <span className="text-left" style={{color:C.ok}}>{fmt(result.total_bonus)} <span className="text-xs font-bold opacity-60">IQD</span></span>
           </div>
           <div className="px-4 py-2 text-center text-xs" style={{color:C.txt,opacity:.4}}>
-            {result.bonus_per_order} د.ع × طلب
+            {result.bonus_per_order} IQD × order
           </div>
         </div>
       )}
@@ -1735,9 +1736,9 @@ function PayslipsView({employees,settings}) {
     });
     const data = await res.json();
     setLoyBusy(false);
-    if(data.error){ setLoyMsg('خطأ: ' + data.error); setTimeout(()=>setLoyMsg(''),4000); return; }
+    if(data.error){ setLoyMsg('Error: ' + data.error); setTimeout(()=>setLoyMsg(''),4000); return; }
     setF(p=>({...p, sales: String(data.total)}));
-    setLoyMsg(`تم جلب ${fmt(data.total)} د.ع`);
+    setLoyMsg(`Fetched ${fmt(data.total)} IQD`);
     setTimeout(()=>setLoyMsg(''),3000);
   };
 
@@ -1755,12 +1756,12 @@ function PayslipsView({employees,settings}) {
     });
     const data=await res.json();
     setDelBusy(false);
-    if(data.error){setDelMsg('خطأ: '+data.error);setTimeout(()=>setDelMsg(''),4000);return;}
-    if(!data.stats?.length){setDelMsg('لا توجد طلبات توصيل في هذا الشهر');setTimeout(()=>setDelMsg(''),3000);return;}
+    if(data.error){setDelMsg('Error: '+data.error);setTimeout(()=>setDelMsg(''),4000);return;}
+    if(!data.stats?.length){setDelMsg('No delivery orders in this month');setTimeout(()=>setDelMsg(''),3000);return;}
     if(data.stats.length===1){
       const s=data.stats[0];
       setF(p=>({...p,bonus:s.bonus}));
-      setDelMsg(`${s.employee} · ${s.orders} طلب × 400 = ${fmt(s.bonus)} د.ع`);
+      setDelMsg(`${s.employee} · ${s.orders} orders × 400 = ${fmt(s.bonus)} IQD`);
       setTimeout(()=>setDelMsg(''),5000);
     } else {
       setDelPicker(data.stats);
@@ -1769,7 +1770,7 @@ function PayslipsView({employees,settings}) {
 
   const applyDeliveryBonus = s => {
     setF(p=>({...p,bonus:s.bonus}));
-    setDelMsg(`${s.employee} · ${s.orders} طلب × 400 = ${fmt(s.bonus)} د.ع`);
+    setDelMsg(`${s.employee} · ${s.orders} orders × 400 = ${fmt(s.bonus)} IQD`);
     setDelPicker(null);
     setTimeout(()=>setDelMsg(''),5000);
   };
@@ -1789,40 +1790,40 @@ function PayslipsView({employees,settings}) {
     const emp=employees.find(e=>e.id===empId);
     const mn=MONTHS[parseInt(m)-1];
     const rows=[
-      ['المبلغ الثابت (حصة من المجموع الشهري)',f.fixed],
-      ['حصة النسبة من المبيعات',f.pct],
-      ['بونص',f.bonus],
-      ['مبلغ إضافي',f.extra],
+      ['Fixed Amount (share of monthly pool)',f.fixed],
+      ['Sales % Share',f.pct],
+      ['Bonus',f.bonus],
+      ['Extra Amount',f.extra],
     ].filter(([,v])=>parseFloat(v)>0)
      .map(([l,v])=>`
       <table style="width:100%;border-collapse:collapse;margin:0">
         <tr style="border-bottom:1px solid #F0EAE8">
-          <td style="padding:10px 0;font-size:14px;color:#555;direction:rtl">${l}</td>
-          <td style="padding:10px 0;font-size:14px;font-weight:700;text-align:left;white-space:nowrap">${fmt(v)} د.ع</td>
+          <td style="padding:10px 0;font-size:14px;color:#555;">${l}</td>
+          <td style="padding:10px 0;font-size:14px;font-weight:700;text-align:left;white-space:nowrap">${fmt(v)} IQD</td>
         </tr>
       </table>`)
      .join('');
-    const notesHtml=f.notes?`<div style="margin-top:20px;padding:14px;background:#FBF1EC;border-radius:10px;font-size:13px;color:#555"><strong>ملاحظة: </strong>${f.notes}</div>`:'';
-    const html=`<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8">
+    const notesHtml=f.notes?`<div style="margin-top:20px;padding:14px;background:#FBF1EC;border-radius:10px;font-size:13px;color:#555"><strong>Note: </strong>${f.notes}</div>`:'';
+    const html=`<!DOCTYPE html><html dir="ltr"><head><meta charset="utf-8">
       <style>
         *{margin:0;padding:0;box-sizing:border-box}
-        body{font-family:Tahoma,'Segoe UI','Arial Unicode MS',sans-serif;direction:rtl;color:#3A2F3D;background:#fff;padding:40px}
+        body{font-family:Tahoma,'Segoe UI',sans-serif;direction:ltr;color:#3A2F3D;background:#fff;padding:40px}
         @media print{body{padding:20px}@page{margin:15mm}}
       </style>
     </head><body>
       <div style="text-align:center;margin-bottom:28px">
         <div style="font-size:30px;font-weight:900;color:#6B5876;letter-spacing:6px">STACKS</div>
-        <div style="font-size:14px;color:#999;margin-top:6px">Stationery — كشف راتب شهري</div>
+        <div style="font-size:14px;color:#999;margin-top:6px">Stationery — Monthly Payslip</div>
       </div>
       <div style="border-top:3px solid #6B5876;margin-bottom:28px"></div>
       <table style="width:100%;border-collapse:collapse;margin-bottom:24px">
         <tr>
           <td style="vertical-align:top">
-            <div style="font-size:11px;color:#999;margin-bottom:4px">الموظف</div>
+            <div style="font-size:11px;color:#999;margin-bottom:4px">Employee</div>
             <div style="font-size:22px;font-weight:900">${emp?.name||''}</div>
           </td>
           <td style="vertical-align:top;text-align:left">
-            <div style="font-size:11px;color:#999;margin-bottom:4px">الشهر</div>
+            <div style="font-size:11px;color:#999;margin-bottom:4px">Month</div>
             <div style="font-size:22px;font-weight:900">${mn} ${y}</div>
           </td>
         </tr>
@@ -1830,29 +1831,29 @@ function PayslipsView({employees,settings}) {
       <div style="background:#F5EDE8;border-radius:12px;padding:18px;margin-bottom:28px">
         <table style="width:100%;border-collapse:collapse">
           <tr style="border-bottom:1px solid #E8DDE0">
-            <td style="padding:7px 0;font-size:14px;color:#666">أيام الدوام</td>
-            <td style="padding:7px 0;font-size:14px;font-weight:700;text-align:left">${empD} يوم</td>
+            <td style="padding:7px 0;font-size:14px;color:#666">Working Days</td>
+            <td style="padding:7px 0;font-size:14px;font-weight:700;text-align:left">${empD} days</td>
           </tr>
           <tr style="border-bottom:1px solid #E8DDE0">
-            <td style="padding:7px 0;font-size:14px;color:#666">النقاط المكتسبة</td>
-            <td style="padding:7px 0;font-size:14px;font-weight:700;text-align:left">${empP} نقطة</td>
+            <td style="padding:7px 0;font-size:14px;color:#666">Earned Points</td>
+            <td style="padding:7px 0;font-size:14px;font-weight:700;text-align:left">${empP} pts</td>
           </tr>
           <tr>
-            <td style="padding:7px 0;font-size:14px;color:#666">اجمالي نقاط الشهر</td>
-            <td style="padding:7px 0;font-size:14px;font-weight:700;text-align:left">${allP} نقطة</td>
+            <td style="padding:7px 0;font-size:14px;color:#666">Month's Total Points</td>
+            <td style="padding:7px 0;font-size:14px;font-weight:700;text-align:left">${allP} pts</td>
           </tr>
         </table>
       </div>
       ${rows}
       <table style="width:100%;border-collapse:collapse;border-top:2px solid #6B5876;margin-top:10px">
         <tr>
-          <td style="padding:18px 0;font-weight:900;font-size:17px">الاجمالي</td>
-          <td style="padding:18px 0;font-weight:900;font-size:22px;color:#6B5876;text-align:left;white-space:nowrap">${fmt(total)} د.ع</td>
+          <td style="padding:18px 0;font-weight:900;font-size:17px">Total</td>
+          <td style="padding:18px 0;font-weight:900;font-size:22px;color:#6B5876;text-align:left;white-space:nowrap">${fmt(total)} IQD</td>
         </tr>
       </table>
       ${notesHtml}
       <div style="margin-top:50px;border-top:1px solid #EEE;padding-top:14px;font-size:12px;color:#AAA;text-align:center">
-        صدر بتاريخ ${new Date().toLocaleDateString('ar-IQ')} · STACKS Stationery
+        Issued on ${new Date().toLocaleDateString('en-US')} · STACKS Stationery
       </div>
       <script>window.onload=function(){window.print();setTimeout(()=>window.close(),1000)}<\/script>
     </body></html>`;
@@ -1867,15 +1868,15 @@ function PayslipsView({employees,settings}) {
   const empD=er.reduce((s,r)=>s+days(r),0);
 
   const fields=[
-    ['المبلغ الثابت','fixed'],['حصة النسبة','pct'],['حجم المبيعات','sales'],
-    ['بونص (اختياري)','bonus'],['مبلغ إضافي (اختياري)','extra'],
+    ['Fixed Amount','fixed'],['Sales % Share','pct'],['Sales Volume','sales'],
+    ['Bonus (optional)','bonus'],['Extra Amount (optional)','extra'],
   ];
 
   return (
     <div className="space-y-4">
       {/* View toggle */}
       <div className="flex gap-2 p-1 rounded-2xl" style={{background:C.soft}}>
-        {[['monthly','كشف الشهر'],['annual','التقرير السنوي'],['delivery','مكافأة التوصيل']].map(([v,l])=>(
+        {[['monthly','Monthly Slip'],['annual','Annual Report'],['delivery','Delivery Bonus']].map(([v,l])=>(
           <button key={v} onClick={()=>setView(v)}
             className="flex-1 py-2 rounded-xl text-sm font-bold transition-all"
             style={{background:view===v?C.card:'transparent',color:view===v?C.primary:C.txt,
@@ -1887,7 +1888,7 @@ function PayslipsView({employees,settings}) {
 
       {/* Employee selector (always visible) */}
       <div>
-        <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>الموظف</label>
+        <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>Employee</label>
         <select value={empId} onChange={e=>setEmpId(e.target.value)}
           className="w-full p-3 rounded-xl border text-sm outline-none"
           style={{borderColor:C.border,color:C.txt,background:'var(--card)'}}>
@@ -1903,14 +1904,14 @@ function PayslipsView({employees,settings}) {
         return (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <span className="font-bold text-sm" style={{color:C.txt}}>سنة {annualYear}</span>
+              <span className="font-bold text-sm" style={{color:C.txt}}>Year {annualYear}</span>
               <div className="flex items-center gap-2">
                 <button onClick={()=>setAnnualYear(y=>y-1)} className="p-1.5 rounded-lg" style={{background:C.soft}}><Ic n="chR" s={16} c={C.primary}/></button>
                 <button onClick={()=>setAnnualYear(y=>y+1)} className="p-1.5 rounded-lg" style={{background:C.soft}}><Ic n="chL" s={16} c={C.primary}/></button>
               </div>
             </div>
             <div className="grid grid-cols-3 gap-2">
-              {[['إجمالي الأيام',totalD,C.primary],['إجمالي النقاط',totalP,C.e2],['الراتب التقديري',fmt(totalS)+' د.ع',C.ok]].map(([l,v,col])=>(
+              {[['Total Days',totalD,C.primary],['Total Points',totalP,C.e2],['Est. Salary',fmt(totalS)+' IQD',C.ok]].map(([l,v,col])=>(
                 <div key={l} className="rounded-2xl p-3 text-center shadow-sm" style={{background:C.card}}>
                   <div className="font-black text-lg leading-tight" style={{color:col}}>{v}</div>
                   <div className="text-xs mt-0.5" style={{color:C.txt,opacity:.5}}>{l}</div>
@@ -1919,7 +1920,7 @@ function PayslipsView({employees,settings}) {
             </div>
             <div className="rounded-2xl overflow-hidden shadow-sm" style={{background:C.card}}>
               <div className="grid grid-cols-4 px-4 py-2 text-xs font-bold" style={{background:C.soft,color:C.txt,opacity:.7}}>
-                <span>الشهر</span><span className="text-center">أيام</span><span className="text-center">نقاط</span><span className="text-left">راتب</span>
+                <span>Month</span><span className="text-center">Days</span><span className="text-center">Points</span><span className="text-left">Salary</span>
               </div>
               {annualData.map((row,i)=>(
                 <div key={i} className="grid grid-cols-4 px-4 py-2.5 text-sm border-b" style={{borderColor:C.border,opacity:row.days===0?.4:1}}>
@@ -1938,7 +1939,7 @@ function PayslipsView({employees,settings}) {
       {view==='monthly' && <>
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>الشهر</label>
+          <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>Month</label>
           <input type="month" value={month} onChange={e=>setMonth(e.target.value)}
             className="w-full p-3 rounded-xl border text-sm outline-none"
             style={{borderColor:C.border,color:C.txt,background:'var(--card)'}}/>
@@ -1946,7 +1947,7 @@ function PayslipsView({employees,settings}) {
       </div>
 
       <div className="flex gap-2">
-        {[['يوم',empD,C.primary],['نقطة',empP,C.e2],['مجموع',allP,C.ok]].map(([l,v,col])=>(
+        {[['Days',empD,C.primary],['Points',empP,C.e2],['Total',allP,C.ok]].map(([l,v,col])=>(
           <div key={l} className="flex-1 rounded-2xl p-3 text-center shadow-sm" style={{background:C.card}}>
             <div className="text-2xl font-black" style={{color:col}}>{v}</div>
             <div className="text-xs" style={{color:C.txt,opacity:.5}}>{l}</div>
@@ -1955,7 +1956,7 @@ function PayslipsView({employees,settings}) {
       </div>
 
       <div className="rounded-2xl p-5 shadow-sm space-y-3" style={{background:C.card}}>
-        <h3 className="font-bold" style={{color:C.txt}}>بيانات الكشف</h3>
+        <h3 className="font-bold" style={{color:C.txt}}>Slip Data</h3>
         <div className="grid grid-cols-2 gap-3">
           {fields.map(([label,key])=>(
             <div key={key}>
@@ -1965,7 +1966,7 @@ function PayslipsView({employees,settings}) {
                   <input type="text" inputMode="numeric" value={fmtNum(f[key])} onChange={e=>setF(p=>({...p,[key]:parseNum(e.target.value)}))}
                     className="flex-1 p-2.5 rounded-xl border text-sm outline-none"
                     style={{borderColor:C.border,background:'var(--input-bg)'}} placeholder="0"/>
-                  <button onClick={fetchLoyverse} disabled={loyBusy} title="جلب من Loyverse"
+                  <button onClick={fetchLoyverse} disabled={loyBusy} title="Fetch from Loyverse"
                     className="px-2.5 rounded-xl text-xs font-black text-white flex-shrink-0"
                     style={{background:loyBusy?'#999':C.ok}}>
                     {loyBusy?'..':'L'}
@@ -1979,7 +1980,7 @@ function PayslipsView({employees,settings}) {
                   <button onClick={fetchDeliveryBonus} disabled={delBusy}
                     className="w-full py-1.5 rounded-xl text-xs font-bold"
                     style={{background:C.soft,color:delBusy?'#999':C.primary}}>
-                    {delBusy?'جاري الجلب...':'عدد الطلبات'}
+                    {delBusy?'Fetching...':'Get Orders'}
                   </button>
                 </div>
               ) : (
@@ -2017,55 +2018,55 @@ function PayslipsView({employees,settings}) {
           })}
         </div>
         {milestoneBonusAdmin>0&&<div className="text-xs font-bold text-center py-1.5 rounded-lg"
-          style={{background:C.ok+'22',color:C.ok}}>بونص المبيعات: +{fmt(milestoneBonusAdmin)} د.ع</div>}
+          style={{background:C.ok+'22',color:C.ok}}>Sales Bonus: +{fmt(milestoneBonusAdmin)} IQD</div>}
         {delPicker&&(
           <div className="rounded-xl overflow-hidden border" style={{borderColor:C.border}}>
-            <div className="px-3 py-2 text-xs font-bold" style={{background:C.soft,color:C.txt}}>اختر الموظف</div>
+            <div className="px-3 py-2 text-xs font-bold" style={{background:C.soft,color:C.txt}}>Select Employee</div>
             {delPicker.map((s,i)=>(
               <button key={i} onClick={()=>applyDeliveryBonus(s)}
                 className="w-full flex items-center justify-between px-3 py-2.5 border-t text-sm"
                 style={{borderColor:C.border,background:C.card}}>
                 <span className="font-bold" style={{color:C.txt}}>{s.employee}</span>
-                <span className="font-black" style={{color:C.primary}}>{s.orders} طلب · <span style={{color:C.ok}}>{fmt(s.bonus)} د.ع</span></span>
+                <span className="font-black" style={{color:C.primary}}>{s.orders} orders · <span style={{color:C.ok}}>{fmt(s.bonus)} IQD</span></span>
               </button>
             ))}
           </div>
         )}
         {delMsg && (
           <div className="p-2.5 rounded-xl text-xs font-semibold text-center"
-            style={{background:delMsg.startsWith('خطأ')||delMsg.startsWith('لا ')?'var(--err-bg)':'var(--ok-bg)',
-                    color:delMsg.startsWith('خطأ')||delMsg.startsWith('لا ')?C.err:C.ok}}>
+            style={{background:delMsg.startsWith('Error')||delMsg.startsWith('No ')?'var(--err-bg)':'var(--ok-bg)',
+                    color:delMsg.startsWith('Error')||delMsg.startsWith('No ')?C.err:C.ok}}>
             {delMsg}
           </div>
         )}
         {loyMsg && (
           <div className="p-2.5 rounded-xl text-xs font-semibold text-center"
-            style={{background:loyMsg.startsWith('خطأ')?'var(--err-bg)':'var(--ok-bg)',
-                    color:loyMsg.startsWith('خطأ')?C.err:C.ok}}>
+            style={{background:loyMsg.startsWith('Error')?'var(--err-bg)':'var(--ok-bg)',
+                    color:loyMsg.startsWith('Error')?C.err:C.ok}}>
             {loyMsg}
           </div>
         )}
         <div>
-          <label className="text-xs font-semibold block mb-1" style={{color:C.txt,opacity:.7}}>ملاحظة</label>
+          <label className="text-xs font-semibold block mb-1" style={{color:C.txt,opacity:.7}}>Notes</label>
           <textarea value={f.notes} onChange={e=>setF(p=>({...p,notes:e.target.value}))}
             rows={2} className="w-full p-2.5 rounded-xl border text-sm outline-none resize-none"
-            style={{borderColor:C.border,background:'var(--input-bg)'}} placeholder="ملاحظة اختيارية..."/>
+            style={{borderColor:C.border,background:'var(--input-bg)'}} placeholder="Optional note..."/>
         </div>
         <div className="p-3 rounded-xl text-center" style={{background:C.soft}}>
-          <div className="text-xs" style={{color:C.txt,opacity:.5}}>الإجمالي</div>
-          <div className="text-2xl font-black" style={{color:C.primary}}>{fmt(total)} <span className="text-base">د.ع</span></div>
+          <div className="text-xs" style={{color:C.txt,opacity:.5}}>Total</div>
+          <div className="text-2xl font-black" style={{color:C.primary}}>{fmt(total)} <span className="text-base">IQD</span></div>
         </div>
         <div className="flex gap-2">
           <button onClick={save} disabled={busy}
             className="flex-1 py-3 rounded-xl font-bold text-white text-sm"
             style={{background:saved?C.ok:busy?'#999':C.primary}}>
-            {saved?'تم الحفظ':busy?'جاري...':'حفظ'}
+            {saved?'Saved':busy?'Saving...':'Save'}
           </button>
           <button onClick={exportPdf}
             className="flex-1 py-3 rounded-xl font-bold text-white text-sm flex items-center justify-center gap-2"
             style={{background:C.e2}}>
             <Ic n="dl" s={16} c="#fff"/>
-            تصدير PDF
+            Export PDF
           </button>
         </div>
       </div>
@@ -2113,38 +2114,38 @@ function SettingsSection({settings, onSaved}) {
       .eq('id', settings.id);
     setBusy(false);
     if(error){flash(error.message,false);return;}
-    flash('تم حفظ الإعدادات');
+    flash('Settings saved');
     if(onSaved) onSaved();
   };
 
   return (
     <div className="rounded-2xl p-5 shadow-sm space-y-4" style={{background:C.card}}>
-      <h3 className="font-bold" style={{color:C.txt}}>إعدادات الراتب</h3>
+      <h3 className="font-bold" style={{color:C.txt}}>Salary Settings</h3>
       <div>
-        <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>المجموع الشهري (د.ع)</label>
+        <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>Monthly Pool (IQD)</label>
         <input type="text" inputMode="numeric" value={fmtNum(pool)} onChange={e=>setPool(parseNum(e.target.value))}
           className="w-full p-3 rounded-xl border text-sm outline-none"
           style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}} placeholder="525,000"/>
       </div>
       <div>
-        <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>نسبة المبيعات (%)</label>
+        <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>Sales Percentage (%)</label>
         <input type="number" step="0.1" value={pct} onChange={e=>setPct(e.target.value)}
           className="w-full p-3 rounded-xl border text-sm outline-none"
           style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}} placeholder="3.2"/>
       </div>
       <div>
-        <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>IP المكتبة العام</label>
+        <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>Store Public IP</label>
         <input type="text" value={net} onChange={e=>setNet(e.target.value)}
           className="w-full p-3 rounded-xl border text-sm outline-none"
           style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}}
-          placeholder="مثال: 87.100.25.4 — اتركه فارغاً لإلغاء التقييد"/>
-        <p className="text-xs mt-1" style={{color:C.txt,opacity:.45}}>اكتشف IP المكتبة من whatismyip.com أثناء اتصالك بشبكتها · الموظف لن يستطيع تسجيل الحضور خارجها</p>
+          placeholder="e.g. 87.100.25.4 — leave blank to disable restriction"/>
+        <p className="text-xs mt-1" style={{color:C.txt,opacity:.45}}>Find the store IP at whatismyip.com while on its network · Employees cannot check in outside it</p>
       </div>
       {msg.text && <div className="p-3 rounded-xl text-sm text-center text-white" style={{background:msg.ok?C.ok:C.err}}>{msg.text}</div>}
       <button onClick={save} disabled={busy}
         className="w-full py-3 rounded-xl font-bold text-white"
         style={{background:busy?'#999':C.primary}}>
-        {busy?'جاري الحفظ...':'حفظ الإعدادات'}
+        {busy?'Saving...':'Save Settings'}
       </button>
     </div>
   );
@@ -2165,35 +2166,35 @@ function EmployeesView({employees, settings, onRefresh}) {
   const flash = (text, ok=true) => { setMsg({text,ok}); setTimeout(()=>setMsg({text:'',ok:true}),3000); };
 
   const addEmployee = async () => {
-    if(!form.name.trim()||!form.username.trim()||!form.password) { flash('يرجى تعبئة جميع الحقول',false); return; }
-    if(form.password.length<6) { flash('كلمة المرور 6 أحرف على الأقل',false); return; }
+    if(!form.name.trim()||!form.username.trim()||!form.password) { flash('Please fill all fields',false); return; }
+    if(form.password.length<6) { flash('Password must be at least 6 characters',false); return; }
     setBusy(true);
     const res = await callFn('create', form);
     setBusy(false);
     if(res.error){ flash(res.error, false); return; }
-    flash('تم إضافة الموظف بنجاح');
+    flash('Employee added successfully');
     setForm({name:'',username:'',password:'',color_hex:'#A8825B',role:'employee',loyverse_pos_name:''});
     setShowAdd(false);
     onRefresh();
   };
 
   const deleteEmployee = async (emp) => {
-    if(!confirm(`حذف ${emp.name}؟ لا يمكن التراجع.`)) return;
+    if(!confirm(`Delete ${emp.name}? This cannot be undone.`)) return;
     setBusy(true);
     const res = await callFn('delete', {employee_id: emp.id});
     setBusy(false);
     if(res.error){ flash(res.error, false); return; }
-    flash('تم الحذف');
+    flash('Deleted');
     onRefresh();
   };
 
   const resetPassword = async () => {
-    if(!newPass||newPass.length<6){ flash('6 أحرف على الأقل',false); return; }
+    if(!newPass||newPass.length<6){ flash('At least 6 characters',false); return; }
     setBusy(true);
     const res = await callFn('reset_password', {employee_id: resetTarget.id, new_password: newPass});
     setBusy(false);
     if(res.error){ flash(res.error, false); return; }
-    flash('تم تغيير كلمة المرور');
+    flash('Password changed');
     setResetTarget(null); setNewPass('');
   };
 
@@ -2203,12 +2204,12 @@ function EmployeesView({employees, settings, onRefresh}) {
   };
 
   const saveEdit = async () => {
-    if(!editForm.name.trim()){ flash('الاسم مطلوب',false); return; }
+    if(!editForm.name.trim()){ flash('Name is required',false); return; }
     setBusy(true);
     const res = await callFn('update', {employee_id: editTarget.id, ...editForm});
     setBusy(false);
     if(res.error){ flash(res.error, false); return; }
-    flash('تم تحديث معلومات الموظف');
+    flash('Employee info updated');
     setEditTarget(null);
     onRefresh();
   };
@@ -2232,7 +2233,7 @@ function EmployeesView({employees, settings, onRefresh}) {
             <div className="flex-1">
               <div className="font-bold" style={{color:C.txt}}>{emp.name}</div>
               <div className="text-xs" style={{color:C.txt,opacity:.45}}>
-                {emp.username ? `@${emp.username}` : ''} · {emp.role==='admin'?'مدير':'موظف'}
+                {emp.username ? `@${emp.username}` : ''} · {emp.role==='admin'?'Admin':'Employee'}
                 {emp.loyverse_pos_name ? ` · POS: ${emp.loyverse_pos_name}` : ''}
               </div>
             </div>
@@ -2241,7 +2242,7 @@ function EmployeesView({employees, settings, onRefresh}) {
             <button onClick={()=>{setResetTarget(emp);setNewPass('');}}
               className="flex-1 py-2 rounded-xl text-xs font-bold"
               style={{background:C.soft,color:C.txt}}>
-              تغيير الباسورد
+              Change Password
             </button>
             <button onClick={()=>openEdit(emp)}
               className="py-2 px-3 rounded-xl"
@@ -2261,14 +2262,14 @@ function EmployeesView({employees, settings, onRefresh}) {
       <button onClick={()=>setShowAdd(v=>!v)}
         className="w-full p-4 rounded-2xl font-bold text-white flex items-center justify-between"
         style={{background:C.primary}}>
-        <span>إضافة موظف جديد</span>
+        <span>Add New Employee</span>
         <Ic n={showAdd?'chL':'chR'} s={18} c="#fff"/>
       </button>
 
       {/* Add form */}
       {showAdd && (
         <div className="rounded-2xl p-5 shadow-sm space-y-3" style={{background:C.card}}>
-          {[['الاسم الكامل','name','text','مثال: أحمد محمد'],['اسم المستخدم للدخول','username','text','مثال: ahmad'],['كلمة المرور','password','password','6 أحرف على الأقل']].map(([l,k,t,ph])=>(
+          {[['Full Name','name','text','e.g. Ahmad Mohammad'],['Username','username','text','e.g. ahmad'],['Password','password','password','At least 6 characters']].map(([l,k,t,ph])=>(
             <div key={k}>
               <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>{l}</label>
               <input type={t} value={form[k]} onChange={e=>setForm(p=>({...p,[k]:e.target.value}))}
@@ -2278,14 +2279,14 @@ function EmployeesView({employees, settings, onRefresh}) {
             </div>
           ))}
           <div>
-            <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>اسم جهاز POS في Loyverse <span style={{opacity:.5}}>(اختياري)</span></label>
+            <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>Loyverse POS Device Name <span style={{opacity:.5}}>(optional)</span></label>
             <input type="text" value={form.loyverse_pos_name} onChange={e=>setForm(p=>({...p,loyverse_pos_name:e.target.value}))}
               className="w-full p-3 rounded-xl border text-sm outline-none"
               style={{borderColor:C.border,background:'var(--input-bg)'}}
-              placeholder="مثال: Mustafa" autoCapitalize="none" autoCorrect="off"/>
+              placeholder="e.g. Mustafa" autoCapitalize="none" autoCorrect="off"/>
           </div>
           <div>
-            <label className="text-xs font-semibold block mb-2" style={{color:C.txt}}>اللون</label>
+            <label className="text-xs font-semibold block mb-2" style={{color:C.txt}}>Color</label>
             <div className="flex gap-2">
               {COLORS.map(col=>(
                 <button key={col} onClick={()=>setForm(p=>({...p,color_hex:col}))}
@@ -2295,9 +2296,9 @@ function EmployeesView({employees, settings, onRefresh}) {
             </div>
           </div>
           <div>
-            <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>الصلاحية</label>
+            <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>Role</label>
             <div className="flex gap-2">
-              {[['employee','موظف'],['admin','مدير']].map(([v,l])=>(
+              {[['employee','Employee'],['admin','Admin']].map(([v,l])=>(
                 <button key={v} onClick={()=>setForm(p=>({...p,role:v}))}
                   className="flex-1 py-2 rounded-xl text-sm font-bold"
                   style={{background:form.role===v?C.primary:C.soft,color:form.role===v?'#fff':C.txt}}>
@@ -2309,7 +2310,7 @@ function EmployeesView({employees, settings, onRefresh}) {
           <button onClick={addEmployee} disabled={busy}
             className="w-full py-3 rounded-xl font-bold text-white"
             style={{background:busy?'#999':C.ok}}>
-            {busy?'جاري الإضافة...':'إضافة الموظف'}
+            {busy?'Adding...':'Add Employee'}
           </button>
         </div>
       )}
@@ -2320,18 +2321,18 @@ function EmployeesView({employees, settings, onRefresh}) {
           style={{background:'rgba(58,47,61,0.5)'}} onClick={e=>e.target===e.currentTarget&&setResetTarget(null)}>
           <div className="w-full max-w-sm rounded-3xl p-6 shadow-2xl mb-2" style={{background:C.card}}>
             <div className="flex items-center justify-between mb-4">
-              <div className="font-bold" style={{color:C.txt}}>تغيير كلمة مرور {resetTarget.name}</div>
+              <div className="font-bold" style={{color:C.txt}}>Change Password for {resetTarget.name}</div>
               <button onClick={()=>setResetTarget(null)} className="p-2 rounded-xl" style={{background:C.soft}}>
                 <Ic n="x" s={16} c={C.txt}/>
               </button>
             </div>
             <input type="password" value={newPass} onChange={e=>setNewPass(e.target.value)}
               className="w-full p-3 rounded-xl border text-sm outline-none mb-3"
-              style={{borderColor:C.border}} placeholder="كلمة المرور الجديدة (6 أحرف+)"/>
+              style={{borderColor:C.border}} placeholder="New password (6+ chars)"/>
             <button onClick={resetPassword} disabled={busy}
               className="w-full py-3 rounded-xl font-bold text-white"
               style={{background:busy?'#999':C.primary}}>
-              {busy?'جاري...':'حفظ'}
+              {busy?'Saving...':'Save'}
             </button>
           </div>
         </div>
@@ -2343,12 +2344,12 @@ function EmployeesView({employees, settings, onRefresh}) {
           style={{background:'rgba(58,47,61,0.5)'}} onClick={e=>e.target===e.currentTarget&&setEditTarget(null)}>
           <div className="w-full max-w-sm rounded-3xl p-6 shadow-2xl mb-2 space-y-4" style={{background:C.card}}>
             <div className="flex items-center justify-between">
-              <div className="font-bold" style={{color:C.txt}}>تعديل: {editTarget.name}</div>
+              <div className="font-bold" style={{color:C.txt}}>Edit: {editTarget.name}</div>
               <button onClick={()=>setEditTarget(null)} className="p-2 rounded-xl" style={{background:C.soft}}>
                 <Ic n="x" s={16} c={C.txt}/>
               </button>
             </div>
-            {[['الاسم الكامل','name','text'],['اسم المستخدم','username','text']].map(([l,k,t])=>(
+            {[['Full Name','name','text'],['Username','username','text']].map(([l,k,t])=>(
               <div key={k}>
                 <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>{l}</label>
                 <input type={t} value={editForm[k]||''} onChange={e=>setEditForm(p=>({...p,[k]:e.target.value}))}
@@ -2358,14 +2359,14 @@ function EmployeesView({employees, settings, onRefresh}) {
               </div>
             ))}
             <div>
-              <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>اسم جهاز POS في Loyverse <span style={{opacity:.5}}>(اختياري)</span></label>
+              <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>Loyverse POS Device Name <span style={{opacity:.5}}>(optional)</span></label>
               <input type="text" value={editForm.loyverse_pos_name||''} onChange={e=>setEditForm(p=>({...p,loyverse_pos_name:e.target.value}))}
                 className="w-full p-3 rounded-xl border text-sm outline-none"
                 style={{borderColor:C.border,background:'var(--input-bg)'}}
-                placeholder="مثال: Mustafa" autoCapitalize="none" autoCorrect="off"/>
+                placeholder="e.g. Mustafa" autoCapitalize="none" autoCorrect="off"/>
             </div>
             <div>
-              <label className="text-xs font-semibold block mb-2" style={{color:C.txt}}>اللون</label>
+              <label className="text-xs font-semibold block mb-2" style={{color:C.txt}}>Color</label>
               <div className="flex gap-2">
                 {COLORS.map(col=>(
                   <button key={col} onClick={()=>setEditForm(p=>({...p,color_hex:col}))}
@@ -2375,9 +2376,9 @@ function EmployeesView({employees, settings, onRefresh}) {
               </div>
             </div>
             <div>
-              <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>الصلاحية</label>
+              <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>Role</label>
               <div className="flex gap-2">
-                {[['employee','موظف'],['admin','مدير']].map(([v,l])=>(
+                {[['employee','Employee'],['admin','Admin']].map(([v,l])=>(
                   <button key={v} onClick={()=>setEditForm(p=>({...p,role:v}))}
                     className="flex-1 py-2 rounded-xl text-sm font-bold"
                     style={{background:editForm.role===v?C.primary:C.soft,color:editForm.role===v?'#fff':C.txt}}>
@@ -2387,12 +2388,12 @@ function EmployeesView({employees, settings, onRefresh}) {
               </div>
             </div>
             <div className="text-xs px-1" style={{color:C.txt,opacity:.5}}>
-              تغيير اسم المستخدم سيستلزم تسجيل الدخول مجدداً باسم المستخدم الجديد.
+              Changing the username will require signing in again with the new username.
             </div>
             <button onClick={saveEdit} disabled={busy}
               className="w-full py-3 rounded-xl font-bold text-white"
               style={{background:busy?'#999':C.ok}}>
-              {busy?'جاري الحفظ...':'حفظ التعديلات'}
+              {busy?'Saving...':'Save Changes'}
             </button>
           </div>
         </div>
@@ -2401,7 +2402,7 @@ function EmployeesView({employees, settings, onRefresh}) {
       <div className="pt-2">
         <div className="flex items-center gap-2 mb-3 px-1">
           <Ic n="gear" s={16} c={C.primary}/>
-          <span className="text-xs font-bold uppercase tracking-widest" style={{color:C.primary}}>إعدادات الراتب</span>
+          <span className="text-xs font-bold uppercase tracking-widest" style={{color:C.primary}}>Salary Settings</span>
         </div>
         <SettingsSection settings={settings} onSaved={onRefresh}/>
       </div>
@@ -2441,7 +2442,7 @@ function BoxkiLogView({employees}) {
   return (
     <div className="space-y-3">
       <div className="flex gap-2">
-        {[['all','الكل'],['ok','مطابق ✓'],['fail','فرق ✗']].map(([v,l])=>(
+        {[['all','All'],['ok','Matched ✓'],['fail','Diff ✗']].map(([v,l])=>(
           <button key={v} onClick={()=>setFilter(v)}
             className="flex-1 py-2 rounded-xl text-xs font-bold"
             style={{background:filter===v?C.primary:C.soft,color:filter===v?'#fff':C.txt}}>
@@ -2450,9 +2451,9 @@ function BoxkiLogView({employees}) {
         ))}
       </div>
 
-      {loading && <div className="text-center py-8 text-sm" style={{color:C.txt,opacity:.4}}>جاري التحميل...</div>}
+      {loading && <div className="text-center py-8 text-sm" style={{color:C.txt,opacity:.4}}>Loading...</div>}
       {!loading && filtered.length===0 && (
-        <div className="text-center py-12 text-sm" style={{color:C.txt,opacity:.4}}>لا توجد سجلات بعد</div>
+        <div className="text-center py-12 text-sm" style={{color:C.txt,opacity:.4}}>No records yet</div>
       )}
 
       <div className="space-y-2">
@@ -2472,14 +2473,14 @@ function BoxkiLogView({employees}) {
                   </div>
                   <div className="text-xs mt-1" style={{color:C.txt,opacity:.5}}>{fmtTs(log.matched_at)}</div>
                   <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 mt-2 text-xs" style={{color:C.txt,opacity:.7}}>
-                    <span>بوكسي: <strong>{fmt(log.boxki_amount)}</strong> د.ع</span>
-                    <span>طلبات: <strong>{log.boxki_orders}</strong></span>
-                    <span>Loyverse: <strong>{fmt(log.loyverse_total)}</strong> د.ع</span>
-                    <span>طلبات L: <strong>{log.loyverse_orders}</strong></span>
+                    <span>Boxki: <strong>{fmt(log.boxki_amount)}</strong> IQD</span>
+                    <span>Orders: <strong>{log.boxki_orders}</strong></span>
+                    <span>Loyverse: <strong>{fmt(log.loyverse_total)}</strong> IQD</span>
+                    <span>Loyverse Orders: <strong>{log.loyverse_orders}</strong></span>
                   </div>
                   {!log.matched && log.diff!==0 && (
                     <div className="mt-1.5 text-xs font-bold" style={{color:C.err}}>
-                      فرق: {fmt(Math.abs(log.diff))} د.ع {log.diff>0?'(بوكسي أكثر)':'(Loyverse أكثر)'}
+                      Diff: {fmt(Math.abs(log.diff))} IQD {log.diff>0?'(Boxki higher)':'(Loyverse higher)'}
                     </div>
                   )}
                   {log.period_from && (
@@ -2499,13 +2500,13 @@ function BoxkiLogView({employees}) {
 
 // ── NOTIFICATION SETTINGS (ADMIN) ─────────────────────────────────────────────
 function NotificationSettingsView() {
-  const DAYS_AR = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+  const DAYS_AR = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   const DEFAULT = {
     reminder_enabled: true,
     reminder_times: ['12:00'],
     reminder_days: [0,1,2,3,4,5],
     reminder_threshold: 1,
-    reminder_message: 'عيني شباب شوكت تسجلون حضور؟',
+    reminder_message: 'Hey team, when are you checking in?',
     boxki_notify_enabled: true,
     checkin_notify_enabled: true,
   };
@@ -2540,7 +2541,7 @@ function NotificationSettingsView() {
   const addTime    = () => upd({reminder_times: [...s.reminder_times, '12:00']});
   const removeTime = i  => upd({reminder_times: s.reminder_times.filter((_,j)=>j!==i)});
 
-  if (!s) return <div className="p-6 text-center" style={{color:C.txt2}}>جار التحميل...</div>;
+  if (!s) return <div className="p-6 text-center" style={{color:C.txt2}}>Loading...</div>;
 
   const Toggle = ({on, onChange, label}) => (
     <div className="flex items-center justify-between py-2">
@@ -2555,17 +2556,17 @@ function NotificationSettingsView() {
   );
 
   return (
-    <div className="space-y-4 pb-8" style={{direction:'rtl'}}>
+    <div className="space-y-4 pb-8" style={{direction:'ltr'}}>
 
-      {/* ── تذكير الحضور ── */}
+      {/* ── Attendance Reminder ── */}
       <div className="rounded-2xl p-4 space-y-3" style={{background:C.card,border:`1px solid ${C.border}`}}>
-        <div className="text-base font-bold mb-1" style={{color:C.txt}}>⏰ تذكير الحضور</div>
-        <Toggle on={s.reminder_enabled} onChange={()=>upd({reminder_enabled:!s.reminder_enabled})} label="تفعيل التذكير"/>
+        <div className="text-base font-bold mb-1" style={{color:C.txt}}>⏰ Attendance Reminder</div>
+        <Toggle on={s.reminder_enabled} onChange={()=>upd({reminder_enabled:!s.reminder_enabled})} label="Enable reminder"/>
 
         {s.reminder_enabled && <>
-          {/* أوقات */}
+          {/* Times */}
           <div>
-            <div className="text-xs mb-2" style={{color:C.txt2}}>أوقات الإرسال</div>
+            <div className="text-xs mb-2" style={{color:C.txt2}}>Send times</div>
             {s.reminder_times.map((t,i) => (
               <div key={i} className="flex items-center gap-2 mb-2">
                 <input type="time" value={t} onChange={e=>updateTime(i,e.target.value)}
@@ -2579,12 +2580,12 @@ function NotificationSettingsView() {
             ))}
             <button onClick={addTime}
               className="text-sm px-3 py-1.5 rounded-xl"
-              style={{background:C.primary+'22',color:C.primary}}>+ إضافة وقت</button>
+              style={{background:C.primary+'22',color:C.primary}}>+ Add time</button>
           </div>
 
-          {/* أيام */}
+          {/* Days */}
           <div>
-            <div className="text-xs mb-2" style={{color:C.txt2}}>أيام الإرسال</div>
+            <div className="text-xs mb-2" style={{color:C.txt2}}>Send days</div>
             <div className="flex flex-wrap gap-2">
               {DAYS_AR.map((d,i) => {
                 const on = s.reminder_days.includes(i);
@@ -2599,21 +2600,21 @@ function NotificationSettingsView() {
             </div>
           </div>
 
-          {/* العتبة */}
+          {/* Threshold */}
           <div>
-            <div className="text-xs mb-2" style={{color:C.txt2}}>أرسل التذكير إذا عدد المسجلين أقل من</div>
+            <div className="text-xs mb-2" style={{color:C.txt2}}>Send reminder if checked-in count is less than</div>
             <div className="flex items-center gap-3">
               <input type="number" min="1" max="20" value={s.reminder_threshold}
                 onChange={e=>upd({reminder_threshold:parseInt(e.target.value)||1})}
                 className="w-20 p-2 rounded-xl text-center text-sm font-bold"
                 style={{background:C.soft,color:C.txt,border:`1px solid ${C.border}`}}/>
-              <span className="text-xs" style={{color:C.txt2}}>موظف</span>
+              <span className="text-xs" style={{color:C.txt2}}>employee(s)</span>
             </div>
           </div>
 
-          {/* نص الرسالة */}
+          {/* Message text */}
           <div>
-            <div className="text-xs mb-2" style={{color:C.txt2}}>نص الرسالة</div>
+            <div className="text-xs mb-2" style={{color:C.txt2}}>Message text</div>
             <textarea rows={2} value={s.reminder_message}
               onChange={e=>upd({reminder_message:e.target.value})}
               className="w-full p-3 rounded-xl text-sm resize-none"
@@ -2622,19 +2623,19 @@ function NotificationSettingsView() {
         </>}
       </div>
 
-      {/* ── إشعارات أخرى ── */}
+      {/* ── Other Notifications ── */}
       <div className="rounded-2xl p-4" style={{background:C.card,border:`1px solid ${C.border}`}}>
-        <div className="text-base font-bold mb-2" style={{color:C.txt}}>إشعارات أخرى</div>
-        <Toggle on={s.checkin_notify_enabled} onChange={()=>upd({checkin_notify_enabled:!s.checkin_notify_enabled})} label="إشعار تسجيل الحضور"/>
+        <div className="text-base font-bold mb-2" style={{color:C.txt}}>Other Notifications</div>
+        <Toggle on={s.checkin_notify_enabled} onChange={()=>upd({checkin_notify_enabled:!s.checkin_notify_enabled})} label="Check-in Notification"/>
         <div style={{height:1,background:C.border,margin:'4px 0'}}/>
-        <Toggle on={s.boxki_notify_enabled} onChange={()=>upd({boxki_notify_enabled:!s.boxki_notify_enabled})} label="إشعار مطابقة بوكسي"/>
+        <Toggle on={s.boxki_notify_enabled} onChange={()=>upd({boxki_notify_enabled:!s.boxki_notify_enabled})} label="Boxki Match Notification"/>
       </div>
 
-      {/* ── حفظ ── */}
+      {/* ── Save ── */}
       <button onClick={save} disabled={saving}
         className="w-full p-4 rounded-2xl font-bold text-white"
         style={{background: saved ? C.ok : C.primary}}>
-        {saving ? 'جار الحفظ...' : saved ? 'تم الحفظ ✓' : 'حفظ الإعدادات'}
+        {saving ? 'Saving...' : saved ? 'Saved ✓' : 'Save Settings'}
       </button>
     </div>
   );
@@ -2658,12 +2659,12 @@ function AuditLogView({employees}) {
   const getEmp = id => employees.find(e=>e.id===id);
 
   const ACTION = {
-    add:   {label:'إضافة',   bg:'var(--ok-bg)', color:C.ok},
-    update:{label:'تعديل',   bg:'var(--edit-bg)', color:C.primary},
-    delete:{label:'حذف',     bg:'var(--err-bg)', color:C.err},
+    add:   {label:'Add',   bg:'var(--ok-bg)', color:C.ok},
+    update:{label:'Update',   bg:'var(--edit-bg)', color:C.primary},
+    delete:{label:'Delete',     bg:'var(--err-bg)', color:C.err},
   };
 
-  const shiftLabel = s => s==='full'?'كامل':'نص';
+  const shiftLabel = s => s==='full'?'Full':'Half';
 
   const fmtDate = iso => {
     const d=new Date(iso);
@@ -2683,7 +2684,7 @@ function AuditLogView({employees}) {
   return (
     <div className="space-y-4">
       <div className="flex gap-2">
-        {[['audit','سجل التعديلات'],['boxki','سجل بوكسي']].map(([v,l])=>(
+        {[['audit','Edit Log'],['boxki','Boxki Log']].map(([v,l])=>(
           <button key={v} onClick={()=>setTab(v)}
             className="flex-1 py-2.5 rounded-xl text-sm font-bold"
             style={{background:tab===v?C.primary:C.soft,color:tab===v?'#fff':C.txt}}>
@@ -2695,10 +2696,10 @@ function AuditLogView({employees}) {
       {tab==='boxki' && <BoxkiLogView employees={employees}/>}
 
       {tab==='audit' && <>
-      {loading && <div className="text-center py-8 text-sm" style={{color:C.txt,opacity:.4}}>جاري التحميل...</div>}
+      {loading && <div className="text-center py-8 text-sm" style={{color:C.txt,opacity:.4}}>Loading...</div>}
 
       {!loading && logs.length===0 && (
-        <div className="text-center py-12 text-sm" style={{color:C.txt,opacity:.4}}>لا توجد تعديلات بعد</div>
+        <div className="text-center py-12 text-sm" style={{color:C.txt,opacity:.4}}>No edits yet</div>
       )}
 
       {Object.entries(grouped).sort(([a],[b])=>b.localeCompare(a)).map(([date,dayLogs])=>(
@@ -2722,10 +2723,10 @@ function AuditLogView({employees}) {
                           {emp?.name || '—'}
                         </div>
                         <div className="text-xs mt-0.5" style={{color:C.txt,opacity:.5}}>
-                          {log.action==='add'    && `${shiftLabel(log.new_shift)} شفت`}
-                          {log.action==='update' && `${shiftLabel(log.old_shift)} ← ${shiftLabel(log.new_shift)}`}
-                          {log.action==='delete' && `حُذف ${shiftLabel(log.old_shift)} شفت`}
-                          {log.is_auto && <span className="mr-1 opacity-60">(تلقائي)</span>}
+                          {log.action==='add'    && `${shiftLabel(log.new_shift)} shift`}
+                          {log.action==='update' && `${shiftLabel(log.old_shift)} → ${shiftLabel(log.new_shift)}`}
+                          {log.action==='delete' && `Deleted ${shiftLabel(log.old_shift)} shift`}
+                          {log.is_auto && <span className="mr-1 opacity-60">(auto)</span>}
                         </div>
                       </div>
                     </div>
@@ -2737,7 +2738,7 @@ function AuditLogView({employees}) {
                   </div>
                   <div className="flex items-center justify-between mt-3 pt-2" style={{borderTop:`1px solid ${C.soft}`}}>
                     <div className="text-xs" style={{color:C.primary,opacity:.8}}>
-                      {byEmp ? `بواسطة: ${byEmp.name}` : '—'}
+                      {byEmp ? `By: ${byEmp.name}` : '—'}
                     </div>
                     <div className="text-xs" style={{color:C.txt,opacity:.35}}>
                       {fmtDate(log.created_at)}
@@ -2813,7 +2814,7 @@ function App() {
     <div className="min-h-screen flex items-center justify-center" style={{background:C.bg}}>
       <div className="text-center">
         <div className="w-14 h-14 rounded-2xl mx-auto mb-3 flex items-center justify-center font-black text-xl text-white" style={{background:C.primary}}>S</div>
-        <div className="text-sm" style={{color:C.txt,opacity:.4}}>جاري التحميل...</div>
+        <div className="text-sm" style={{color:C.txt,opacity:.4}}>Loading...</div>
       </div>
     </div>
   );
@@ -2822,13 +2823,13 @@ function App() {
 
   const isAdmin=me.role==='admin';
   const tabs=[
-    {id:'calendar',label:'التقويم',icon:'calendar'},
-    {id:'dashboard',label:'الرئيسية',icon:'home'},
+    {id:'calendar',label:'Calendar',icon:'calendar'},
+    {id:'dashboard',label:'Home',icon:'home'},
     ...(isAdmin?[
-      {id:'payslips',label:'الرواتب',icon:'file'},
-      {id:'employees',label:'الموظفون',icon:'user'},
-      {id:'audit',label:'السجل',icon:'clock'},
-      {id:'notif',label:'الإشعارات',icon:'bell'},
+      {id:'payslips',label:'Payroll',icon:'file'},
+      {id:'employees',label:'Staff',icon:'user'},
+      {id:'audit',label:'Log',icon:'clock'},
+      {id:'notif',label:'Notifications',icon:'bell'},
     ]:[]),
   ];
 
@@ -2845,7 +2846,7 @@ function App() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {isAdmin&&<span className="text-xs px-2 py-1 rounded-lg font-semibold" style={{background:'var(--badge-bg)',color:C.primary}}>مدير</span>}
+          {isAdmin&&<span className="text-xs px-2 py-1 rounded-lg font-semibold" style={{background:'var(--badge-bg)',color:C.primary}}>Admin</span>}
           <button onClick={toggleDark} className="p-2 rounded-xl" style={{background:C.soft}}>
             <Ic n={dark?'sun':'moon'} s={17} c={C.primary}/>
           </button>
@@ -2861,12 +2862,12 @@ function App() {
           style={{background:'var(--edit-bg)'}}>
           <div className="flex items-center gap-2">
             <Ic n="bell" s={16} c={C.primary}/>
-            <span className="text-sm font-semibold" style={{color:C.primary}}>لم تسجل حضورك اليوم بعد</span>
+            <span className="text-sm font-semibold" style={{color:C.primary}}>You haven't checked in today yet</span>
           </div>
           <button onClick={()=>{setAttendanceBanner(false);setTab('calendar');}}
             className="text-xs font-bold px-3 py-1 rounded-lg text-white"
             style={{background:C.primary}}>
-            سجّل الآن
+            Check In Now
           </button>
         </div>
       )}
