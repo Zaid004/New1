@@ -1794,44 +1794,70 @@ function PayslipsView({employees,settings}) {
       ['بونص',f.bonus],
       ['مبلغ إضافي',f.extra],
     ].filter(([,v])=>parseFloat(v)>0)
-     .map(([l,v])=>`<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #F0EAE8;font-size:14px"><span style="color:#555">${l}</span><span style="font-weight:700">${fmt(v)} د.ع</span></div>`)
+     .map(([l,v])=>`
+      <table style="width:100%;border-collapse:collapse;margin:0">
+        <tr style="border-bottom:1px solid #F0EAE8">
+          <td style="padding:10px 0;font-size:14px;color:#555;direction:rtl">${l}</td>
+          <td style="padding:10px 0;font-size:14px;font-weight:700;text-align:left;white-space:nowrap">${fmt(v)} د.ع</td>
+        </tr>
+      </table>`)
      .join('');
     const notesHtml=f.notes?`<div style="margin-top:20px;padding:14px;background:#FBF1EC;border-radius:10px;font-size:13px;color:#555"><strong>ملاحظة: </strong>${f.notes}</div>`:'';
-    const html=`<div style="font-family:Tahoma,'Segoe UI','Arial Unicode MS',sans-serif;direction:rtl;padding:50px;color:#3A2F3D;background:#fff;width:740px;word-spacing:2px">
+    const html=`<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8">
+      <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:Tahoma,'Segoe UI','Arial Unicode MS',sans-serif;direction:rtl;color:#3A2F3D;background:#fff;padding:40px}
+        @media print{body{padding:20px}@page{margin:15mm}}
+      </style>
+    </head><body>
       <div style="text-align:center;margin-bottom:28px">
         <div style="font-size:30px;font-weight:900;color:#6B5876;letter-spacing:6px">STACKS</div>
         <div style="font-size:14px;color:#999;margin-top:6px">Stationery — كشف راتب شهري</div>
       </div>
       <div style="border-top:3px solid #6B5876;margin-bottom:28px"></div>
-      <div style="display:flex;justify-content:space-between;margin-bottom:24px">
-        <div><div style="font-size:11px;color:#999;margin-bottom:4px">الموظف</div><div style="font-size:22px;font-weight:900">${emp?.name||''}</div></div>
-        <div><div style="font-size:11px;color:#999;margin-bottom:4px">الشهر</div><div style="font-size:22px;font-weight:900">${mn} ${y}</div></div>
-      </div>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:24px">
+        <tr>
+          <td style="vertical-align:top">
+            <div style="font-size:11px;color:#999;margin-bottom:4px">الموظف</div>
+            <div style="font-size:22px;font-weight:900">${emp?.name||''}</div>
+          </td>
+          <td style="vertical-align:top;text-align:left">
+            <div style="font-size:11px;color:#999;margin-bottom:4px">الشهر</div>
+            <div style="font-size:22px;font-weight:900">${mn} ${y}</div>
+          </td>
+        </tr>
+      </table>
       <div style="background:#F5EDE8;border-radius:12px;padding:18px;margin-bottom:28px">
-        <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #E8DDE0;font-size:14px"><span style="color:#666">أيام الدوام</span><span style="font-weight:700">${empD} يوم</span></div>
-        <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #E8DDE0;font-size:14px"><span style="color:#666">النقاط المكتسبة</span><span style="font-weight:700">${empP} نقطة</span></div>
-        <div style="display:flex;justify-content:space-between;padding:7px 0;font-size:14px"><span style="color:#666">اجمالي نقاط الشهر</span><span style="font-weight:700">${allP} نقطة</span></div>
+        <table style="width:100%;border-collapse:collapse">
+          <tr style="border-bottom:1px solid #E8DDE0">
+            <td style="padding:7px 0;font-size:14px;color:#666">أيام الدوام</td>
+            <td style="padding:7px 0;font-size:14px;font-weight:700;text-align:left">${empD} يوم</td>
+          </tr>
+          <tr style="border-bottom:1px solid #E8DDE0">
+            <td style="padding:7px 0;font-size:14px;color:#666">النقاط المكتسبة</td>
+            <td style="padding:7px 0;font-size:14px;font-weight:700;text-align:left">${empP} نقطة</td>
+          </tr>
+          <tr>
+            <td style="padding:7px 0;font-size:14px;color:#666">اجمالي نقاط الشهر</td>
+            <td style="padding:7px 0;font-size:14px;font-weight:700;text-align:left">${allP} نقطة</td>
+          </tr>
+        </table>
       </div>
       ${rows}
-      <div style="display:flex;justify-content:space-between;padding:18px 0;border-top:2px solid #6B5876;margin-top:10px">
-        <span style="font-weight:900;font-size:17px">الاجمالي</span>
-        <span style="font-weight:900;font-size:22px;color:#6B5876">${fmt(total)} د.ع</span>
-      </div>
+      <table style="width:100%;border-collapse:collapse;border-top:2px solid #6B5876;margin-top:10px">
+        <tr>
+          <td style="padding:18px 0;font-weight:900;font-size:17px">الاجمالي</td>
+          <td style="padding:18px 0;font-weight:900;font-size:22px;color:#6B5876;text-align:left;white-space:nowrap">${fmt(total)} د.ع</td>
+        </tr>
+      </table>
       ${notesHtml}
       <div style="margin-top:50px;border-top:1px solid #EEE;padding-top:14px;font-size:12px;color:#AAA;text-align:center">
         صدر بتاريخ ${new Date().toLocaleDateString('ar-IQ')} · STACKS Stationery
       </div>
-    </div>`;
-    const wrap=document.createElement('div');
-    wrap.style.cssText='position:absolute;left:-9999px;top:0;width:740px';
-    wrap.innerHTML=html;
-    document.body.appendChild(wrap);
-    html2pdf().set({
-      margin:10,
-      filename:`كشف-${emp?.name}-${mn}-${y}.pdf`,
-      html2canvas:{scale:2,useCORS:true,logging:false,windowWidth:760},
-      jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}
-    }).from(wrap.firstChild).save().then(()=>document.body.removeChild(wrap));
+      <script>window.onload=function(){window.print();setTimeout(()=>window.close(),1000)}<\/script>
+    </body></html>`;
+    const w=window.open('','_blank','width=800,height=900');
+    if(w){w.document.write(html);w.document.close();}
   };
 
   const emp=employees.find(e=>e.id===empId);
