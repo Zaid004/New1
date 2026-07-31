@@ -1854,10 +1854,20 @@ function PayslipsView({employees,settings}) {
       <div style="margin-top:50px;border-top:1px solid #EEE;padding-top:14px;font-size:12px;color:#AAA;text-align:center">
         صدر بتاريخ ${new Date().toLocaleDateString('ar-IQ')} · STACKS Stationery
       </div>
-      <script>window.onload=function(){window.print();setTimeout(()=>window.close(),1000)}<\/script>
+      <script>setTimeout(function(){window.print();},600)<\/script>
     </body></html>`;
-    const w=window.open('','_blank','width=800,height=900');
-    if(w){w.document.write(html);w.document.close();}
+    const blob=new Blob([html],{type:'text/html;charset=utf-8'});
+    const blobUrl=URL.createObjectURL(blob);
+    const w=window.open(blobUrl,'_blank');
+    if(!w){
+      const a=document.createElement('a');
+      a.href=blobUrl;
+      a.download=`payslip-${emp?.name?.replace(/\s+/g,'-')||'employee'}-${mn}-${y}.html`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+    setTimeout(()=>URL.revokeObjectURL(blobUrl),15000);
   };
 
   const emp=employees.find(e=>e.id===empId);
