@@ -1823,13 +1823,13 @@ function PayslipsView({employees,settings}) {
       </div>
     </div>`;
     const wrap=document.createElement('div');
-    wrap.style.cssText='position:fixed;left:0;top:0;z-index:-9999';
+    wrap.style.cssText='position:absolute;left:-9999px;top:0;width:740px';
     wrap.innerHTML=html;
     document.body.appendChild(wrap);
     html2pdf().set({
-      margin:0,
+      margin:10,
       filename:`كشف-${emp?.name}-${mn}-${y}.pdf`,
-      html2canvas:{scale:2,useCORS:true,logging:false},
+      html2canvas:{scale:2,useCORS:true,logging:false,windowWidth:760},
       jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}
     }).from(wrap.firstChild).save().then(()=>document.body.removeChild(wrap));
   };
