@@ -2534,6 +2534,8 @@ function NotificationSettingsView() {
     boxki_notify_enabled: true,
     checkin_notify_enabled: true,
     task_notify_enabled: true,
+    task_reminder_enabled: true,
+    task_reminder_time: '08:00',
   };
   const [s, setS] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -2667,6 +2669,24 @@ function NotificationSettingsView() {
         <Toggle on={s.boxki_notify_enabled} onChange={()=>upd({boxki_notify_enabled:!s.boxki_notify_enabled})} label="إشعار مطابقة بوكسي"/>
         <div style={{height:1,background:C.border,margin:'4px 0'}}/>
         <Toggle on={s.task_notify_enabled!==false} onChange={()=>upd({task_notify_enabled:s.task_notify_enabled===false})} label="إشعار إكمال المهام"/>
+      </div>
+
+      {/* ── تذكير المهام الصباحي ── */}
+      <div className="rounded-2xl p-4 space-y-3" style={{background:C.card,border:`1px solid ${C.border}`}}>
+        <div className="text-base font-bold mb-1" style={{color:C.txt}}>📋 تذكير المهام الصباحي</div>
+        <Toggle on={s.task_reminder_enabled!==false} onChange={()=>upd({task_reminder_enabled:s.task_reminder_enabled===false})} label="تفعيل تذكير المهام"/>
+        {s.task_reminder_enabled!==false&&(
+          <div>
+            <div className="text-xs mb-2" style={{color:C.txt2}}>وقت إرسال التذكير</div>
+            <input type="time" value={s.task_reminder_time||'08:00'}
+              onChange={e=>upd({task_reminder_time:e.target.value})}
+              className="p-2 rounded-xl text-sm font-bold"
+              style={{background:C.soft,color:C.txt,border:`1px solid ${C.border}`}}/>
+            <div className="text-xs mt-2" style={{color:C.txt2}}>
+              يرسل تبليغ تليغرام في هذا الوقت لكل مهمة مجدولة لهذا اليوم (يومية، أسبوعية، شهرية، مرة واحدة)
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── تبليغ سريع ── */}

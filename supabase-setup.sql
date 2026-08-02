@@ -185,10 +185,67 @@ create trigger attendance_audit
   for each row execute function log_attendance_change();
 
 -- ════════════════════════════════════════════════════════════
+-- 7. TASKS & COMPLETIONS
+-- ════════════════════════════════════════════════════════════
+
+create table if not exists tasks (
+  id            uuid primary key default gen_random_uuid(),
+  title         text not null,
+  recurrence    text not null default 'daily' check (recurrence in ('daily','weekly','monthly','once')),
+  is_active     boolean not null default true,
+  assigned_to   uuid references employees(id) on delete set null,
+  day_of_week   int,   -- 0=Sun … 6=Sat  (for weekly)
+  day_of_month  int,   -- 1–31           (for monthly)
+  specific_date date,  -- (for once)
+  created_at    timestamptz default now()
+);
+
+create table if not exists task_completions (
+  id             uuid primary key default gen_random_uuid(),
+  task_id        uuid not null references tasks(id) on delete cascade,
+  employee_id    uuid not null references employees(id) on delete cascade,
+  completed_date date not null,
+  created_at     timestamptz default now(),
+  unique (task_id, employee_id, completed_date)
+);
+
+alter table tasks            enable row level security;
+alter table task_completions enable row level security;
+
+create policy "tasks_read"       on tasks            for select using (auth.uid() is not null);
+create policy "tasks_admin"      on tasks            for all    using (current_employee_role() = 'admin');
+create policy "tc_own"           on task_completions for all    using (employee_id = current_employee_id());
+create policy "tc_admin"         on task_completions for all    using (current_employee_role() = 'admin');
+
+-- 8. NOTIFICATION SETTINGS
+-- ════════════════════════════════════════════════════════════
+create table if not exists notification_settings (
+  id                    int primary key default 1,
+  reminder_enabled      boolean default true,
+  reminder_times        jsonb   default '["12:00"]',
+  reminder_days         jsonb   default '[0,1,2,3,4,5]',
+  reminder_threshold    int     default 1,
+  reminder_message      text    default 'عيني شباب شوكت تسجلون حضور؟',
+  boxki_notify_enabled  boolean default true,
+  checkin_notify_enabled boolean default true,
+  task_notify_enabled   boolean default true,
+  task_reminder_enabled boolean default true,
+  task_reminder_time    text    default '08:00'
+);
+
+insert into notification_settings (id) values (1) on conflict do nothing;
+
+alter table notification_settings enable row level security;
+create policy "ns_admin" on notification_settings for all using (current_employee_role() = 'admin');
+
+-- ════════════════════════════════════════════════════════════
 -- IF YOU ALREADY RAN THIS SCRIPT BEFORE — run only this:
 -- ════════════════════════════════════════════════════════════
 -- alter table employees add column if not exists username text unique;
 -- alter table attendance_records add column if not exists note text;
+-- alter table notification_settings add column if not exists task_notify_enabled   boolean default true;
+-- alter table notification_settings add column if not exists task_reminder_enabled boolean default true;
+-- alter table notification_settings add column if not exists task_reminder_time    text    default '08:00';
 
 -- ════════════════════════════════════════════════════════════
 -- SAMPLE DATA
