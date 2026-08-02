@@ -535,7 +535,15 @@ function CalendarView({me,employees,isAdmin,settings}) {
       setCompletions(cs=>cs.filter(c=>c.id!==ex.id));
     } else {
       const {data}=await sb.from('task_completions').insert({task_id:taskId,employee_id:me.id,completed_date:dateStr}).select().single();
-      if(data) setCompletions(cs=>[...cs,data]);
+      if(data){
+        setCompletions(cs=>[...cs,data]);
+        const task=tasks.find(t=>t.id===taskId);
+        sb.from('notification_settings').select('task_notify_enabled').eq('id',1).maybeSingle()
+          .then(({data:ns})=>{
+            if(ns?.task_notify_enabled!==false)
+              sendTelegram(`✅ <b>مهمة مكتملة</b>\n👤 ${me.name}\n📌 ${task?.title||''}\n📅 ${dateStr}`);
+          });
+      }
     }
   };
 
@@ -2525,10 +2533,22 @@ function NotificationSettingsView() {
     reminder_message: 'عيني شباب شوكت تسجلون حضور؟',
     boxki_notify_enabled: true,
     checkin_notify_enabled: true,
+    task_notify_enabled: true,
   };
   const [s, setS] = useState(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [quickMsg, setQuickMsg] = useState('');
+  const [qBusy, setQBusy] = useState(false);
+  const [qSent, setQSent] = useState(false);
+
+  const sendQuick = async () => {
+    if(!quickMsg.trim()) return;
+    setQBusy(true);
+    await sendTelegram(quickMsg.trim());
+    setQBusy(false); setQSent(true); setQuickMsg('');
+    setTimeout(()=>setQSent(false), 2500);
+  };
 
   useEffect(() => {
     sb.from('notification_settings').select('*').eq('id',1).maybeSingle()
@@ -2645,6 +2665,23 @@ function NotificationSettingsView() {
         <Toggle on={s.checkin_notify_enabled} onChange={()=>upd({checkin_notify_enabled:!s.checkin_notify_enabled})} label="إشعار تسجيل الحضور"/>
         <div style={{height:1,background:C.border,margin:'4px 0'}}/>
         <Toggle on={s.boxki_notify_enabled} onChange={()=>upd({boxki_notify_enabled:!s.boxki_notify_enabled})} label="إشعار مطابقة بوكسي"/>
+        <div style={{height:1,background:C.border,margin:'4px 0'}}/>
+        <Toggle on={s.task_notify_enabled!==false} onChange={()=>upd({task_notify_enabled:s.task_notify_enabled===false})} label="إشعار إكمال المهام"/>
+      </div>
+
+      {/* ── تبليغ سريع ── */}
+      <div className="rounded-2xl p-4 space-y-3" style={{background:C.card,border:`1px solid ${C.border}`}}>
+        <div className="text-base font-bold" style={{color:C.txt}}>📨 تبليغ سريع</div>
+        <div className="text-xs" style={{color:C.txt2}}>أرسل رسالة مباشرة عبر بوت التليغرام</div>
+        <textarea rows={3} value={quickMsg} onChange={e=>setQuickMsg(e.target.value)}
+          placeholder="اكتب رسالتك هنا..."
+          className="w-full p-3 rounded-xl text-sm resize-none"
+          style={{background:C.soft,color:C.txt,border:`1px solid ${C.border}`,direction:'rtl'}}/>
+        <button onClick={sendQuick} disabled={qBusy||!quickMsg.trim()}
+          className="w-full py-3 rounded-xl font-bold text-white text-sm"
+          style={{background: qSent ? C.ok : C.primary, opacity: (!quickMsg.trim()&&!qBusy)?0.5:1}}>
+          {qBusy?'جار الإرسال...':qSent?'تم الإرسال ✓':'إرسال عبر التليغرام 📤'}
+        </button>
       </div>
 
       {/* ── حفظ ── */}
