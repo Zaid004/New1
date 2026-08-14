@@ -133,7 +133,8 @@ const getPublicIP = async () => {
 };
 const fmtNum = v => { if(v===''||v===undefined||v===null) return ''; const n=Number(String(v).replace(/,/g,'')); return isNaN(n)||n===0&&v===''?'':new Intl.NumberFormat('en').format(n); };
 const parseNum = v => String(v).replace(/[^0-9.]/g,'');
-const todayStr = () => new Date().toISOString().split('T')[0];
+const iraqNow  = () => new Date(Date.now() + 3*60*60*1000);
+const todayStr = () => iraqNow().toISOString().slice(0,10);
 const monthRange = (y,m) => {
   const from = `${y}-${String(m+1).padStart(2,'0')}-01`;
   const last = new Date(y,m+1,0).getDate();
@@ -459,9 +460,9 @@ function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone,allowedNetwo
 
 // ── CALENDAR VIEW ─────────────────────────────────────────────────────────────
 function CalendarView({me,employees,isAdmin,settings}) {
-  const now = new Date();
-  const [vy,setVy]=useState(now.getFullYear());
-  const [vm,setVm]=useState(now.getMonth());
+  const now = iraqNow();
+  const [vy,setVy]=useState(now.getUTCFullYear());
+  const [vm,setVm]=useState(now.getUTCMonth());
   const [recs,setRecs]=useState([]);
   const [modal,setModal]=useState(null);
   const [tasks,setTasks]=useState([]);
@@ -802,7 +803,7 @@ function CalendarView({me,employees,isAdmin,settings}) {
 // ── EMPLOYEE DASHBOARD ────────────────────────────────────────────────────────
 function EmpDashboard({me,employees,settings,onRefresh}) {
   const COLORS = ['#6B5876','#A8825B','#7A8B6F','#B0594F','#5876A8','#8B6F7A'];
-  const now=new Date();
+  const now=iraqNow();
   const [recs,setRecs]=useState([]);
   const [sales,setSales]=useState('');
   const [extra,setExtra]=useState('');
@@ -826,17 +827,17 @@ function EmpDashboard({me,employees,settings,onRefresh}) {
   const getDelRange = () => {
     const toISO=(ds,end=false)=>new Date(`${ds}T${end?'23:59:59.999':'00:00:00.000'}+03:00`).toISOString();
     const today=todayStr();
-    const yest=(()=>{const d=new Date();d.setDate(d.getDate()-1);return d.toISOString().split('T')[0];})();
+    const yest=(()=>{const d=iraqNow();d.setUTCDate(d.getUTCDate()-1);return d.toISOString().slice(0,10);})();
     if(delDateMode==='today')     return {from:toISO(today),     to:toISO(today,true)};
     if(delDateMode==='yesterday') return {from:toISO(yest),      to:toISO(yest,true)};
     if(delDateMode==='week'){
-      const d=new Date(),ws=new Date(d);
-      ws.setDate(d.getDate()-(d.getDay()+1)%7);
-      return {from:toISO(ws.toISOString().split('T')[0]),to:toISO(today,true)};
+      const d=iraqNow(),ws=new Date(d);
+      ws.setUTCDate(d.getUTCDate()-(d.getUTCDay()+1)%7);
+      return {from:toISO(ws.toISOString().slice(0,10)),to:toISO(today,true)};
     }
     if(delDateMode==='month'){
-      const d=new Date();
-      return {from:toISO(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`),to:toISO(today,true)};
+      const d=iraqNow();
+      return {from:toISO(`${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-01`),to:toISO(today,true)};
     }
     return {from:toISO(delFrom),to:toISO(delTo,true)};
   };
@@ -1530,9 +1531,9 @@ function BoxkiMatcher() {
 
 // ── ADMIN DASHBOARD ───────────────────────────────────────────────────────────
 function AdminDashboard({employees,settings}) {
-  const now=new Date();
-  const [vy,setVy]=useState(now.getFullYear());
-  const [vm,setVm]=useState(now.getMonth());
+  const now=iraqNow();
+  const [vy,setVy]=useState(now.getUTCFullYear());
+  const [vm,setVm]=useState(now.getUTCMonth());
   const [recs,setRecs]=useState([]);
   const [tasks,setTasks]=useState([]);
   const [todayComps,setTodayComps]=useState([]);
@@ -1679,19 +1680,19 @@ function DeliveryStats() {
     const toISO = (dateStr, end=false) =>
       new Date(`${dateStr}T${end?'23:59:59.999':'00:00:00.000'}+03:00`).toISOString();
     const today = todayStr();
-    const yest  = (()=>{const d=new Date();d.setDate(d.getDate()-1);return d.toISOString().split('T')[0];})();
+    const yest  = (()=>{const d=iraqNow();d.setUTCDate(d.getUTCDate()-1);return d.toISOString().slice(0,10);})();
     if(dateMode==='today')     return {from:toISO(today),      to:toISO(today,true)};
     if(dateMode==='yesterday') return {from:toISO(yest),       to:toISO(yest,true)};
     if(dateMode==='week'){
-      const d=new Date();
-      const daysBack=(d.getDay()+1)%7; // Saturday as week start
-      const ws=new Date(d);ws.setDate(d.getDate()-daysBack);
-      const wsStr=ws.toISOString().split('T')[0];
+      const d=iraqNow();
+      const daysBack=(d.getUTCDay()+1)%7;
+      const ws=new Date(d);ws.setUTCDate(d.getUTCDate()-daysBack);
+      const wsStr=ws.toISOString().slice(0,10);
       return {from:toISO(wsStr), to:toISO(today,true)};
     }
     if(dateMode==='month'){
-      const d=new Date();
-      const ms=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`;
+      const d=iraqNow();
+      const ms=`${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-01`;
       return {from:toISO(ms), to:toISO(today,true)};
     }
     return {from:toISO(customFrom), to:toISO(customTo,true)};
@@ -1803,11 +1804,11 @@ function DeliveryStats() {
 
 // ── PAYSLIPS (ADMIN) ──────────────────────────────────────────────────────────
 function PayslipsView({employees,settings}) {
-  const now=new Date();
+  const now=iraqNow();
   const empOnly = employees.filter(e => e.role !== 'admin');
   const empOnlyIds = new Set(empOnly.map(e => e.id));
   const [empId,setEmpId]=useState(()=>empOnly[0]?.id||'');
-  const [month,setMonth]=useState(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`);
+  const [month,setMonth]=useState(`${now.getUTCFullYear()}-${String(now.getUTCMonth()+1).padStart(2,'0')}`);
   const [view,setView]=useState('monthly'); // 'monthly' | 'annual'
   const [recs,setRecs]=useState([]);
   const [f,setF]=useState({fixed:'',pct:'',sales:'',bonus:'',extra:'',notes:''});
@@ -1820,7 +1821,7 @@ function PayslipsView({employees,settings}) {
   const [delPicker,setDelPicker]=useState(null);
 
   // Annual report state
-  const [annualYear,setAnnualYear]=useState(new Date().getFullYear());
+  const [annualYear,setAnnualYear]=useState(iraqNow().getUTCFullYear());
   const [annualData,setAnnualData]=useState([]);
 
   useEffect(()=>{
@@ -2016,7 +2017,7 @@ function PayslipsView({employees,settings}) {
       ${notesHtml}
       <div style="margin-top:16px;display:flex;align-items:flex-end;justify-content:space-between">
         <div style="font-size:11px;color:#AAA;border-top:1px solid #EEE;padding-top:8px;flex:1">
-          صدر بتاريخ ${new Date().toLocaleDateString('ar-IQ')} · STACKS Stationery
+          صدر بتاريخ ${iraqNow().toISOString().slice(0,10)} · STACKS Stationery
         </div>
         <div style="opacity:0.8;transform:rotate(-8deg);margin-right:8px;flex-shrink:0">
           ${stampImg}
@@ -3029,7 +3030,7 @@ function App() {
     if(myEmp && myEmp.role!=='admin') {
       const today=todayStr();
       const {data:todayRec}=await sb.from('attendance_records').select('id').eq('employee_id',myEmp.id).eq('date',today).maybeSingle();
-      const h=new Date().getHours();
+      const h=iraqNow().getUTCHours();
       if(!todayRec && h>=8 && h<22) setAttendanceBanner(true);
     }
   };
