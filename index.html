@@ -1360,6 +1360,13 @@ function BoxkiMatcher() {
 
   const diff = loyData ? Math.round(result) - loyData.total : 0;
   const isMatch = loyData && diff === 0;
+  const diagHint = loyData && !isMatch ? (() => {
+    const cd = Math.round(ord) - loyData.orders;
+    if (cd === 0) return `ابحث عن طلب سعره خاطئ أو عليه خصم (${fmt(Math.abs(diff))} دينار)`;
+    if (cd === 1) return `ابحث في بوكسي عن طلب قيمته ~${fmt(diff+5000)} د.ع غير مسجّل في لويفرز`;
+    if (cd ===-1) return `ابحث عن طلب مكرر أو تاريخه خاطئ في لويفرز`;
+    return null;
+  })() : null;
 
   return (
     <div>
@@ -1502,6 +1509,11 @@ function BoxkiMatcher() {
                       </>
                     )}
                   </div>
+                  {diagHint&&(
+                    <div className="p-3 rounded-xl text-xs text-center" style={{background:'var(--err-bg)',color:C.err}}>
+                      💡 {diagHint}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
