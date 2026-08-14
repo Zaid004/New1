@@ -1197,6 +1197,46 @@ function NotifButton() {
   );
 }
 
+// ── STORE REFERENCE ILLUSTRATIONS ────────────────────────────────────────────
+const StoreRef = ({idx}) => idx === 0 ? (
+  /* Corner/diagonal angle — camera stands bottom-right */
+  <svg viewBox="0 0 100 68" width="90" height="61" fill="none">
+    <polygon points="0,68 52,32 100,56 100,68" fill="#ede8f2"/>
+    <polygon points="0,68 0,6 52,32" fill="#e4dced"/>
+    <polygon points="0,6 52,32 52,4 24,4" fill="#d8d0e6"/>
+    <line x1="2" y1="18" x2="48" y2="36" stroke="#6B5876" strokeWidth="1" opacity="0.55"/>
+    <line x1="2" y1="32" x2="48" y2="46" stroke="#6B5876" strokeWidth="1" opacity="0.55"/>
+    <line x1="2" y1="47" x2="48" y2="57" stroke="#6B5876" strokeWidth="1" opacity="0.55"/>
+    <line x1="3" y1="12" x2="50" y2="8" stroke="#6B5876" strokeWidth="0.8" opacity="0.4"/>
+    <line x1="3" y1="19" x2="50" y2="15" stroke="#6B5876" strokeWidth="0.8" opacity="0.4"/>
+    <line x1="3" y1="26" x2="50" y2="22" stroke="#6B5876" strokeWidth="0.8" opacity="0.4"/>
+    <rect x="28" y="43" width="18" height="11" rx="1" fill="#6B5876" opacity="0.28"/>
+    <circle cx="88" cy="62" r="4" fill="#6B5876" opacity="0.75"/>
+    <circle cx="88" cy="62" r="7.5" fill="none" stroke="#6B5876" strokeWidth="1" opacity="0.35"/>
+  </svg>
+) : (
+  /* Front centered angle — camera stands bottom-center */
+  <svg viewBox="0 0 100 68" width="90" height="61" fill="none">
+    <polygon points="0,68 22,36 78,36 100,68" fill="#ede8f2"/>
+    <rect x="22" y="4" width="56" height="32" fill="#d8d0e6"/>
+    <polygon points="0,68 0,10 22,36 22,4" fill="#e4dced"/>
+    <polygon points="100,68 100,10 78,36 78,4" fill="#e4dced"/>
+    <polygon points="0,10 22,4 78,4 100,10" fill="#f0ebf4"/>
+    <line x1="23" y1="12" x2="77" y2="12" stroke="#6B5876" strokeWidth="1" opacity="0.55"/>
+    <line x1="23" y1="20" x2="77" y2="20" stroke="#6B5876" strokeWidth="1" opacity="0.55"/>
+    <line x1="23" y1="28" x2="77" y2="28" stroke="#6B5876" strokeWidth="1" opacity="0.55"/>
+    <line x1="1"  y1="26" x2="21" y2="18" stroke="#6B5876" strokeWidth="0.8" opacity="0.45"/>
+    <line x1="1"  y1="40" x2="21" y2="28" stroke="#6B5876" strokeWidth="0.8" opacity="0.45"/>
+    <line x1="1"  y1="54" x2="21" y2="38" stroke="#6B5876" strokeWidth="0.8" opacity="0.45"/>
+    <line x1="99" y1="26" x2="79" y2="18" stroke="#6B5876" strokeWidth="0.8" opacity="0.45"/>
+    <line x1="99" y1="40" x2="79" y2="28" stroke="#6B5876" strokeWidth="0.8" opacity="0.45"/>
+    <line x1="99" y1="54" x2="79" y2="38" stroke="#6B5876" strokeWidth="0.8" opacity="0.45"/>
+    <rect x="38" y="50" width="24" height="13" rx="1" fill="#6B5876" opacity="0.28"/>
+    <circle cx="50" cy="64" r="4" fill="#6B5876" opacity="0.75"/>
+    <circle cx="50" cy="64" r="7.5" fill="none" stroke="#6B5876" strokeWidth="1" opacity="0.35"/>
+  </svg>
+);
+
 // ── BOXKI MATCHER ─────────────────────────────────────────────────────────────
 function BoxkiMatcher() {
   const getIraqToday = () => new Date(Date.now()+3*60*60*1000).toISOString().slice(0,10);
@@ -1368,17 +1408,17 @@ function BoxkiMatcher() {
                 <label className="block cursor-pointer">
                   <input type="file" accept="image/*" capture="environment" className="hidden"
                     onChange={e=>{const f=e.target.files?.[0];if(f)setPhotos(prev=>{const n=[...prev];n[i]=f;return n;});}}/>
-                  <div className="w-full h-28 rounded-xl flex flex-col items-center justify-center gap-2"
-                    style={{border:`2px dashed ${photos[i]?C.ok:C.border}`,background:C.soft}}>
+                  <div className="w-full rounded-xl flex flex-col items-center justify-center gap-1.5"
+                    style={{border:`2px dashed ${photos[i]?C.ok:C.border}`,background:C.soft,minHeight:'120px',padding:'10px 0'}}>
                     {photos[i]?(
                       <>
-                        <Ic n='check' s={26} c={C.ok}/>
-                        <div className="text-xs font-bold" style={{color:C.ok}}>{photos[i].name?.slice(0,20)||'تم الاختيار'}</div>
+                        <Ic n='check' s={28} c={C.ok}/>
+                        <div className="text-xs font-bold" style={{color:C.ok}}>تم الاختيار ✓</div>
                       </>
                     ):(
                       <>
-                        <Ic n='camera' s={26} c={C.txt2}/>
-                        <div className="text-xs" style={{color:C.txt2}}>اضغط للتصوير</div>
+                        <StoreRef idx={i}/>
+                        <div className="text-xs font-semibold" style={{color:C.primary}}>صوّر من هذه الزاوية</div>
                       </>
                     )}
                   </div>
