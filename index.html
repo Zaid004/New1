@@ -1209,7 +1209,71 @@ function BoxkiMatcher() {
   const [loyData,setLoyData]=useState(null);
   const [loyErr,setLoyErr]=useState('');
 
+  // ── Photo verification state ──
+  const [photoStep,setPhotoStep]=useState(false);
+  const [photos,setPhotos]=useState([null,null]);
+  const [photoUploading,setPhotoUploading]=useState(false);
+  const [photoErr,setPhotoErr]=useState('');
+
   const reset = () => { setLoyData(null); setLoyErr(''); };
+
+  // Resize + encode photo to base64 JPEG (max 1200px, 85% quality)
+  const processPhoto = file => new Promise(resolve => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 1200;
+        let w = img.width, h = img.height;
+        if (w > MAX || h > MAX) {
+          if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+          else       { w = Math.round(w * MAX / h); h = MAX; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', 0.85).split(',')[1]);
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+
+  const sendPhoto = async (session, base64, caption) => {
+    await fetch(`${SUPA_URL}/functions/v1/send-telegram`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json','Authorization':`Bearer ${session.access_token}`},
+      body: JSON.stringify({type:'photo', data:base64, caption}),
+    });
+  };
+
+  const needsPhotos = async () => {
+    const {data:ns} = await sb.from('notification_settings').select('photo_check_enabled').eq('id',1).maybeSingle();
+    if (ns?.photo_check_enabled === false) return false;
+    const ts = localStorage.getItem('boxki_photo_ts');
+    return !ts || Date.now() - parseInt(ts) > 3600000;
+  };
+
+  const handlePhotoUpload = async () => {
+    if (!photos[0] || !photos[1]) { setPhotoErr('يرجى رفع الصورتين أولاً'); return; }
+    setPhotoUploading(true); setPhotoErr('');
+    try {
+      const {data:{session}} = await sb.auth.getSession();
+      const {data:empRow} = await sb.from('employees').select('name').eq('auth_user_id',session.user.id).maybeSingle();
+      const empName = empRow?.name || 'موظف';
+      for (let i = 0; i < 2; i++) {
+        const b64 = await processPhoto(photos[i]);
+        await sendPhoto(session, b64, `📸 صورة ${i+1} من 2 — ${empName}`);
+      }
+      localStorage.setItem('boxki_photo_ts', String(Date.now()));
+      setPhotoStep(false); setPhotos([null,null]); setPhotoErr('');
+      doMatch();
+    } catch(_) {
+      setPhotoErr('خطأ في إرسال الصور، حاول مجدداً');
+    } finally {
+      setPhotoUploading(false);
+    }
+  };
 
   const amt=parseFloat(amount)||0;
   const ord=parseFloat(orders)||0;
@@ -1218,6 +1282,11 @@ function BoxkiMatcher() {
   const hasResult=amt>0&&ord>0;
 
   const matchLoyverse = async () => {
+    if (await needsPhotos()) { setPhotoStep(true); return; }
+    doMatch();
+  };
+
+  const doMatch = async () => {
     setLoyLoading(true); setLoyData(null); setLoyErr('');
     try {
       const {data:{session}} = await sb.auth.getSession();
@@ -1276,6 +1345,54 @@ function BoxkiMatcher() {
 
   return (
     <div>
+
+      {/* ── Photo verification modal ── */}
+      {photoStep&&(
+        <div className="fixed inset-0 z-50 flex items-end justify-center p-4 pb-8"
+          style={{background:'rgba(0,0,0,0.75)'}}>
+          <div className="rounded-2xl p-5 w-full max-w-sm space-y-4" style={{background:C.card}}>
+            <div className="text-center">
+              <div style={{fontSize:36}}>📸</div>
+              <div className="font-bold text-base mt-1" style={{color:C.txt}}>صور المحل مطلوبة</div>
+              <div className="text-xs mt-1" style={{color:C.txt2}}>التقط صورتين للمحل قبل المطابقة</div>
+            </div>
+            {[0,1].map(i=>(
+              <div key={i}>
+                <div className="text-sm font-bold mb-1.5" style={{color:C.txt}}>الصورة {i===0?'الأولى':'الثانية'}</div>
+                <label className="block cursor-pointer">
+                  <input type="file" accept="image/*" capture="environment" className="hidden"
+                    onChange={e=>{const f=e.target.files?.[0];if(f)setPhotos(prev=>{const n=[...prev];n[i]=f;return n;});}}/>
+                  <div className="w-full h-28 rounded-xl flex flex-col items-center justify-center gap-1"
+                    style={{border:`2px dashed ${photos[i]?C.ok:C.border}`,background:C.soft}}>
+                    {photos[i]?(
+                      <>
+                        <div style={{fontSize:28}}>✅</div>
+                        <div className="text-xs font-bold" style={{color:C.ok}}>تم الاختيار</div>
+                      </>
+                    ):(
+                      <>
+                        <div style={{fontSize:28}}>📷</div>
+                        <div className="text-xs" style={{color:C.txt2}}>اضغط للتصوير</div>
+                      </>
+                    )}
+                  </div>
+                </label>
+              </div>
+            ))}
+            {photoErr&&<div className="text-center text-sm font-bold" style={{color:C.err}}>{photoErr}</div>}
+            <button onClick={handlePhotoUpload}
+              disabled={!photos[0]||!photos[1]||photoUploading}
+              className="w-full py-3 rounded-xl font-bold text-white text-sm"
+              style={{background:photos[0]&&photos[1]&&!photoUploading?C.primary:'#aaa'}}>
+              {photoUploading?'جاري الإرسال...':'إرسال الصور والمتابعة ←'}
+            </button>
+            <button onClick={()=>{setPhotoStep(false);setPhotos([null,null]);setPhotoErr('');}}
+              className="w-full py-2 text-sm text-center" style={{color:C.txt2}}>
+              إلغاء
+            </button>
+          </div>
+        </div>
+      )}
       <button onClick={()=>setShow(v=>!v)}
         className="w-full p-4 rounded-2xl font-bold flex items-center justify-between"
         style={{background:C.card}}>
@@ -2536,6 +2653,7 @@ function NotificationSettingsView() {
     task_notify_enabled: true,
     task_reminder_enabled: true,
     task_reminder_time: '08:00',
+    photo_check_enabled: true,
   };
   const [s, setS] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -2667,6 +2785,8 @@ function NotificationSettingsView() {
         <Toggle on={s.checkin_notify_enabled} onChange={()=>upd({checkin_notify_enabled:!s.checkin_notify_enabled})} label="إشعار تسجيل الحضور"/>
         <div style={{height:1,background:C.border,margin:'4px 0'}}/>
         <Toggle on={s.boxki_notify_enabled} onChange={()=>upd({boxki_notify_enabled:!s.boxki_notify_enabled})} label="إشعار مطابقة بوكسي"/>
+        <div style={{height:1,background:C.border,margin:'4px 0'}}/>
+        <Toggle on={s.photo_check_enabled!==false} onChange={()=>upd({photo_check_enabled:s.photo_check_enabled===false})} label="📸 تصوير المحل قبل المطابقة"/>
         <div style={{height:1,background:C.border,margin:'4px 0'}}/>
         <Toggle on={s.task_notify_enabled!==false} onChange={()=>upd({task_notify_enabled:s.task_notify_enabled===false})} label="إشعار إكمال المهام"/>
       </div>
