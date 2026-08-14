@@ -1300,7 +1300,9 @@ function BoxkiMatcher() {
   const hasResult=amt>0&&ord>0;
 
   const matchLoyverse = async () => {
-    if (await needsPhotos()) { setPhotoStep(true); return; }
+    const {data:{session}} = await sb.auth.getSession();
+    const {data: empRow} = await sb.from('employees').select('role').eq('auth_user_id', session.user.id).maybeSingle();
+    if (empRow?.role !== 'admin' && await needsPhotos()) { setPhotoStep(true); return; }
     doMatch();
   };
 
