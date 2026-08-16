@@ -1722,10 +1722,15 @@ function AdminDashboard({employees,settings,me,onRefresh}) {
         return (
           <div key={emp.id} className="rounded-2xl p-5 shadow-sm" style={{background:C.card}}>
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold"
-                style={{background:emp.color_hex}}>
-                {emp.name.charAt(0)}
-              </div>
+              {emp.avatar_id!=null&&AVATARS[emp.avatar_id]?(
+                <img src={AVATARS[emp.avatar_id]} className="w-10 h-10 rounded-xl object-cover"
+                  style={{border:`2px solid ${emp.color_hex}`}}/>
+              ):(
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold"
+                  style={{background:emp.color_hex}}>
+                  {emp.name.charAt(0)}
+                </div>
+              )}
               <div>
                 <div className="font-bold" style={{color:C.txt}}>{emp.name}</div>
                 <div className="text-xs" style={{color:C.txt,opacity:.4}}>{emp.role==='admin'?'مدير':'موظف'}</div>
