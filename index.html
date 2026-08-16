@@ -2502,15 +2502,17 @@ function EmployeesView({employees, settings, onRefresh}) {
 
   const openEdit = emp => {
     setEditTarget(emp);
-    setEditForm({name: emp.name, username: emp.username||'', color_hex: emp.color_hex, role: emp.role, loyverse_pos_name: emp.loyverse_pos_name||''});
+    setEditForm({name: emp.name, username: emp.username||'', color_hex: emp.color_hex, role: emp.role, loyverse_pos_name: emp.loyverse_pos_name||'', avatar_id: emp.avatar_id??null});
   };
 
   const saveEdit = async () => {
     if(!editForm.name.trim()){ flash('الاسم مطلوب',false); return; }
     setBusy(true);
-    const res = await callFn('update', {employee_id: editTarget.id, ...editForm});
+    const {avatar_id, ...rest} = editForm;
+    const res = await callFn('update', {employee_id: editTarget.id, ...rest});
+    if(res.error){ setBusy(false); flash(res.error, false); return; }
+    await sb.from('employees').update({avatar_id: avatar_id??null}).eq('id', editTarget.id);
     setBusy(false);
-    if(res.error){ flash(res.error, false); return; }
     flash('تم تحديث معلومات الموظف');
     setEditTarget(null);
     onRefresh();
@@ -2528,10 +2530,15 @@ function EmployeesView({employees, settings, onRefresh}) {
       {employees.map(emp => (
         <div key={emp.id} className="rounded-2xl p-4 shadow-sm" style={{background:C.card}}>
           <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold"
-              style={{background:emp.color_hex}}>
-              {emp.name.charAt(0)}
-            </div>
+            {emp.avatar_id!=null&&AVATARS[emp.avatar_id]?(
+              <img src={AVATARS[emp.avatar_id]} className="w-10 h-10 rounded-xl object-cover"
+                style={{border:`2px solid ${emp.color_hex}`}}/>
+            ):(
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold"
+                style={{background:emp.color_hex}}>
+                {emp.name.charAt(0)}
+              </div>
+            )}
             <div className="flex-1">
               <div className="font-bold" style={{color:C.txt}}>{emp.name}</div>
               <div className="text-xs" style={{color:C.txt,opacity:.45}}>
@@ -2674,6 +2681,23 @@ function EmployeesView({employees, settings, onRefresh}) {
                   <button key={col} onClick={()=>setEditForm(p=>({...p,color_hex:col}))}
                     className="w-8 h-8 rounded-lg transition-transform"
                     style={{background:col,transform:editForm.color_hex===col?'scale(1.25)':'scale(1)',outline:editForm.color_hex===col?`2px solid ${col}`:undefined,outlineOffset:2}}/>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-semibold block mb-2" style={{color:C.txt}}>صورة الملف الشخصي</label>
+              <div className="grid grid-cols-4 gap-2 mb-2">
+                <button onClick={()=>setEditForm(p=>({...p,avatar_id:null}))}
+                  className="rounded-xl flex items-center justify-center"
+                  style={{aspectRatio:'1',background:C.soft,outline:editForm.avatar_id===null?`3px solid ${C.primary}`:undefined,outlineOffset:2}}>
+                  <Ic n="x" s={18} c={editForm.avatar_id===null?C.primary:C.txt}/>
+                </button>
+                {AVATARS.map((src,i)=>(
+                  <button key={i} onClick={()=>setEditForm(p=>({...p,avatar_id:i}))}
+                    className="rounded-xl overflow-hidden"
+                    style={{outline:editForm.avatar_id===i?`3px solid ${C.primary}`:undefined,outlineOffset:2}}>
+                    <img src={src} style={{width:'100%',aspectRatio:'1',objectFit:'cover',display:'block'}}/>
+                  </button>
                 ))}
               </div>
             </div>
