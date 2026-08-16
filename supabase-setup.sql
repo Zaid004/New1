@@ -260,3 +260,6 @@ create policy "ns_admin" on notification_settings for all using (current_employe
 -- 2. ثم شغّل:
 -- insert into employees (name, username, color_hex, auth_user_id, role)
 -- values ('اسم المدير', 'admin', '#6B5876', 'AUTH_USER_ID_FROM_SUPABASE_AUTH', 'admin');
+
+-- Add avatar_id column to employees
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS avatar_id INTEGER DEFAULT NULL;
