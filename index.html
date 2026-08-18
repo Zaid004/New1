@@ -140,6 +140,16 @@ const taskApplies = (task, dateStr) => {
   return false;
 };
 
+// Haversine distance in meters between two GPS coordinates
+const haversineMeters = (lat1, lng1, lat2, lng2) => {
+  const R = 6371000;
+  const rad = x => x * Math.PI / 180;
+  const dLat = rad(lat2 - lat1);
+  const dLng = rad(lng2 - lng1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(rad(lat1))*Math.cos(rad(lat2))*Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+};
+
 // Get public IP via ipify (unique per internet connection/location)
 const getPublicIP = async () => {
   try {
@@ -278,7 +288,7 @@ function AuthScreen() {
 }
 
 // ── DAY MODAL ────────────────────────────────────────────────────────────────
-function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone,allowedNetwork,salesTotal}) {
+function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone,allowedNetwork,gpsSettings,salesTotal}) {
   const [busy,setBusy]=useState(false);
   const [netErr,setNetErr]=useState('');
   const [notes,setNotes]=useState(()=>{
@@ -317,6 +327,29 @@ function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone,allowedNetwo
       if (currentIP !== allowedNetwork.trim()) {
         setBusy(false);
         setNetErr('تسجيل الحضور متاح فقط من شبكة المكتبة');
+        return;
+      }
+    }
+    if (gpsSettings?.library_lat && gpsSettings?.library_lng) {
+      setBusy(true);
+      try {
+        const pos = await new Promise((res, rej) =>
+          navigator.geolocation.getCurrentPosition(res, rej, {enableHighAccuracy:true, timeout:10000, maximumAge:0})
+        );
+        const dist = haversineMeters(pos.coords.latitude, pos.coords.longitude, gpsSettings.library_lat, gpsSettings.library_lng);
+        const radius = gpsSettings.location_radius || 100;
+        if (dist > radius) {
+          setBusy(false);
+          setNetErr(`أنت خارج نطاق المكتبة — المسافة ${Math.round(dist)} م والحد المسموح ${radius} م`);
+          return;
+        }
+      } catch(e) {
+        setBusy(false);
+        if (e.code === 1) {
+          setNetErr('يرجى السماح للتطبيق بالوصول إلى الموقع الجغرافي');
+        } else {
+          setNetErr('تعذّر تحديد موقعك، حاول مجدداً');
+        }
         return;
       }
     }
@@ -874,6 +907,7 @@ function CalendarView({me,employees,isAdmin,settings}) {
           me={me}
           isAdmin={isAdmin}
           allowedNetwork={settings?.allowed_network||''}
+          gpsSettings={settings}
           salesTotal={salesData[modal.dateStr]??null}
           onClose={()=>setModal(null)}
           onDone={()=>{load(vy,vm);setModal(null);}}
@@ -2531,15 +2565,43 @@ function SettingsSection({settings, onSaved}) {
   const [pool, setPool] = useState(String(settings?.monthly_pool_amount||525000));
   const [pct,  setPct]  = useState(String(settings?.monthly_percentage||3.2));
   const [net,  setNet]  = useState(settings?.allowed_network||'');
+  const [lat,  setLat]  = useState(settings?.library_lat!=null?String(settings.library_lat):'');
+  const [lng,  setLng]  = useState(settings?.library_lng!=null?String(settings.library_lng):'');
+  const [radius, setRadius] = useState(String(settings?.location_radius||100));
+  const [gpsLoading, setGpsLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg,  setMsg]  = useState({text:'',ok:true});
   const flash = (text,ok=true)=>{setMsg({text,ok});setTimeout(()=>setMsg({text:'',ok:true}),3000);};
 
+  const useMyLocation = () => {
+    if (!navigator.geolocation) { flash('المتصفح لا يدعم GPS', false); return; }
+    setGpsLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        setLat(String(pos.coords.latitude));
+        setLng(String(pos.coords.longitude));
+        setGpsLoading(false);
+        flash('تم تحديد موقعك الحالي — لا تنسَ الحفظ');
+      },
+      err => {
+        setGpsLoading(false);
+        flash(err.code===1?'يرجى السماح بالوصول للموقع':'تعذّر تحديد الموقع', false);
+      },
+      {enableHighAccuracy:true, timeout:10000, maximumAge:0}
+    );
+  };
+
   const save = async () => {
     setBusy(true);
-    const {error} = await sb.from('settings')
-      .update({monthly_pool_amount: parseFloat(parseNum(pool))||525000, monthly_percentage: parseFloat(pct)||3.2, allowed_network: net.trim()})
-      .eq('id', settings.id);
+    const updates = {
+      monthly_pool_amount: parseFloat(parseNum(pool))||525000,
+      monthly_percentage: parseFloat(pct)||3.2,
+      allowed_network: net.trim(),
+      library_lat: lat.trim()!==''?parseFloat(lat):null,
+      library_lng: lng.trim()!==''?parseFloat(lng):null,
+      location_radius: parseInt(radius)||100,
+    };
+    const {error} = await sb.from('settings').update(updates).eq('id', settings.id);
     setBusy(false);
     if(error){flash(error.message,false);return;}
     flash('تم حفظ الإعدادات');
@@ -2569,6 +2631,41 @@ function SettingsSection({settings, onSaved}) {
           placeholder="مثال: 87.100.25.4 — اتركه فارغاً لإلغاء التقييد"/>
         <p className="text-xs mt-1" style={{color:C.txt,opacity:.45}}>اكتشف IP المكتبة من whatismyip.com أثناء اتصالك بشبكتها · الموظف لن يستطيع تسجيل الحضور خارجها</p>
       </div>
+
+      <div className="pt-2 border-t" style={{borderColor:C.border}}>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-bold text-sm" style={{color:C.txt}}>موقع المكتبة (GPS)</h3>
+          <button onClick={useMyLocation} disabled={gpsLoading}
+            className="text-xs font-bold px-3 py-1.5 rounded-xl"
+            style={{background:C.soft,color:C.primary}}>
+            {gpsLoading?'جاري التحديد...':'استخدم موقعي الحالي'}
+          </button>
+        </div>
+        <div className="flex gap-2 mb-2">
+          <div className="flex-1">
+            <label className="text-xs font-semibold block mb-1" style={{color:C.txt,opacity:.7}}>خط العرض (Lat)</label>
+            <input type="number" step="any" value={lat} onChange={e=>setLat(e.target.value)}
+              className="w-full p-3 rounded-xl border text-sm outline-none"
+              style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}} placeholder="33.3152"/>
+          </div>
+          <div className="flex-1">
+            <label className="text-xs font-semibold block mb-1" style={{color:C.txt,opacity:.7}}>خط الطول (Lng)</label>
+            <input type="number" step="any" value={lng} onChange={e=>setLng(e.target.value)}
+              className="w-full p-3 rounded-xl border text-sm outline-none"
+              style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}} placeholder="44.3661"/>
+          </div>
+        </div>
+        <div>
+          <label className="text-xs font-semibold block mb-1" style={{color:C.txt,opacity:.7}}>النطاق المسموح (متر)</label>
+          <input type="number" min="10" max="5000" value={radius} onChange={e=>setRadius(e.target.value)}
+            className="w-full p-3 rounded-xl border text-sm outline-none"
+            style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}} placeholder="100"/>
+        </div>
+        <p className="text-xs mt-1.5" style={{color:C.txt,opacity:.45}}>
+          {lat&&lng?`الموقع محدد — نطاق ${radius||100} م · اترك الحقول فارغة لإلغاء التقييد`:'اترك فارغاً لإلغاء التقييد بالموقع'}
+        </p>
+      </div>
+
       {msg.text && <div className="p-3 rounded-xl text-sm text-center text-white" style={{background:msg.ok?C.ok:C.err}}>{msg.text}</div>}
       <button onClick={save} disabled={busy}
         className="w-full py-3 rounded-xl font-bold text-white"

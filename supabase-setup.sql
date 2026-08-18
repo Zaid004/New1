@@ -274,3 +274,8 @@ create table if not exists daily_sales (
 alter table daily_sales enable row level security;
 create policy "ds_read"  on daily_sales for select using (auth.uid() is not null);
 create policy "ds_write" on daily_sales for all   using (auth.uid() is not null);
+
+-- 10. GPS LOCATION SETTINGS (add to existing settings row)
+alter table settings add column if not exists library_lat  numeric;
+alter table settings add column if not exists library_lng  numeric;
+alter table settings add column if not exists location_radius integer default 100;
