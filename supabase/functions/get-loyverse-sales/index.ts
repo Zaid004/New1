@@ -227,6 +227,74 @@ Deno.serve(async (req) => {
     }
   }
 
+  // ── MODE: daily total (single day, all payment methods) ───────────────────
+  if (mode === 'daily_total') {
+    const { date } = body as { date: string };
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return json({ error: 'date مطلوب بصيغة YYYY-MM-DD' }, 400);
+    const from = new Date(`${date}T00:00:00.000+03:00`).toISOString();
+    const to   = new Date(`${date}T23:59:59.999+03:00`).toISOString();
+    let total = 0, cursor: string | null = null;
+    try {
+      do {
+        const params = new URLSearchParams({ created_at_min: from, created_at_max: to, limit: '250' });
+        if (cursor) params.set('cursor', cursor);
+        const res = await fetch(`https://api.loyverse.com/v1.0/receipts?${params}`, {
+          headers: { Authorization: `Bearer ${loyToken}` },
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          return json({ error: (err as { errors?: { message: string }[] })?.errors?.[0]?.message ?? `Loyverse ${res.status}` }, 502);
+        }
+        const data = await res.json() as { receipts: { total_money: number; receipt_type: string }[]; cursor?: string };
+        for (const r of data.receipts ?? []) {
+          if (r.receipt_type === 'SALE')        total += r.total_money ?? 0;
+          else if (r.receipt_type === 'REFUND') total -= Math.abs(r.total_money ?? 0);
+        }
+        cursor = data.cursor ?? null;
+      } while (cursor);
+      return json({ total: Math.round(total) });
+    } catch (e) { return json({ error: (e as Error).message }, 500); }
+  }
+
+  // ── MODE: daily breakdown (per-day totals for a month) ─────────────────────
+  if (mode === 'daily_breakdown') {
+    const { month: bMonth } = body as { month: string };
+    if (!bMonth || !/^\d{4}-\d{2}$/.test(bMonth)) return json({ error: 'month مطلوب بصيغة YYYY-MM' }, 400);
+    const [by, bm] = bMonth.split('-');
+    const lastDay = new Date(parseInt(by), parseInt(bm), 0).getDate();
+    const from = new Date(`${by}-${bm}-01T00:00:00.000+03:00`).toISOString();
+    const to   = new Date(`${by}-${bm}-${String(lastDay).padStart(2,'0')}T23:59:59.999+03:00`).toISOString();
+    type BRec = { total_money: number; receipt_type: string; created_at: string };
+    const allReceipts: BRec[] = [];
+    let cursor: string | null = null;
+    try {
+      do {
+        const params = new URLSearchParams({ created_at_min: from, created_at_max: to, limit: '250' });
+        if (cursor) params.set('cursor', cursor);
+        const res = await fetch(`https://api.loyverse.com/v1.0/receipts?${params}`, {
+          headers: { Authorization: `Bearer ${loyToken}` },
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          return json({ error: (err as { errors?: { message: string }[] })?.errors?.[0]?.message ?? `Loyverse ${res.status}` }, 502);
+        }
+        const data = await res.json() as { receipts: BRec[]; cursor?: string };
+        allReceipts.push(...(data.receipts ?? []));
+        cursor = data.cursor ?? null;
+      } while (cursor);
+      const days: Record<string, number> = {};
+      for (const r of allReceipts) {
+        const iraqDate = new Date(new Date(r.created_at).getTime() + 3 * 60 * 60 * 1000);
+        const ds = iraqDate.toISOString().slice(0, 10);
+        if (!days[ds]) days[ds] = 0;
+        if (r.receipt_type === 'SALE')        days[ds] += r.total_money ?? 0;
+        else if (r.receipt_type === 'REFUND') days[ds] -= Math.abs(r.total_money ?? 0);
+      }
+      for (const d in days) days[d] = Math.round(days[d]);
+      return json({ days });
+    } catch (e) { return json({ error: (e as Error).message }, 500); }
+  }
+
   // ── MODE: monthly sales (default) ──────────────────────────────────────────
   const { month } = body;
   if (!month || !/^\d{4}-\d{2}$/.test(month)) {

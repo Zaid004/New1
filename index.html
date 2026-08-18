@@ -102,6 +102,23 @@ const MONTHS = ['يناير','فبراير','مارس','أبريل','مايو','
 const DAYS   = ['أحد','اثن','ثلا','أرب','خمس','جمع','سبت'];
 
 const fmt = n => new Intl.NumberFormat('en').format(Math.round(Number(n)||0));
+const salesColor = amt => {
+  if(amt>1000000) return '#D4AF37';
+  if(amt>700000)  return '#8FA8C8';
+  if(amt>450000)  return '#22C55E';
+  if(amt>=300000) return '#D4850A';
+  return '#E05252';
+};
+const salesBarStyle = amt => {
+  if(amt==null) return null;
+  const gold=amt>1000000;
+  return {
+    position:'absolute',top:0,left:0,right:0,height:gold?4:3,
+    background: gold?'linear-gradient(90deg,#C9A227,#FFD700,#C9A227)':salesColor(amt),
+    borderRadius:'6px 6px 0 0', zIndex:4,
+    boxShadow: gold?'0 0 8px rgba(255,215,0,0.5)':undefined,
+  };
+};
 
 const SALES_MILESTONES = [
   {target:12_000_000, bonus:25_000,  label:'١٢ مليون'},
@@ -261,7 +278,7 @@ function AuthScreen() {
 }
 
 // ── DAY MODAL ────────────────────────────────────────────────────────────────
-function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone,allowedNetwork}) {
+function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone,allowedNetwork,salesTotal}) {
   const [busy,setBusy]=useState(false);
   const [netErr,setNetErr]=useState('');
   const [notes,setNotes]=useState(()=>{
@@ -349,12 +366,24 @@ function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone,allowedNetwo
     <div className="fixed inset-0 z-50 flex items-end justify-center p-4"
       style={{background:'rgba(58,47,61,0.5)'}} onClick={e=>e.target===e.currentTarget&&onClose()}>
       <div className="w-full max-w-sm rounded-3xl p-6 shadow-2xl mb-2" style={{background:C.card}}>
-        <div className="flex items-center justify-between mb-5">
+        <div className="flex items-center justify-between mb-4">
           <div className="font-bold text-lg" style={{color:C.txt}}>{d} {MONTHS[m]} {y}</div>
           <button onClick={onClose} className="p-2 rounded-xl" style={{background:C.soft}}>
             <Ic n="x" s={16} c={C.txt} />
           </button>
         </div>
+        {salesTotal!=null&&(
+          <div className="mb-4 p-3 rounded-2xl flex items-center justify-between" style={{background:C.soft}}>
+            <div className="space-y-0.5">
+              <div className="text-xs" style={{color:C.txt,opacity:.5}}>إجمالي مبيعات اليوم</div>
+              <div className="font-black text-lg leading-tight" style={{color:salesColor(salesTotal)}}>{fmt(salesTotal)} <span className="text-xs font-semibold">د.ع</span></div>
+            </div>
+            <div className="text-xs font-bold px-2.5 py-1.5 rounded-xl"
+              style={{background:salesTotal>=500000?'var(--ok-bg)':'var(--err-bg)',color:salesTotal>=500000?C.ok:C.err}}>
+              {salesTotal>=500000?'التارغت محقق':fmt(500000-salesTotal)+' للتارغت'}
+            </div>
+          </div>
+        )}
 
         {isAdmin ? (
           <div className="space-y-3">
@@ -467,6 +496,7 @@ function CalendarView({me,employees,isAdmin,settings}) {
   const [modal,setModal]=useState(null);
   const [tasks,setTasks]=useState([]);
   const [completions,setCompletions]=useState([]);
+  const [salesData,setSalesData]=useState({});
   const [showTaskAdd,setShowTaskAdd]=useState(false);
   const [taskBusy,setTaskBusy]=useState(false);
   const initTaskForm=()=>({title:'',recurrence:'daily',day_of_week:0,day_of_month:1,specific_date:todayStr(),assigned_to:''});
@@ -484,7 +514,43 @@ function CalendarView({me,employees,isAdmin,settings}) {
       .then(({data})=>setCompletions(data||[]));
   };
 
-  useEffect(()=>{load(vy,vm);loadCompletions(vy,vm);},[vy,vm]);
+  const loadSales = async (y,m) => {
+    const now2=iraqNow();
+    const isCurrent=y===now2.getUTCFullYear()&&m===now2.getUTCMonth();
+    const monthStr=`${y}-${String(m+1).padStart(2,'0')}`;
+    const {from,to}=monthRange(y,m);
+    const {data:stored}=await sb.from('daily_sales').select('date,total_amount').gte('date',from).lte('date',to);
+    const map={};
+    for(const r of stored||[]) map[r.date]=r.total_amount;
+    setSalesData(map);
+    if(!isCurrent) return;
+    const today=todayStr();
+    const daysInM=new Date(y,m+1,0).getDate();
+    const missing=[];
+    for(let d=1;d<=daysInM;d++){
+      const ds=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      if(ds<today&&!map[ds]) missing.push(ds);
+    }
+    if(!missing.length) return;
+    try{
+      const {data:{session}}=await sb.auth.getSession();
+      const res=await fetch(`${SUPA_URL}/functions/v1/get-loyverse-sales`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':`Bearer ${session.access_token}`},
+        body:JSON.stringify({mode:'daily_breakdown',month:monthStr}),
+      });
+      const data=await res.json();
+      if(data.days){
+        const rows=missing.filter(ds=>data.days[ds]!=null).map(ds=>({date:ds,total_amount:data.days[ds]}));
+        if(rows.length){
+          await sb.from('daily_sales').upsert(rows,{onConflict:'date'});
+          setSalesData(prev=>{const n={...prev};for(const r of rows)n[r.date]=r.total_amount;return n;});
+        }
+      }
+    }catch(e){}
+  };
+
+  useEffect(()=>{load(vy,vm);loadCompletions(vy,vm);loadSales(vy,vm);},[vy,vm]);
   useEffect(()=>{
     sb.from('tasks').select('*').order('created_at',{ascending:false}).then(({data})=>setTasks(data||[]));
   },[]);
@@ -568,8 +634,9 @@ function CalendarView({me,employees,isAdmin,settings}) {
   };
 
   const openDay = d => {
-    if(!canEdit(d)) return;
+    if(!d) return;
     const ds=`${vy}-${String(vm+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    if(!canEdit(d)&&salesData[ds]==null&&dayRecs(d).length===0) return;
     setModal({dateStr:ds,recs:dayRecs(d)});
   };
 
@@ -602,6 +669,8 @@ function CalendarView({me,employees,isAdmin,settings}) {
           const isToday=ds===todayStr();
           const editable=canEdit(d);
           const hasTasks=dayHasTasks(ds);
+          const salesAmt=salesData[ds]??null;
+          const clickable=editable||salesAmt!=null||dr.length>0;
 
           let bg = C.soft;
           let overlay = null;
@@ -623,12 +692,13 @@ function CalendarView({me,employees,isAdmin,settings}) {
               style={{
                 background:dr.length<2?bg:'transparent',
                 border:`2px solid ${isToday?C.primary:'transparent'}`,
-                cursor:editable?'pointer':'default',
+                cursor:clickable?'pointer':'default',
                 transition:'transform .1s',
               }}
-              onMouseEnter={e=>{if(editable)e.currentTarget.style.transform='scale(1.04)';}}
+              onMouseEnter={e=>{if(clickable)e.currentTarget.style.transform='scale(1.04)';}}
               onMouseLeave={e=>{e.currentTarget.style.transform='scale(1)';}}>
               {overlay}
+              {salesAmt!=null&&<div style={salesBarStyle(salesAmt)}/>}
               {hasTasks&&<div style={{position:'absolute',top:3,right:3,width:6,height:6,borderRadius:'50%',background:'#F59E0B',zIndex:3,border:'1.5px solid rgba(255,255,255,0.8)'}}/>}
               <div style={{position:'relative',zIndex:1,padding:'4px 5px'}}>
                 <span className="text-xs font-bold leading-none" style={{color:dr.length>0?'#fff':C.txt}}>{d}</span>
@@ -792,6 +862,7 @@ function CalendarView({me,employees,isAdmin,settings}) {
           me={me}
           isAdmin={isAdmin}
           allowedNetwork={settings?.allowed_network||''}
+          salesTotal={salesData[modal.dateStr]??null}
           onClose={()=>setModal(null)}
           onDone={()=>{load(vy,vm);setModal(null);}}
         />
@@ -1292,6 +1363,7 @@ function BoxkiMatcher() {
   const [loyLoading,setLoyLoading]=useState(false);
   const [loyData,setLoyData]=useState(null);
   const [loyErr,setLoyErr]=useState('');
+  const [dayTotal,setDayTotal]=useState(null);
 
   // ── Photo verification state ──
   const [photoStep,setPhotoStep]=useState(false);
@@ -1299,7 +1371,7 @@ function BoxkiMatcher() {
   const [photoUploading,setPhotoUploading]=useState(false);
   const [photoErr,setPhotoErr]=useState('');
 
-  const reset = () => { setLoyData(null); setLoyErr(''); };
+  const reset = () => { setLoyData(null); setLoyErr(''); setDayTotal(null); };
 
   // Resize + encode photo to base64 JPEG (max 1200px, 85% quality)
   const processPhoto = file => new Promise(resolve => {
@@ -1406,6 +1478,21 @@ function BoxkiMatcher() {
         sb.from('employees').select('name, role').eq('auth_user_id', session.user.id).maybeSingle(),
         sb.from('notification_settings').select('boxki_notify_enabled').eq('id',1).maybeSingle(),
       ]);
+      // Fetch daily total (all payment methods) and cache in daily_sales
+      const matchDate = fromDt.slice(0,10);
+      try {
+        const dtRes = await fetch(`${SUPA_URL}/functions/v1/get-loyverse-sales`,{
+          method:'POST',
+          headers:{'Content-Type':'application/json','Authorization':`Bearer ${session.access_token}`},
+          body:JSON.stringify({mode:'daily_total',date:matchDate}),
+        });
+        const dtData = await dtRes.json();
+        if(!dtData.error && dtData.total!=null){
+          setDayTotal(dtData.total);
+          await sb.from('daily_sales').upsert({date:matchDate,total_amount:dtData.total},{onConflict:'date'});
+        }
+      } catch(e){}
+
       if (empRow && empRow.role !== 'admin' && ns?.boxki_notify_enabled !== false) {
         const empName = empRow.name || 'موظف';
         const fmtAmt = n => n.toLocaleString('ar-IQ');
@@ -1583,6 +1670,28 @@ function BoxkiMatcher() {
                     <div className="p-3 rounded-xl text-xs flex items-center gap-2" style={{background:'var(--err-bg)',color:C.err}}>
                       <Ic n='info' s={15} c={C.err}/>
                       <span>{diagHint}</span>
+                    </div>
+                  )}
+                  {dayTotal!=null&&(
+                    <div className="p-4 rounded-2xl space-y-2.5" style={{background:C.soft}}>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-xs mb-0.5" style={{color:C.txt,opacity:.5}}>إجمالي مبيعات اليوم</div>
+                          <div className="text-xl font-black" style={{color:salesColor(dayTotal)}}>{fmt(dayTotal)} <span className="text-xs font-semibold">د.ع</span></div>
+                        </div>
+                        <div className="text-xs font-bold px-3 py-1.5 rounded-xl"
+                          style={{background:dayTotal>=500000?'var(--ok-bg)':'var(--err-bg)',color:dayTotal>=500000?C.ok:C.err}}>
+                          {dayTotal>=500000?'التارغت محقق':fmt(500000-dayTotal)+' للتارغت'}
+                        </div>
+                      </div>
+                      <div className="relative h-1.5 rounded-full overflow-hidden" style={{background:C.card}}>
+                        <div className="absolute h-full rounded-full"
+                          style={{width:`${Math.min(100,(dayTotal/500000)*100).toFixed(1)}%`,background:salesColor(dayTotal),transition:'width 0.6s ease'}}/>
+                      </div>
+                      <div className="flex justify-between text-xs" style={{color:C.txt,opacity:.35}}>
+                        <span>0</span>
+                        <span>500,000 د.ع</span>
+                      </div>
                     </div>
                   )}
                 </div>

@@ -263,3 +263,14 @@ create policy "ns_admin" on notification_settings for all using (current_employe
 
 -- Add avatar_id column to employees
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS avatar_id INTEGER DEFAULT NULL;
+
+-- 9. DAILY SALES (cached Loyverse daily totals)
+create table if not exists daily_sales (
+  date         date    primary key,
+  total_amount numeric not null default 0,
+  fetched_at   timestamptz default now()
+);
+
+alter table daily_sales enable row level security;
+create policy "ds_read"  on daily_sales for select using (auth.uid() is not null);
+create policy "ds_write" on daily_sales for all   using (auth.uid() is not null);
