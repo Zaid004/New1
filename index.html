@@ -564,32 +564,60 @@ function CalendarView({me,employees,isAdmin,settings}) {
     const isCurrent=y===now2.getUTCFullYear()&&m===now2.getUTCMonth();
     const monthStr=`${y}-${String(m+1).padStart(2,'0')}`;
     const {from,to}=monthRange(y,m);
-    const {data:stored}=await sb.from('daily_sales').select('date,total_amount').gte('date',from).lte('date',to);
+    const {data:stored}=await sb.from('daily_sales').select('date,total_amount,fetched_at').gte('date',from).lte('date',to);
     const map={};
-    for(const r of stored||[]) map[r.date]=r.total_amount;
+    const fetchedAtMap={};
+    for(const r of stored||[]){ map[r.date]=r.total_amount; fetchedAtMap[r.date]=r.fetched_at; }
     setSalesData(map);
     if(!isCurrent) return;
     const today=todayStr();
+
+    // Missing past days (already closed, need one-time back-fill)
     const daysInM=new Date(y,m+1,0).getDate();
     const missing=[];
     for(let d=1;d<=daysInM;d++){
       const ds=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
       if(ds<today&&!map[ds]) missing.push(ds);
     }
-    if(!missing.length) return;
+
+    // Today: fetch if missing or stale (>30 min since last fetch)
+    const todayStale = !map[today] ||
+      (fetchedAtMap[today] && Date.now()-new Date(fetchedAtMap[today]).getTime() > 30*60*1000);
+
+    if(!missing.length && !todayStale) return;
+
     try{
       const {data:{session}}=await sb.auth.getSession();
-      const res=await fetch(`${SUPA_URL}/functions/v1/get-loyverse-sales`,{
-        method:'POST',
-        headers:{'Content-Type':'application/json','Authorization':`Bearer ${session.access_token}`},
-        body:JSON.stringify({mode:'daily_breakdown',month:monthStr}),
-      });
-      const data=await res.json();
-      if(data.days){
-        const rows=missing.filter(ds=>data.days[ds]!=null).map(ds=>({date:ds,total_amount:data.days[ds]}));
-        if(rows.length){
-          await sb.from('daily_sales').upsert(rows,{onConflict:'date'});
-          setSalesData(prev=>{const n={...prev};for(const r of rows)n[r.date]=r.total_amount;return n;});
+
+      if(missing.length){
+        const res=await fetch(`${SUPA_URL}/functions/v1/get-loyverse-sales`,{
+          method:'POST',
+          headers:{'Content-Type':'application/json','Authorization':`Bearer ${session.access_token}`},
+          body:JSON.stringify({mode:'daily_breakdown',month:monthStr}),
+        });
+        const data=await res.json();
+        if(data.days){
+          const rows=missing.filter(ds=>data.days[ds]!=null).map(ds=>({date:ds,total_amount:data.days[ds]}));
+          if(rows.length){
+            await sb.from('daily_sales').upsert(rows,{onConflict:'date'});
+            setSalesData(prev=>{const n={...prev};for(const r of rows)n[r.date]=r.total_amount;return n;});
+          }
+        }
+      }
+
+      if(todayStale){
+        const res=await fetch(`${SUPA_URL}/functions/v1/get-loyverse-sales`,{
+          method:'POST',
+          headers:{'Content-Type':'application/json','Authorization':`Bearer ${session.access_token}`},
+          body:JSON.stringify({mode:'daily_total',date:today}),
+        });
+        const data=await res.json();
+        if(!data.error && data.total!=null){
+          await sb.from('daily_sales').upsert(
+            {date:today, total_amount:data.total, fetched_at:new Date().toISOString()},
+            {onConflict:'date'}
+          );
+          setSalesData(prev=>({...prev,[today]:data.total}));
         }
       }
     }catch(e){}
