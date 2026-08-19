@@ -469,20 +469,27 @@ function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone,allowedNetwo
                   </div>
                   {pending&&rec&&(
                     <div className="mb-3 p-3 rounded-xl" style={{background:'#FEF3C7'}}>
-                      <div className="text-xs font-semibold mb-2" style={{color:'#78350F'}}>⚠️ انصراف قسري · {toIraqTime(rec.checkout_time)}</div>
+                      <div className="flex items-center gap-1.5 text-xs font-semibold mb-2" style={{color:'#78350F'}}>
+                        <Ic n="clock" s={12} c="#78350F"/>
+                        <span>انصراف قسري · {toIraqTime(rec.checkout_time)}</span>
+                      </div>
                       <div className="flex gap-2">
                         <button onClick={()=>handleAdminCheckout(rec,'approve')}
-                          className="flex-1 py-2 rounded-xl text-xs font-bold text-white" style={{background:C.ok}}>موافقة</button>
+                          className="flex-1 py-2 rounded-xl text-xs font-bold text-white flex items-center justify-center gap-1.5" style={{background:C.ok}}>
+                          <Ic n="check" s={13} c="#fff"/>موافقة
+                        </button>
                         <button onClick={()=>handleAdminCheckout(rec,'strike')}
-                          className="flex-1 py-2 rounded-xl text-xs font-bold text-white" style={{background:C.err}}>🚨 سترايك</button>
+                          className="flex-1 py-2 rounded-xl text-xs font-bold text-white flex items-center justify-center gap-1.5" style={{background:C.err}}>
+                          <Ic n="x" s={13} c="#fff"/>سترايك
+                        </button>
                       </div>
                     </div>
                   )}
                   {rec?.checkout_status==='approved'&&rec.checkout_time&&(
-                    <div className="mb-2 text-xs px-2 py-1 rounded-lg inline-block" style={{background:'var(--ok-bg)',color:C.ok}}>✓ انصرف {toIraqTime(rec.checkout_time)}</div>
+                    <div className="mb-2 text-xs px-2 py-1 rounded-lg inline-flex items-center gap-1" style={{background:'var(--ok-bg)',color:C.ok}}><Ic n="check" s={11} c={C.ok}/>انصرف {toIraqTime(rec.checkout_time)}</div>
                   )}
                   {rec?.checkout_status==='strike'&&(
-                    <div className="mb-2 text-xs px-2 py-1 rounded-lg inline-block" style={{background:'var(--err-bg)',color:C.err}}>🚨 سترايك</div>
+                    <div className="mb-2 text-xs px-2 py-1 rounded-lg inline-flex items-center gap-1" style={{background:'var(--err-bg)',color:C.err}}><Ic n="x" s={11} c={C.err}/>سترايك</div>
                   )}
                   <div className="flex gap-2 mb-2">
                     <button onClick={()=>handleAdmin(emp.id,'full')}
@@ -545,9 +552,9 @@ function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone,allowedNetwo
                 <div className="text-xs mb-2" style={{color:C.txt,opacity:.6}}>
                   حضور: {toIraqTime(myRec.created_at)} → انصراف: {toIraqTime(myRec.checkout_time)}{myRec.checkout_type==='forced'?' (قسري)':''}
                 </div>
-                {myRec.checkout_status==='pending'&&<div className="text-xs font-bold px-2 py-1 rounded-lg inline-block" style={{background:'#FEF3C7',color:'#92400E'}}>⏳ بانتظار مراجعة المدير</div>}
-                {myRec.checkout_status==='approved'&&<div className="text-xs font-bold px-2 py-1 rounded-lg inline-block" style={{background:'var(--ok-bg)',color:C.ok}}>✓ مقبول</div>}
-                {myRec.checkout_status==='strike'&&<div className="text-xs font-bold px-2 py-1 rounded-lg inline-block" style={{background:'var(--err-bg)',color:C.err}}>🚨 سترايك</div>}
+                {myRec.checkout_status==='pending'&&<div className="text-xs font-bold px-2 py-1 rounded-lg inline-flex items-center gap-1" style={{background:'#FEF3C7',color:'#92400E'}}><Ic n="clock" s={11} c="#92400E"/>بانتظار مراجعة المدير</div>}
+                {myRec.checkout_status==='approved'&&<div className="text-xs font-bold px-2 py-1 rounded-lg inline-flex items-center gap-1" style={{background:'var(--ok-bg)',color:C.ok}}><Ic n="check" s={11} c={C.ok}/>مقبول</div>}
+                {myRec.checkout_status==='strike'&&<div className="text-xs font-bold px-2 py-1 rounded-lg inline-flex items-center gap-1" style={{background:'var(--err-bg)',color:C.err}}><Ic n="x" s={11} c={C.err}/>سترايك</div>}
               </div>
             ) : (<>
               <div className="p-3 rounded-xl mb-3" style={{background:C.soft}}>
@@ -562,8 +569,8 @@ function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone,allowedNetwo
                 <div className="space-y-2 mb-3">
                   {eligibility.canNormal ? (
                     <button onClick={()=>handleCheckout('normal')}
-                      className="w-full py-3 rounded-2xl font-bold text-white" style={{background:C.ok}}>
-                      ✓ تسجيل انصراف
+                      className="w-full py-3 rounded-2xl font-bold text-white flex items-center justify-center gap-2" style={{background:C.ok}}>
+                      <Ic n="check" s={16} c="#fff"/>تسجيل انصراف
                     </button>
                   ) : (
                     <div className="p-3 rounded-xl text-center text-xs" style={{background:'var(--ok-bg)',color:C.ok}}>
@@ -573,8 +580,10 @@ function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone,allowedNetwo
                     </div>
                   )}
                   <button onClick={()=>handleCheckout('forced')}
-                    className="w-full py-2.5 rounded-2xl text-sm font-bold"
-                    style={{background:'var(--err-bg)',color:C.err}}>⚠️ انصراف قسري</button>
+                    className="w-full py-2.5 rounded-2xl text-sm font-bold flex items-center justify-center gap-2"
+                    style={{background:'var(--err-bg)',color:C.err}}>
+                    <Ic n="clock" s={14} c={C.err}/>انصراف قسري
+                  </button>
                 </div>
               )}
               <button onClick={removeMyRecord}
@@ -2931,8 +2940,8 @@ function EmployeesView({employees, settings, onRefresh}) {
               <div className="font-bold flex items-center gap-2" style={{color:C.txt}}>
                 {emp.name}
                 {strikeCounts[emp.id]>0&&(
-                  <span className="text-xs font-bold px-1.5 py-0.5 rounded-full" style={{background:'var(--err-bg)',color:C.err}}>
-                    🚨 {strikeCounts[emp.id]}
+                  <span className="text-xs font-bold px-1.5 py-0.5 rounded-full inline-flex items-center gap-0.5" style={{background:'var(--err-bg)',color:C.err}}>
+                    <Ic n="x" s={10} c={C.err}/>{strikeCounts[emp.id]}
                   </span>
                 )}
               </div>
@@ -2950,9 +2959,9 @@ function EmployeesView({employees, settings, onRefresh}) {
             </button>
             {emp.role!=='admin'&&(
               <button onClick={()=>{setStrikeTarget(emp);setStrikeForm({reason:'انصراف قسري',amount:String(settings?.strike_deduction_amount||0)});}}
-                className="py-2 px-3 rounded-xl text-xs font-bold"
-                style={{background:'var(--err-bg)',color:C.err}}>
-                🚨
+                className="py-2 px-3 rounded-xl"
+                style={{background:'var(--err-bg)'}}>
+                <Ic n="x" s={14} c={C.err}/>
               </button>
             )}
             <button onClick={()=>openEdit(emp)}
