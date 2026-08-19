@@ -279,3 +279,26 @@ create policy "ds_write" on daily_sales for all   using (auth.uid() is not null)
 alter table settings add column if not exists library_lat  numeric;
 alter table settings add column if not exists library_lng  numeric;
 alter table settings add column if not exists location_radius integer default 100;
+
+-- 11. CHECKOUT TRACKING & STRIKES
+alter table attendance_records
+  add column if not exists checkout_time   timestamptz,
+  add column if not exists checkout_type   text check (checkout_type in ('normal','forced')),
+  add column if not exists checkout_status text check (checkout_status in ('pending','approved','strike'));
+
+create table if not exists strikes (
+  id          uuid primary key default gen_random_uuid(),
+  employee_id uuid not null references employees(id) on delete cascade,
+  date        date not null,
+  reason      text,
+  amount      numeric default 0,
+  given_by    uuid references employees(id),
+  created_at  timestamptz default now()
+);
+alter table strikes enable row level security;
+create policy "strikes_admin"    on strikes for all    using (current_employee_role() = 'admin');
+create policy "strikes_own_read" on strikes for select using (employee_id = current_employee_id());
+
+alter table settings
+  add column if not exists strike_first_warning    boolean default true,
+  add column if not exists strike_deduction_amount numeric default 0;
