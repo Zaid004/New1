@@ -64,7 +64,7 @@ Deno.serve(async (_req) => {
       });
       if (timeMatched) {
         const { data: attendance } = await supabase
-          .from('attendance')
+          .from('attendance_records')
           .select('employee_id')
           .eq('date', today);
         const presentCount = (attendance ?? []).length;
