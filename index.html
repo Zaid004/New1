@@ -3292,6 +3292,8 @@ function NotificationSettingsView() {
   const [quickMsg, setQuickMsg] = useState('');
   const [qBusy, setQBusy] = useState(false);
   const [qSent, setQSent] = useState(false);
+  const [remBusy, setRemBusy] = useState(false);
+  const [remSent, setRemSent] = useState(false);
 
   const sendQuick = async () => {
     if(!quickMsg.trim()) return;
@@ -3299,6 +3301,13 @@ function NotificationSettingsView() {
     await sendTelegram(quickMsg.trim());
     setQBusy(false); setQSent(true); setQuickMsg('');
     setTimeout(()=>setQSent(false), 2500);
+  };
+
+  const sendReminderNow = async () => {
+    setRemBusy(true);
+    await sendTelegram(`⏰ ${s?.reminder_message || 'عيني شباب شوكت تسجلون حضور؟'}`);
+    setRemBusy(false); setRemSent(true);
+    setTimeout(()=>setRemSent(false), 2500);
   };
 
   useEffect(() => {
@@ -3445,6 +3454,11 @@ function NotificationSettingsView() {
       <div className="rounded-2xl p-4 space-y-3" style={{background:C.card,border:`1px solid ${C.border}`}}>
         <div className="text-base font-bold" style={{color:C.txt}}>📨 تبليغ سريع</div>
         <div className="text-xs" style={{color:C.txt2}}>أرسل رسالة مباشرة عبر بوت التليغرام</div>
+        <button onClick={sendReminderNow} disabled={remBusy}
+          className="w-full py-3 rounded-xl font-bold text-sm"
+          style={{background: remSent ? C.ok+'22' : C.soft, color: remSent ? C.ok : C.txt2, border:`1px solid ${remSent?C.ok:C.border}`}}>
+          {remBusy ? 'جار الإرسال...' : remSent ? 'تم إرسال تذكير الحضور ✓' : '⏰ إرسال تذكير الحضور الآن'}
+        </button>
         <textarea rows={3} value={quickMsg} onChange={e=>setQuickMsg(e.target.value)}
           placeholder="اكتب رسالتك هنا..."
           className="w-full p-3 rounded-xl text-sm resize-none"
