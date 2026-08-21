@@ -247,6 +247,7 @@ create policy "ns_admin" on notification_settings for all using (current_employe
 -- alter table notification_settings add column if not exists task_reminder_enabled boolean default true;
 -- alter table notification_settings add column if not exists task_reminder_time    text    default '08:00';
 -- alter table notification_settings add column if not exists photo_check_enabled   boolean default true;
+-- alter table notification_settings add column if not exists task_notify_enabled   boolean default true;
 
 -- ════════════════════════════════════════════════════════════
 -- SAMPLE DATA
