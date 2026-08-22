@@ -128,7 +128,7 @@ Deno.serve(async (_req) => {
 
   const botToken  = Deno.env.get('TELEGRAM_BOT_TOKEN');
   const chatId    = Deno.env.get('TELEGRAM_CHAT_ID');
-  const vpub      = Deno.env.get('VAPID_PUBLIC_KEY')  ?? '';
+  const vpub      = 'BMlNdgIZQhNvnAB1xyKLI48nH-fAHNSMUguXJw5mngU3XA_YrY8iy8ZKJ8EsCN-TgCug8QJz8RuGdGRuXg4wVwc';
   const vpriv     = Deno.env.get('VAPID_PRIVATE_KEY') ?? '';
 
   const sendMsg = async (text: string) => {
