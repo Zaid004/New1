@@ -69,24 +69,23 @@ function urlBase64ToUint8(b64) {
 }
 
 async function subscribeToPush(employeeId) {
-  try {
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
-    const reg = await navigator.serviceWorker.ready;
-    let sub = await reg.pushManager.getSubscription();
-    if (!sub) {
-      sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8(VAPID_PUBLIC),
-      });
-    }
-    const j = sub.toJSON();
-    await sb.from('push_subscriptions').upsert({
-      employee_id: employeeId,
-      endpoint: j.endpoint,
-      p256dh: j.keys.p256dh,
-      auth: j.keys.auth,
-    }, { onConflict: 'endpoint' });
-  } catch(_) {}
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) throw new Error('المتصفح لا يدعم Web Push');
+  const reg = await navigator.serviceWorker.ready;
+  let sub = await reg.pushManager.getSubscription();
+  if (!sub) {
+    sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8(VAPID_PUBLIC),
+    });
+  }
+  const j = sub.toJSON();
+  const { error } = await sb.from('push_subscriptions').upsert({
+    employee_id: employeeId,
+    endpoint: j.endpoint,
+    p256dh: j.keys.p256dh,
+    auth: j.keys.auth,
+  }, { onConflict: 'endpoint' });
+  if (error) throw new Error(error.message);
 }
 
 async function unsubscribeFromPush() {
@@ -3340,13 +3339,17 @@ function NotificationSettingsView({me}) {
   const [pushBusy, setPushBusy] = useState(false);
 
   const enablePush = async () => {
-    setPushBusy(true);
-    const granted = await requestNotifPermission();
-    if (granted) {
-      setPushPerm('granted');
-      if (me?.id) await subscribeToPush(me.id);
-    } else {
-      setPushPerm(Notification.permission);
+    setPushBusy(true); setSaveErr('');
+    try {
+      const granted = await requestNotifPermission();
+      if (granted) {
+        setPushPerm('granted');
+        if (me?.id) await subscribeToPush(me.id);
+      } else {
+        setPushPerm(Notification.permission);
+      }
+    } catch(e) {
+      setSaveErr('خطأ في تفعيل الإشعارات: ' + e.message);
     }
     setPushBusy(false);
   };
