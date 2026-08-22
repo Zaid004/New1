@@ -330,6 +330,7 @@ function AuthScreen() {
 function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone,allowedNetwork,gpsSettings,salesTotal}) {
   const [busy,setBusy]=useState(false);
   const [netErr,setNetErr]=useState('');
+  const [confirmForced,setConfirmForced]=useState(false);
   const [nowIraq,setNowIraq]=useState(iraqNow());
   const [notes,setNotes]=useState(()=>{
     const init={};
@@ -618,11 +619,29 @@ function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone,allowedNetwo
                         :`الانصراف بعد ٩:٣٠ م (متبقي ${fmtDur(eligibility.minsLeft)})`}
                     </div>
                   )}
-                  <button onClick={()=>handleCheckout('forced')}
+                  <button onClick={()=>setConfirmForced(true)}
                     className="w-full py-2.5 rounded-2xl text-sm font-bold flex items-center justify-center gap-2"
                     style={{background:'var(--err-bg)',color:C.err}}>
                     <Ic n="clock" s={14} c={C.err}/>انصراف قسري
                   </button>
+                  {confirmForced&&(
+                    <div className="rounded-2xl p-4 mt-1" style={{background:'var(--err-bg)',border:`1.5px solid ${C.err}`}}>
+                      <div className="text-sm font-bold mb-3 text-center" style={{color:C.err}}>هل أنت متأكد من الانصراف القسري؟</div>
+                      <div className="text-xs text-center mb-3" style={{color:C.txt,opacity:.6}}>سيتم إرسال طلب مراجعة للمدير</div>
+                      <div className="flex gap-2">
+                        <button onClick={()=>{setConfirmForced(false);handleCheckout('forced');}} disabled={busy}
+                          className="flex-1 py-2 rounded-xl text-sm font-bold text-white"
+                          style={{background:C.err}}>
+                          {busy?'...':'نعم، انصراف'}
+                        </button>
+                        <button onClick={()=>setConfirmForced(false)}
+                          className="flex-1 py-2 rounded-xl text-sm font-bold"
+                          style={{background:C.soft,color:C.txt}}>
+                          إلغاء
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
               <button onClick={removeMyRecord}
