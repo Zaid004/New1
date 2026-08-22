@@ -248,6 +248,20 @@ create policy "ns_admin" on notification_settings for all using (current_employe
 -- alter table notification_settings add column if not exists task_reminder_time    text    default '08:00';
 -- alter table notification_settings add column if not exists photo_check_enabled   boolean default true;
 -- alter table notification_settings add column if not exists task_notify_enabled   boolean default true;
+-- alter table notification_settings add column if not exists webpush_enabled        boolean default true;
+
+-- 12. WEB PUSH SUBSCRIPTIONS
+-- create table if not exists push_subscriptions (
+--   id uuid primary key default gen_random_uuid(),
+--   employee_id uuid not null references employees(id) on delete cascade,
+--   endpoint text not null unique,
+--   p256dh text not null,
+--   auth text not null,
+--   created_at timestamptz default now()
+-- );
+-- alter table push_subscriptions enable row level security;
+-- create policy "ps_own"   on push_subscriptions for all using (employee_id = current_employee_id());
+-- create policy "ps_admin" on push_subscriptions for all using (current_employee_role() = 'admin');
 
 -- ════════════════════════════════════════════════════════════
 -- SAMPLE DATA

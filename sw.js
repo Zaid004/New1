@@ -43,3 +43,11 @@ self.addEventListener('push', e => {
     })
   );
 });
+
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  e.waitUntil(clients.matchAll({ type: 'window' }).then(list => {
+    const existing = list.find(w => w.url.startsWith(self.location.origin));
+    return existing ? existing.focus() : clients.openWindow('/');
+  }));
+});

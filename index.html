@@ -60,6 +60,46 @@ const showNotif = (title, body) => {
     new Notification(title, {body, icon:'/icon.svg', dir:'rtl', lang:'ar', tag:'attendance'});
 };
 
+// ── WEB PUSH ─────────────────────────────────────────────────────────────────
+const VAPID_PUBLIC = 'BMlNdgIZQhNvnAB1xyKLI48nH-fAHNSMUguXJw5mngU3XA_YrY8iy8ZKJ8EsCN-TgCug8QJz8RuGdGRuXg4wVwc';
+
+function urlBase64ToUint8(b64) {
+  const pad = '='.repeat((4 - b64.length % 4) % 4);
+  return Uint8Array.from(atob((b64 + pad).replace(/-/g,'+').replace(/_/g,'/')), c => c.charCodeAt(0));
+}
+
+async function subscribeToPush(employeeId) {
+  try {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8(VAPID_PUBLIC),
+      });
+    }
+    const j = sub.toJSON();
+    await sb.from('push_subscriptions').upsert({
+      employee_id: employeeId,
+      endpoint: j.endpoint,
+      p256dh: j.keys.p256dh,
+      auth: j.keys.auth,
+    }, { onConflict: 'endpoint' });
+  } catch(_) {}
+}
+
+async function unsubscribeFromPush() {
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) {
+      await sb.from('push_subscriptions').delete().eq('endpoint', sub.endpoint);
+      await sub.unsubscribe();
+    }
+  } catch(_) {}
+}
+
 // ── CONFIG (replace with your Supabase credentials) ──────────────────────────
 const SUPA_URL = window.__SUPABASE_URL__ || 'https://djzvuuqgqsniabgibfnq.supabase.co';
 const SUPA_KEY = window.__SUPABASE_ANON_KEY__ || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRqenZ1dXFncXNuaWFiZ2liZm5xIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4NDY1NzksImV4cCI6MjA5ODQyMjU3OX0.A2Jc1WRjM3iOVfHiyM4JU3I_N8kRWKSzFvNDdcusbDA';
@@ -3270,7 +3310,7 @@ function BoxkiLogView({employees}) {
 }
 
 // ── NOTIFICATION SETTINGS (ADMIN) ─────────────────────────────────────────────
-function NotificationSettingsView() {
+function NotificationSettingsView({me}) {
   const DAYS_AR = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
   const DEFAULT = {
     reminder_enabled: true,
@@ -3294,6 +3334,26 @@ function NotificationSettingsView() {
   const [qSent, setQSent] = useState(false);
   const [remBusy, setRemBusy] = useState(false);
   const [remSent, setRemSent] = useState(false);
+  const [pushPerm, setPushPerm] = useState(() => ('Notification' in window ? Notification.permission : 'denied'));
+  const [pushBusy, setPushBusy] = useState(false);
+
+  const enablePush = async () => {
+    setPushBusy(true);
+    const granted = await requestNotifPermission();
+    if (granted) {
+      setPushPerm('granted');
+      if (me?.id) await subscribeToPush(me.id);
+    } else {
+      setPushPerm(Notification.permission);
+    }
+    setPushBusy(false);
+  };
+
+  const disablePush = async () => {
+    setPushBusy(true);
+    await unsubscribeFromPush();
+    setPushBusy(false);
+  };
 
   const sendQuick = async () => {
     if(!quickMsg.trim()) return;
@@ -3447,6 +3507,31 @@ function NotificationSettingsView() {
               يرسل تبليغ تليغرام في هذا الوقت لكل مهمة مجدولة لهذا اليوم (يومية، أسبوعية، شهرية، مرة واحدة)
             </div>
           </div>
+        )}
+      </div>
+
+      {/* ── إشعارات الجهاز (Web Push) ── */}
+      <div className="rounded-2xl p-4 space-y-3" style={{background:C.card,border:`1px solid ${C.border}`}}>
+        <div className="text-base font-bold" style={{color:C.txt}}>🔔 إشعارات الجهاز</div>
+        <Toggle on={s.webpush_enabled!==false} onChange={()=>upd({webpush_enabled:s.webpush_enabled===false})} label="تفعيل Web Push"/>
+        <div className="text-xs" style={{color:C.txt2}}>
+          {pushPerm==='granted' ? 'هذا الجهاز مفعّل — سيستقبل الإشعارات' :
+           pushPerm==='denied'  ? 'الإشعارات محظورة من إعدادات المتصفح' :
+           'لم يتم السماح بالإشعارات بعد'}
+        </div>
+        {pushPerm !== 'granted' && pushPerm !== 'denied' && (
+          <button onClick={enablePush} disabled={pushBusy}
+            className="w-full py-2.5 rounded-xl font-bold text-sm text-white"
+            style={{background: C.primary}}>
+            {pushBusy ? 'جار التفعيل...' : 'تفعيل إشعارات هذا الجهاز'}
+          </button>
+        )}
+        {pushPerm === 'granted' && (
+          <button onClick={disablePush} disabled={pushBusy}
+            className="w-full py-2.5 rounded-xl text-sm font-medium"
+            style={{background:C.soft, color:C.txt2, border:`1px solid ${C.border}`}}>
+            {pushBusy ? '...' : 'إلغاء اشتراك هذا الجهاز'}
+          </button>
         )}
       </div>
 
@@ -3643,6 +3728,10 @@ function App() {
       const h=iraqNow().getUTCHours();
       if(!todayRec && h>=8 && h<22) setAttendanceBanner(true);
     }
+    // Auto-subscribe to push if permission already granted
+    if(myEmp && Notification.permission === 'granted') {
+      subscribeToPush(myEmp.id);
+    }
   };
 
   const logout = async () => {
@@ -3724,7 +3813,7 @@ function App() {
         {tab==='payslips'&&isAdmin&&<PayslipsView employees={employees} settings={settings}/>}
         {tab==='employees'&&isAdmin&&<EmployeesView employees={employees} settings={settings} onRefresh={()=>loadData(session)}/>}
         {tab==='audit'&&isAdmin&&<AuditLogView employees={employees}/>}
-        {tab==='notif'&&isAdmin&&<NotificationSettingsView/>}
+        {tab==='notif'&&isAdmin&&<NotificationSettingsView me={me}/>}
       </div>
 
       {/* Bottom nav */}
