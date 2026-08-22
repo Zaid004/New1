@@ -905,7 +905,9 @@ function CalendarView({me,employees,isAdmin,settings}) {
           if(dr.length===1){
             bg=getEmpColor(dr[0].employee_id);
           } else if(dr.length>=2){
-            const sorted=[...dr].sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
+            // Sort by time-of-day in Iraq (UTC+3): morning person first (top), evening person second (bottom)
+            const iraqTod = r => (new Date(r.created_at).getTime() + 3*3600*1000) % (24*3600*1000);
+            const sorted=[...dr].sort((a,b)=>iraqTod(a)-iraqTod(b));
             const c1=getEmpColor(sorted[0].employee_id), c2=getEmpColor(sorted[1].employee_id);
             const e1=employees.find(e=>e.id===sorted[0].employee_id);
             const e2=employees.find(e=>e.id===sorted[1].employee_id);
