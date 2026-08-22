@@ -29,6 +29,10 @@ create table if not exists attendance_records (
 
 -- Migration (run if table already exists):
 -- alter table attendance_records add column if not exists note text;
+-- Migration: add checkin_hour for reliable calendar ordering (Iraq hour 0-23 at check-in time)
+-- alter table attendance_records add column if not exists checkin_hour int;
+-- Backfill existing records from created_at (approximation for historical data):
+-- update attendance_records set checkin_hour = extract(hour from (created_at at time zone 'Asia/Baghdad')) where checkin_hour is null;
 
 -- 3. SALARY INPUTS (employee personal calc persistence)
 create table if not exists salary_inputs (

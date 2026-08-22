@@ -354,7 +354,9 @@ function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone,allowedNetwo
     if(ex){
       return sb.from('attendance_records').update({shift_type:shiftType,is_auto_generated:autoGen,note,updated_at:new Date().toISOString()}).eq('id',ex.id);
     } else {
-      return sb.from('attendance_records').insert({employee_id:empId,date:dateStr,shift_type:shiftType,is_auto_generated:autoGen,note});
+      // checkin_hour = Iraq hour (0-23) at moment of check-in, used for reliable calendar ordering
+      const checkin_hour = iraqNow().getUTCHours();
+      return sb.from('attendance_records').insert({employee_id:empId,date:dateStr,shift_type:shiftType,is_auto_generated:autoGen,note,checkin_hour});
     }
   };
 
@@ -905,9 +907,11 @@ function CalendarView({me,employees,isAdmin,settings}) {
           if(dr.length===1){
             bg=getEmpColor(dr[0].employee_id);
           } else if(dr.length>=2){
-            // Sort by time-of-day in Iraq (UTC+3): morning person first (top), evening person second (bottom)
+            // Sort by checkin_hour (Iraq hour stored at insert time) for reliable ordering;
+            // fall back to time-of-day from created_at for older records without the column
             const iraqTod = r => (new Date(r.created_at).getTime() + 3*3600*1000) % (24*3600*1000);
-            const sorted=[...dr].sort((a,b)=>iraqTod(a)-iraqTod(b));
+            const sortKey = r => r.checkin_hour != null ? r.checkin_hour * 3600000 : iraqTod(r);
+            const sorted=[...dr].sort((a,b)=>sortKey(a)-sortKey(b));
             const c1=getEmpColor(sorted[0].employee_id), c2=getEmpColor(sorted[1].employee_id);
             const e1=employees.find(e=>e.id===sorted[0].employee_id);
             const e2=employees.find(e=>e.id===sorted[1].employee_id);
