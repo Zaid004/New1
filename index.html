@@ -901,17 +901,22 @@ function CalendarView({me,employees,isAdmin,settings}) {
 
           let bg = C.soft;
           let overlay = null;
+          let splitEmps = null;
           if(dr.length===1){
             bg=getEmpColor(dr[0].employee_id);
           } else if(dr.length>=2){
-            const c1=getEmpColor(dr[0].employee_id), c2=getEmpColor(dr[1].employee_id);
+            const sorted=[...dr].sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
+            const c1=getEmpColor(sorted[0].employee_id), c2=getEmpColor(sorted[1].employee_id);
+            const e1=employees.find(e=>e.id===sorted[0].employee_id);
+            const e2=employees.find(e=>e.id===sorted[1].employee_id);
             overlay=(
               <>
-                <div style={{position:'absolute',inset:0,background:c1,clipPath:'polygon(0 0,100% 0,0 100%)'}}/>
-                <div style={{position:'absolute',inset:0,background:c2,clipPath:'polygon(100% 0,100% 100%,0 100%)'}}/>
+                <div style={{position:'absolute',top:0,left:0,right:0,bottom:'50%',background:c1}}/>
+                <div style={{position:'absolute',top:'50%',left:0,right:0,bottom:0,background:c2}}/>
               </>
             );
             bg='transparent';
+            splitEmps={e1,e2};
           }
 
           return (
@@ -931,7 +936,20 @@ function CalendarView({me,employees,isAdmin,settings}) {
               <div style={{position:'relative',zIndex:1,padding:'4px 5px'}}>
                 <span className="text-xs font-bold leading-none" style={{color:dr.length>0?'#fff':C.txt}}>{d}</span>
               </div>
-              {dr.length>0&&(
+              {splitEmps ? (
+                <div style={{position:'absolute',inset:0,zIndex:1,display:'flex',flexDirection:'column',pointerEvents:'none'}}>
+                  <div style={{flex:1,display:'flex',alignItems:'flex-end',padding:'0 4px 2px'}}>
+                    <span style={{fontSize:8,fontWeight:800,color:'rgba(255,255,255,0.95)',lineHeight:1,textShadow:'0 1px 2px rgba(0,0,0,0.3)'}}>
+                      {splitEmps.e1?.name?.split(' ')[0]}
+                    </span>
+                  </div>
+                  <div style={{flex:1,display:'flex',alignItems:'flex-end',padding:'0 4px 3px'}}>
+                    <span style={{fontSize:8,fontWeight:800,color:'rgba(255,255,255,0.95)',lineHeight:1,textShadow:'0 1px 2px rgba(0,0,0,0.3)'}}>
+                      {splitEmps.e2?.name?.split(' ')[0]}
+                    </span>
+                  </div>
+                </div>
+              ) : dr.length>0&&(
                 <div style={{position:'relative',zIndex:1,padding:'0 5px 4px'}}>
                   {dr.map(r=>{
                     const emp=employees.find(e=>e.id===r.employee_id);
