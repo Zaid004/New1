@@ -3349,7 +3349,13 @@ function NotificationSettingsView({me}) {
         setPushPerm(Notification.permission);
       }
     } catch(e) {
-      setSaveErr('خطأ في تفعيل الإشعارات: ' + e.message);
+      const msg = e.message || '';
+      const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+      if ((msg.includes('Load failed') || msg.includes('denied')) && isIOS) {
+        setSaveErr('على iPhone: أضف التطبيق للشاشة الرئيسية أولاً ثم افتحه منها (مشاركة ← إضافة للشاشة الرئيسية)');
+      } else {
+        setSaveErr('خطأ في تفعيل الإشعارات: ' + msg);
+      }
     }
     setPushBusy(false);
   };

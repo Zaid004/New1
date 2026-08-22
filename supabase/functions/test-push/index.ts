@@ -67,7 +67,14 @@ async function encryptWebPush(text: string, p256dh: string, auth: string): Promi
   return cat(salt, rs, new Uint8Array([65]), serverPub, ciphertext);
 }
 
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, content-type',
+};
+
 Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
+
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL') ?? '',
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
@@ -76,7 +83,7 @@ Deno.serve(async (req) => {
   // Verify JWT
   const token = req.headers.get('Authorization')?.replace('Bearer ', '') ?? '';
   const { data: { user }, error: authErr } = await supabase.auth.getUser(token);
-  if (authErr || !user) return new Response('Unauthorized', { status: 401 });
+  if (authErr || !user) return new Response('Unauthorized', { status: 401, headers: CORS });
 
   const { endpoint, p256dh, auth } = await req.json();
   if (!endpoint || !p256dh || !auth)
@@ -84,7 +91,7 @@ Deno.serve(async (req) => {
 
   const vpub  = 'BMlNdgIZQhNvnAB1xyKLI48nH-fAHNSMUguXJw5mngU3XA_YrY8iy8ZKJ8EsCN-TgCug8QJz8RuGdGRuXg4wVwc';
   const vpriv = Deno.env.get('VAPID_PRIVATE_KEY') ?? '';
-  if (!vpriv) return new Response('VAPID_PRIVATE_KEY not set', { status: 500 });
+  if (!vpriv) return new Response('VAPID_PRIVATE_KEY not set', { status: 500, headers: CORS });
 
   try {
     const [jwt, body] = await Promise.all([
@@ -103,9 +110,12 @@ Deno.serve(async (req) => {
     });
     return new Response(JSON.stringify({ status: res.status }), {
       status: res.ok || res.status === 201 ? 200 : 502,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...CORS },
     });
   } catch (e) {
-    return new Response(JSON.stringify({ error: String(e) }), { status: 500 });
+    return new Response(JSON.stringify({ error: String(e) }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json', ...CORS },
+    });
   }
 });
