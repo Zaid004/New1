@@ -3334,6 +3334,8 @@ function NotificationSettingsView({me}) {
   const [qSent, setQSent] = useState(false);
   const [remBusy, setRemBusy] = useState(false);
   const [remSent, setRemSent] = useState(false);
+  const [testPushBusy, setTestPushBusy] = useState(false);
+  const [testPushMsg, setTestPushMsg] = useState('');
   const [pushPerm, setPushPerm] = useState(() => ('Notification' in window ? Notification.permission : 'denied'));
   const [pushBusy, setPushBusy] = useState(false);
 
@@ -3368,6 +3370,27 @@ function NotificationSettingsView({me}) {
     await sendTelegram(`⏰ ${s?.reminder_message || 'عيني شباب شوكت تسجلون حضور؟'}`);
     setRemBusy(false); setRemSent(true);
     setTimeout(()=>setRemSent(false), 2500);
+  };
+
+  const testWebPush = async () => {
+    setTestPushBusy(true); setTestPushMsg('');
+    try {
+      if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+        setTestPushMsg('المتصفح لا يدعم Web Push'); setTestPushBusy(false); return;
+      }
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (!sub) { setTestPushMsg('فعّل الإشعارات أولاً'); setTestPushBusy(false); return; }
+      const {data:{session}} = await sb.auth.getSession();
+      const res = await fetch(`${SUPA_URL}/functions/v1/test-push`, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json','Authorization':`Bearer ${session?.access_token}`},
+        body: JSON.stringify({endpoint:sub.endpoint,...sub.toJSON().keys}),
+      });
+      setTestPushMsg(res.ok ? 'تم — تحقق من إشعارات جهازك' : 'فشل الإرسال');
+    } catch(e) { setTestPushMsg('خطأ: '+e.message); }
+    setTestPushBusy(false);
+    setTimeout(()=>setTestPushMsg(''), 4000);
   };
 
   useEffect(() => {
@@ -3526,13 +3549,19 @@ function NotificationSettingsView({me}) {
             {pushBusy ? 'جار التفعيل...' : 'تفعيل إشعارات هذا الجهاز'}
           </button>
         )}
-        {pushPerm === 'granted' && (
+        {pushPerm === 'granted' && (<>
+          <button onClick={testWebPush} disabled={testPushBusy}
+            className="w-full py-2.5 rounded-xl font-bold text-sm text-white"
+            style={{background: testPushBusy ? '#999' : C.ok}}>
+            {testPushBusy ? 'جار الإرسال...' : 'إرسال إشعار تجريبي'}
+          </button>
+          {testPushMsg && <div className="text-xs text-center py-1" style={{color: testPushMsg.includes('تم') ? C.ok : C.err}}>{testPushMsg}</div>}
           <button onClick={disablePush} disabled={pushBusy}
             className="w-full py-2.5 rounded-xl text-sm font-medium"
             style={{background:C.soft, color:C.txt2, border:`1px solid ${C.border}`}}>
             {pushBusy ? '...' : 'إلغاء اشتراك هذا الجهاز'}
           </button>
-        )}
+        </>)}
       </div>
 
       {/* ── تبليغ سريع ── */}
