@@ -735,9 +735,10 @@ function CalendarView({me,employees,isAdmin,settings}) {
       if(ds<today&&!map[ds]) missing.push(ds);
     }
 
-    // Today: fetch if missing or stale (>30 min since last fetch)
+    // Today: fetch if missing or stale (>5 min since last fetch)
     const todayStale = !map[today] ||
-      (fetchedAtMap[today] && Date.now()-new Date(fetchedAtMap[today]).getTime() > 30*60*1000);
+      !fetchedAtMap[today] ||
+      Date.now()-new Date(fetchedAtMap[today]).getTime() > 5*60*1000;
 
     if(!missing.length && !todayStale) return;
 
@@ -779,6 +780,12 @@ function CalendarView({me,employees,isAdmin,settings}) {
   };
 
   useEffect(()=>{load(vy,vm);loadCompletions(vy,vm);loadSales(vy,vm);},[vy,vm]);
+  // Auto-refresh today's sales every 5 min so refunds and late entries appear promptly
+  useEffect(()=>{
+    const tick=()=>{const n=iraqNow();loadSales(n.getUTCFullYear(),n.getUTCMonth());};
+    const id=setInterval(tick,5*60*1000);
+    return()=>clearInterval(id);
+  },[]);
   useEffect(()=>{
     sb.from('tasks').select('*').order('created_at',{ascending:false}).then(({data})=>setTasks(data||[]));
   },[]);
