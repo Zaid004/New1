@@ -343,7 +343,14 @@ function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone,allowedNetwo
     return ()=>clearInterval(t);
   },[]);
 
-  const toIraqTime = ts => ts ? new Date(new Date(ts).getTime()+3*3600000).toISOString().slice(11,16) : '';
+  const toIraqTime = ts => {
+    if(!ts) return '';
+    const d = new Date(new Date(ts).getTime()+3*3600000);
+    let h = d.getUTCHours(), m = d.getUTCMinutes();
+    const ampm = h >= 12 ? 'م' : 'ص';
+    h = h % 12 || 12;
+    return `${h}:${String(m).padStart(2,'0')} ${ampm}`;
+  };
   const fmtDur = mins => { const h=Math.floor(mins/60),m=Math.round(mins%60); return h>0?(m>0?`${h}س ${m}د`:`${h}س`):`${m}د`; };
 
   const getRec = empId => recs.find(r=>r.employee_id===empId);
