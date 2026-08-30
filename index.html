@@ -507,7 +507,8 @@ function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone,allowedNetwo
                     <div className="w-3 h-3 rounded-full" style={{background:emp.color_hex}}/>
                     <span className="font-semibold text-sm" style={{color:C.txt}}>{emp.name}</span>
                     {rec?.is_auto_generated&&<span className="text-xs px-2 py-0.5 rounded-full" style={{background:'#E8DDE5',color:C.primary}}>تلقائي</span>}
-                    {rec&&<span className="text-xs px-2 py-0.5 rounded-full mr-auto" style={{background:emp.color_hex+'22',color:emp.color_hex}}>{rec.shift_type==='full'?'كامل':'نص'}</span>}
+                    {rec&&<span className="text-xs px-2 py-0.5 rounded-full" style={{background:emp.color_hex+'22',color:emp.color_hex}}>{rec.shift_type==='full'?'كامل':'نص'}</span>}
+                    {rec&&<span className="text-xs mr-auto" style={{color:C.txt,opacity:.5}}>⏰ {toIraqTime(rec.created_at)}</span>}
                   </div>
                   {pending&&rec&&(
                     <div className="mb-3 p-3 rounded-xl" style={{background:'#FEF3C7'}}>
