@@ -1143,6 +1143,8 @@ function CalendarView({me,employees,isAdmin,settings}) {
 function EmpDashboard({me,employees,settings,onRefresh}) {
   const COLORS = ['#6B5876','#A8825B','#7A8B6F','#B0594F','#5876A8','#8B6F7A'];
   const now=iraqNow();
+  const [calcYear, setCalcYear]   = useState(now.getUTCFullYear());
+  const [calcMonth, setCalcMonth] = useState(now.getUTCMonth());
   const [recs,setRecs]=useState([]);
   const [sales,setSales]=useState('');
   const [extra,setExtra]=useState('');
@@ -1210,11 +1212,11 @@ function EmpDashboard({me,employees,settings,onRefresh}) {
   const fetchLoyverse = async () => {
     setLoyBusy(true); setLoyMsg('');
     const {data:{session}} = await sb.auth.getSession();
-    const m = String(now.getMonth()+1).padStart(2,'0');
+    const mo = String(calcMonth+1).padStart(2,'0');
     const res = await fetch(`${SUPA_URL}/functions/v1/get-loyverse-sales`, {
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':`Bearer ${session.access_token}`},
-      body: JSON.stringify({month:`${now.getFullYear()}-${m}`}),
+      body: JSON.stringify({month:`${calcYear}-${mo}`}),
     });
     const data = await res.json();
     setLoyBusy(false);
@@ -1226,9 +1228,8 @@ function EmpDashboard({me,employees,settings,onRefresh}) {
 
   const fetchCalcDelivery = async () => {
     setDelCalcBusy(true); setDelCalcMsg('');
-    const d=now;
-    const y=d.getFullYear(), mo=String(d.getMonth()+1).padStart(2,'0');
-    const lastDay=new Date(y,d.getMonth()+1,0).getDate();
+    const y=calcYear, mo=String(calcMonth+1).padStart(2,'0');
+    const lastDay=new Date(y,calcMonth+1,0).getDate();
     const from=new Date(`${y}-${mo}-01T00:00:00.000+03:00`).toISOString();
     const to=new Date(`${y}-${mo}-${String(lastDay).padStart(2,'0')}T23:59:59.999+03:00`).toISOString();
     const {data:{session}}=await sb.auth.getSession();
@@ -1253,9 +1254,10 @@ function EmpDashboard({me,employees,settings,onRefresh}) {
   };
 
   useEffect(()=>{
-    const {from,to}=monthRange(now.getFullYear(),now.getMonth());
+    const {from,to}=monthRange(calcYear,calcMonth);
     sb.from('attendance_records').select('*').gte('date',from).lte('date',to).then(({data})=>setRecs(data||[]));
-  },[]);
+    setSales(''); setExtra('');
+  },[calcYear,calcMonth]);
 
   const pool   = settings?.monthly_pool_amount||525000;
   const pct    = settings?.monthly_percentage||3.2;
@@ -1294,9 +1296,30 @@ function EmpDashboard({me,employees,settings,onRefresh}) {
 
   return (
     <div className="space-y-4">
+      <div className="flex items-center justify-between mb-1">
+        <button onClick={()=>{
+          if(calcMonth===0){setCalcMonth(11);setCalcYear(y=>y-1);}
+          else setCalcMonth(m=>m-1);
+        }} className="p-2 rounded-xl" style={{background:C.soft}}>
+          <Ic n="chR" s={16} c={C.txt}/>
+        </button>
+        <span className="font-bold text-sm" style={{color:C.txt}}>{MONTHS[calcMonth]} {calcYear}</span>
+        <button onClick={()=>{
+          const isCurrentMonth=calcYear===now.getUTCFullYear()&&calcMonth===now.getUTCMonth();
+          if(isCurrentMonth) return;
+          if(calcMonth===11){setCalcMonth(0);setCalcYear(y=>y+1);}
+          else setCalcMonth(m=>m+1);
+        }} className="p-2 rounded-xl" style={{
+          background:C.soft,
+          opacity:(calcYear===now.getUTCFullYear()&&calcMonth===now.getUTCMonth())?0.3:1
+        }}>
+          <Ic n="chL" s={16} c={C.txt}/>
+        </button>
+      </div>
+
       <div className="grid grid-cols-2 gap-3">
         <div className="rounded-2xl p-5 shadow-sm" style={{background:C.card}}>
-          <div className="text-xs font-semibold mb-1" style={{color:C.txt,opacity:.5}}>أيام {MONTHS[now.getMonth()]}</div>
+          <div className="text-xs font-semibold mb-1" style={{color:C.txt,opacity:.5}}>أيام {MONTHS[calcMonth]}</div>
           <div className="text-4xl font-black" style={{color:C.primary}}>{myDays}</div>
         </div>
         <div className="rounded-2xl p-5 shadow-sm" style={{background:C.card}}>
