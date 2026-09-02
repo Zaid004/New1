@@ -22,7 +22,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;900&display=swap');
 :root{
   --bg:#FBF1EC;--card:#FFFFFF;--soft:#F5EDE8;--border:#E8DDE5;
-  --primary:#6B5876;--e2:#A8825B;--ok:#7A8B6F;--err:#B0594F;--txt:#3A2F3D;
+  --primary:#5A3570;--e2:#A8825B;--ok:#7A8B6F;--err:#B0594F;--txt:#3A2F3D;
   --err-bg:#FDECEA;--ok-bg:#EAF3EA;--edit-bg:#EEE8F5;--input-bg:#FAFAFA;--badge-bg:#F0EAF0;--muted:#BBB;
 }
 html.dark{
@@ -1141,7 +1141,18 @@ function CalendarView({me,employees,isAdmin,settings}) {
 
 // ── EMPLOYEE DASHBOARD ────────────────────────────────────────────────────────
 function EmpDashboard({me,employees,settings,onRefresh}) {
-  const COLORS = ['#6B5876','#A8825B','#7A8B6F','#B0594F','#5876A8','#8B6F7A'];
+  const COLORS = [
+    {hex:'#6B5876',name:'أرجواني'},
+    {hex:'#A8825B',name:'نحاسي'},
+    {hex:'#7A8B6F',name:'حشيشي'},
+    {hex:'#B0594F',name:'طيني'},
+    {hex:'#5876A8',name:'سماوي'},
+    {hex:'#8B6F7A',name:'وردي'},
+    {hex:'#1D5A8A',name:'لازوردي',newUntil:'2026-09-07'},
+    {hex:'#7A2F6E',name:'ياقوتي',newUntil:'2026-09-07'},
+    {hex:'#2A6B50',name:'زمردي',newUntil:'2026-09-07'},
+    {hex:'#8B5E0A',name:'كهرماني',newUntil:'2026-09-07'},
+  ];
   const now=iraqNow();
   const [calcYear, setCalcYear]   = useState(now.getUTCFullYear());
   const [calcMonth, setCalcMonth] = useState(now.getUTCMonth());
@@ -1484,12 +1495,23 @@ function EmpDashboard({me,employees,settings,onRefresh}) {
 
       {showColor && (
         <div className="rounded-2xl p-5 shadow-sm space-y-4" style={{background:C.card}}>
-          <div className="flex gap-3 justify-center">
-            {COLORS.map(col=>(
-              <button key={col} onClick={()=>setMyColor(col)}
-                className="w-10 h-10 rounded-xl transition-transform"
-                style={{background:col,transform:myColor===col?'scale(1.2)':'scale(1)',outline:myColor===col?`2px solid ${col}`:undefined,outlineOffset:3}}/>
-            ))}
+          <div className="flex flex-wrap gap-3 justify-center">
+            {COLORS.map(({hex,name,newUntil})=>{
+              const todayStr=iraqNow().toISOString().slice(0,10);
+              const showNew=newUntil&&todayStr<newUntil;
+              return (
+                <button key={hex} onClick={()=>setMyColor(hex)}
+                  className="flex flex-col items-center gap-1"
+                  style={{width:'48px'}}>
+                  <div className="relative">
+                    <div className="w-10 h-10 rounded-xl transition-transform"
+                      style={{background:hex,transform:myColor===hex?'scale(1.2)':'scale(1)',outline:myColor===hex?`2px solid ${hex}`:undefined,outlineOffset:3}}/>
+                    {showNew&&<span className="absolute -top-1 -right-1 font-bold text-white rounded-full px-1" style={{background:C.err,fontSize:'8px',lineHeight:'14px'}}>جديد</span>}
+                  </div>
+                  <span style={{color:C.txt,opacity:.55,fontSize:'9px'}}>{name}</span>
+                </button>
+              );
+            })}
           </div>
           {colorMsg && (
             <div className="text-center text-sm font-semibold" style={{color: colorMsg.includes('خطأ')?C.err:C.ok}}>
@@ -2949,7 +2971,18 @@ function SettingsSection({settings, onSaved}) {
 
 // ── EMPLOYEES MANAGEMENT (ADMIN) ─────────────────────────────────────────────
 function EmployeesView({employees, settings, onRefresh}) {
-  const COLORS = ['#6B5876','#A8825B','#7A8B6F','#B0594F','#5876A8','#8B6F7A'];
+  const COLORS = [
+    {hex:'#6B5876',name:'أرجواني'},
+    {hex:'#A8825B',name:'نحاسي'},
+    {hex:'#7A8B6F',name:'حشيشي'},
+    {hex:'#B0594F',name:'طيني'},
+    {hex:'#5876A8',name:'سماوي'},
+    {hex:'#8B6F7A',name:'وردي'},
+    {hex:'#1D5A8A',name:'لازوردي',newUntil:'2026-09-07'},
+    {hex:'#7A2F6E',name:'ياقوتي',newUntil:'2026-09-07'},
+    {hex:'#2A6B50',name:'زمردي',newUntil:'2026-09-07'},
+    {hex:'#8B5E0A',name:'كهرماني',newUntil:'2026-09-07'},
+  ];
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({name:'',username:'',password:'',color_hex:'#A8825B',role:'employee',loyverse_pos_name:''});
   const [resetTarget, setResetTarget] = useState(null);
@@ -3127,12 +3160,23 @@ function EmployeesView({employees, settings, onRefresh}) {
           </div>
           <div>
             <label className="text-xs font-semibold block mb-2" style={{color:C.txt}}>اللون</label>
-            <div className="flex gap-2">
-              {COLORS.map(col=>(
-                <button key={col} onClick={()=>setForm(p=>({...p,color_hex:col}))}
-                  className="w-8 h-8 rounded-lg transition-transform"
-                  style={{background:col,transform:form.color_hex===col?'scale(1.25)':'scale(1)',outline:form.color_hex===col?`2px solid ${col}`:undefined,outlineOffset:2}}/>
-              ))}
+            <div className="flex flex-wrap gap-2">
+              {COLORS.map(({hex,name,newUntil})=>{
+                const todayStr=iraqNow().toISOString().slice(0,10);
+                const showNew=newUntil&&todayStr<newUntil;
+                return (
+                  <button key={hex} onClick={()=>setForm(p=>({...p,color_hex:hex}))}
+                    className="flex flex-col items-center gap-1"
+                    style={{width:'40px'}}>
+                    <div className="relative">
+                      <div className="w-8 h-8 rounded-lg transition-transform"
+                        style={{background:hex,transform:form.color_hex===hex?'scale(1.25)':'scale(1)',outline:form.color_hex===hex?`2px solid ${hex}`:undefined,outlineOffset:2}}/>
+                      {showNew&&<span className="absolute -top-1 -right-1 font-bold text-white rounded-full px-1" style={{background:C.err,fontSize:'7px',lineHeight:'12px'}}>جديد</span>}
+                    </div>
+                    <span style={{color:C.txt,opacity:.55,fontSize:'8px'}}>{name}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
           <div>
@@ -3241,12 +3285,23 @@ function EmployeesView({employees, settings, onRefresh}) {
             </div>
             <div>
               <label className="text-xs font-semibold block mb-2" style={{color:C.txt}}>اللون</label>
-              <div className="flex gap-2">
-                {COLORS.map(col=>(
-                  <button key={col} onClick={()=>setEditForm(p=>({...p,color_hex:col}))}
-                    className="w-8 h-8 rounded-lg transition-transform"
-                    style={{background:col,transform:editForm.color_hex===col?'scale(1.25)':'scale(1)',outline:editForm.color_hex===col?`2px solid ${col}`:undefined,outlineOffset:2}}/>
-                ))}
+              <div className="flex flex-wrap gap-2">
+                {COLORS.map(({hex,name,newUntil})=>{
+                  const todayStr=iraqNow().toISOString().slice(0,10);
+                  const showNew=newUntil&&todayStr<newUntil;
+                  return (
+                    <button key={hex} onClick={()=>setEditForm(p=>({...p,color_hex:hex}))}
+                      className="flex flex-col items-center gap-1"
+                      style={{width:'40px'}}>
+                      <div className="relative">
+                        <div className="w-8 h-8 rounded-lg transition-transform"
+                          style={{background:hex,transform:editForm.color_hex===hex?'scale(1.25)':'scale(1)',outline:editForm.color_hex===hex?`2px solid ${hex}`:undefined,outlineOffset:2}}/>
+                        {showNew&&<span className="absolute -top-1 -right-1 font-bold text-white rounded-full px-1" style={{background:C.err,fontSize:'7px',lineHeight:'12px'}}>جديد</span>}
+                      </div>
+                      <span style={{color:C.txt,opacity:.55,fontSize:'8px'}}>{name}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
             <div>
