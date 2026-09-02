@@ -244,6 +244,7 @@ const PATHS = {
   camera:'M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2zM12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
   img:'M21 15l-5-5L5 20M3 3h18a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM8.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z',
   info:'M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zM12 16v-4M12 8h.01',
+  star:'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z',
 };
 const Ic = ({n,s=20,c='currentColor'}) => (
   <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -3863,6 +3864,7 @@ function App() {
   const [tab,setTab]=useState('calendar');
   const [dark,setDark]=useState(()=>localStorage.getItem('dark')==='1');
   const [attendanceBanner,setAttendanceBanner]=useState(false);
+  const [showWhatsNew,setShowWhatsNew]=useState(false);
 
   const toggleDark = () => {
     const next=!dark;
@@ -3895,6 +3897,9 @@ function App() {
     const myEmp=all.find(e=>e.auth_user_id===s.user.id)||null;
     setMe(myEmp);
     setSettings(sets);
+    // Show whats-new popup once per version
+    const WN_KEY='stacks_wn_v3';
+    if(!localStorage.getItem(WN_KEY)) setShowWhatsNew(true);
     // Check attendance reminder
     if(myEmp && myEmp.role!=='admin') {
       const today=todayStr();
@@ -3936,8 +3941,81 @@ function App() {
     ]:[]),
   ];
 
+  const dismissWhatsNew = () => {
+    localStorage.setItem('stacks_wn_v3','1');
+    setShowWhatsNew(false);
+  };
+
   return (
     <div className="min-h-screen" style={{background:C.bg}}>
+
+      {/* What's New popup */}
+      {showWhatsNew && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center p-4"
+          style={{background:'rgba(30,20,35,0.6)'}} onClick={e=>e.target===e.currentTarget&&dismissWhatsNew()}>
+          <div className="w-full max-w-sm rounded-3xl shadow-2xl mb-2 overflow-hidden" style={{background:C.card}}>
+            {/* Top banner */}
+            <div className="px-6 pt-6 pb-4" style={{background:`linear-gradient(135deg,#6B5876 0%,#4A3560 100%)`}}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xs font-bold tracking-widest text-white opacity-70 mb-1">STACKS</div>
+                  <div className="text-xl font-black text-white">مميزات التحديث</div>
+                </div>
+                <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{background:'rgba(255,255,255,0.15)'}}>
+                  <Ic n="star" s={22} c="#fff"/>
+                </div>
+              </div>
+            </div>
+            {/* Features list */}
+            <div className="px-6 py-5 space-y-4">
+              {/* New colors */}
+              <div className="flex gap-3 items-start">
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{background:'var(--edit-bg)'}}>
+                  <Ic n="user" s={16} c={C.primary}/>
+                </div>
+                <div>
+                  <div className="font-bold text-sm mb-1" style={{color:C.txt}}>ألوان ملف شخصي جديدة</div>
+                  <div className="text-xs leading-relaxed" style={{color:C.txt,opacity:.6}}>أضفنا ٤ ألوان مميزة بأسماء عربية حصرية</div>
+                  <div className="flex gap-2 mt-2">
+                    {[
+                      {hex:'#1D5A8A',name:'لازوردي'},
+                      {hex:'#7A2F6E',name:'ياقوتي'},
+                      {hex:'#2A6B50',name:'زمردي'},
+                      {hex:'#8B5E0A',name:'كهرماني'},
+                    ].map(({hex,name})=>(
+                      <div key={hex} className="flex flex-col items-center gap-1">
+                        <div className="w-8 h-8 rounded-lg" style={{background:hex}}/>
+                        <span style={{fontSize:'9px',color:C.txt,opacity:.55}}>{name}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              {/* Divider */}
+              <div style={{height:1,background:C.border}}/>
+              {/* Background color */}
+              <div className="flex gap-3 items-start">
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{background:'var(--edit-bg)'}}>
+                  <Ic n="sun" s={16} c={C.primary}/>
+                </div>
+                <div>
+                  <div className="font-bold text-sm mb-1" style={{color:C.txt}}>خلفية الوضع النهاري</div>
+                  <div className="text-xs leading-relaxed" style={{color:C.txt,opacity:.6}}>تحديث لون الخلفية العامة ليكون أكثر راحة للعين</div>
+                </div>
+              </div>
+            </div>
+            {/* CTA */}
+            <div className="px-6 pb-6">
+              <button onClick={dismissWhatsNew}
+                className="w-full py-3 rounded-2xl font-bold text-white text-sm"
+                style={{background:`linear-gradient(135deg,#6B5876 0%,#4A3560 100%)`}}>
+                رائع، فاهمت
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="shadow-sm px-4 py-3 flex items-center justify-between sticky top-0 z-40"
         style={{background:C.card}}>
