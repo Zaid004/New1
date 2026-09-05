@@ -3500,17 +3500,15 @@ function BoxkiLogView({employees}) {
 }
 
 // ── BOXKI MATCH LOG (EMPLOYEE) — today & yesterday only ──────────────────────
-function EmpBoxkiLogView({me}) {
+function EmpBoxkiLogView({employees}) {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(()=>{
     const now=iraqNow();
-    const today=now.toISOString().slice(0,10);
     const yest=new Date(now.getTime()-24*3600000).toISOString().slice(0,10);
     sb.from('boxki_match_log')
       .select('*')
-      .eq('auth_user_id', me.auth_user_id)
       .gte('matched_at', new Date(yest+'T00:00:00.000+03:00').toISOString())
       .order('matched_at',{ascending:false})
       .then(({data})=>{setLogs(data||[]);setLoading(false);});
@@ -3542,7 +3540,7 @@ function EmpBoxkiLogView({me}) {
           <div className="text-xs font-bold mb-2 px-1" style={{color:C.txt,opacity:.4}}>{fmtDayLabel(day)}</div>
           <div className="space-y-2">
             {grouped[day].map((log,i)=>(
-              <BoxkiLogCard key={i} log={log} emp={null}/>
+              <BoxkiLogCard key={i} log={log} emp={employees.find(e=>e.auth_user_id===log.auth_user_id)}/>
             ))}
           </div>
         </div>
@@ -4173,7 +4171,7 @@ function App() {
         {tab==='payslips'&&isAdmin&&<PayslipsView employees={employees} settings={settings}/>}
         {tab==='employees'&&isAdmin&&<EmployeesView employees={employees} settings={settings} onRefresh={()=>loadData(session)}/>}
         {tab==='audit'&&isAdmin&&<AuditLogView employees={employees}/>}
-        {tab==='log'&&!isAdmin&&<EmpBoxkiLogView me={me}/>}
+        {tab==='log'&&!isAdmin&&<EmpBoxkiLogView employees={employees}/>}
         {tab==='notif'&&isAdmin&&<NotificationSettingsView me={me}/>}
       </div>
 
