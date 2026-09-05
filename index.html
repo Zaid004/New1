@@ -3357,39 +3357,100 @@ function EmployeesView({employees, settings, onRefresh}) {
   );
 }
 
-// ── BOXKI MATCH LOG (ADMIN) ───────────────────────────────────────────────────
+// ── SHARED BOXKI LOG CARD ─────────────────────────────────────────────────────
+function BoxkiLogCard({log, emp}) {
+  const fmtTs = iso => {
+    const d=new Date(new Date(iso).getTime()+3*3600000);
+    let h=d.getUTCHours(), m=d.getUTCMinutes();
+    const ampm=h>=12?'م':'ص'; h=h%12||12;
+    return `${h}:${String(m).padStart(2,'0')} ${ampm}`;
+  };
+  const fmtPeriod = iso => {
+    if(!iso) return '';
+    const d=new Date(new Date(iso).getTime()+3*3600000);
+    return `${d.getUTCDate()}/${d.getUTCMonth()+1} ${String(d.getUTCHours()).padStart(2,'0')}:${String(d.getUTCMinutes()).padStart(2,'0')}`;
+  };
+  return (
+    <div className="rounded-2xl p-4 shadow-sm" style={{background:C.card}}>
+      <div className="flex items-start gap-3">
+        {emp && <div className="w-3 h-3 rounded-full flex-shrink-0 mt-1" style={{background:emp.color_hex}}/>}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              {emp && <div className="font-semibold text-sm" style={{color:C.txt}}>{emp.name}</div>}
+              <div className="text-xs mt-0.5" style={{color:C.txt,opacity:.45}}>{fmtTs(log.matched_at)}</div>
+            </div>
+            <div className="w-9 h-9 rounded-full flex items-center justify-center font-black text-base flex-shrink-0"
+              style={{background:log.matched?C.ok+'22':'var(--err-bg)',color:log.matched?C.ok:C.err}}>
+              {log.matched?'✓':'✗'}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 mt-2 text-xs" style={{color:C.txt,opacity:.7}}>
+            <span>بوكسي: <strong>{fmt(log.boxki_amount)}</strong> د.ع</span>
+            <span>طلبات: <strong>{log.boxki_orders}</strong></span>
+            <span>Loyverse: <strong>{fmt(log.loyverse_total)}</strong> د.ع</span>
+            <span>طلبات L: <strong>{log.loyverse_orders}</strong></span>
+          </div>
+          {!log.matched && log.diff!==0 && (
+            <div className="mt-1.5 text-xs font-bold" style={{color:C.err}}>
+              فرق: {fmt(Math.abs(log.diff))} د.ع {log.diff>0?'(بوكسي أكثر)':'(Loyverse أكثر)'}
+            </div>
+          )}
+          {log.period_from && (
+            <div className="text-xs mt-1" style={{color:C.txt,opacity:.35}}>
+              {fmtPeriod(log.period_from)} — {fmtPeriod(log.period_to)}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── BOXKI MATCH LOG (ADMIN) — grouped by day ──────────────────────────────────
 function BoxkiLogView({employees}) {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
+  const [openDay, setOpenDay] = useState(null);
 
   useEffect(()=>{
     sb.from('boxki_match_log')
       .select('*')
       .order('matched_at',{ascending:false})
-      .limit(200)
-      .then(({data})=>{setLogs(data||[]);setLoading(false);});
+      .limit(300)
+      .then(({data})=>{
+        setLogs(data||[]);
+        setLoading(false);
+        // Auto-open the most recent day
+        if(data&&data.length>0){
+          const d=new Date(new Date(data[0].matched_at).getTime()+3*3600000);
+          setOpenDay(d.toISOString().slice(0,10));
+        }
+      });
   },[]);
 
   const getEmpByAuth = authId => employees.find(e=>e.auth_user_id===authId);
-
-  const fmtTs = iso => {
-    const d=new Date(iso);
-    return `${d.getDate()} ${MONTHS[d.getMonth()]} · ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-  };
-
-  const fmtPeriod = iso => {
-    if(!iso) return '';
-    const d=new Date(iso);
-    return `${d.getDate()}/${d.getMonth()+1} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  const iraqDate = iso => new Date(new Date(iso).getTime()+3*3600000).toISOString().slice(0,10);
+  const fmtDayLabel = ds => {
+    const [y,m,d]=ds.split('-');
+    return `${parseInt(d)} ${MONTHS[parseInt(m)-1]} ${y}`;
   };
 
   const filtered = filter==='all' ? logs : logs.filter(l=>filter==='ok'?l.matched:!l.matched);
 
+  const grouped = filtered.reduce((acc,log)=>{
+    const key=iraqDate(log.matched_at);
+    if(!acc[key]) acc[key]=[];
+    acc[key].push(log);
+    return acc;
+  },{});
+  const days = Object.keys(grouped).sort((a,b)=>b.localeCompare(a));
+
   return (
     <div className="space-y-3">
       <div className="flex gap-2">
-        {[['all','الكل'],['ok','مطابق ✓'],['fail','فرق ✗']].map(([v,l])=>(
+        {[['all','الكل'],['ok','مطابق'],['fail','فرق']].map(([v,l])=>(
           <button key={v} onClick={()=>setFilter(v)}
             className="flex-1 py-2 rounded-xl text-xs font-bold"
             style={{background:filter===v?C.primary:C.soft,color:filter===v?'#fff':C.txt}}>
@@ -3399,48 +3460,93 @@ function BoxkiLogView({employees}) {
       </div>
 
       {loading && <div className="text-center py-8 text-sm" style={{color:C.txt,opacity:.4}}>جاري التحميل...</div>}
-      {!loading && filtered.length===0 && (
+      {!loading && days.length===0 && (
         <div className="text-center py-12 text-sm" style={{color:C.txt,opacity:.4}}>لا توجد سجلات بعد</div>
       )}
 
       <div className="space-y-2">
-        {filtered.map((log,i)=>{
-          const emp=getEmpByAuth(log.auth_user_id);
+        {days.map(day=>{
+          const dayLogs=grouped[day];
+          const isOpen=openDay===day;
+          const okCount=dayLogs.filter(l=>l.matched).length;
+          const failCount=dayLogs.filter(l=>!l.matched).length;
           return (
-            <div key={i} className="rounded-2xl p-4 shadow-sm" style={{background:C.card}}>
-              <div className="flex items-start gap-3">
-                {emp && <div className="w-3 h-3 rounded-full flex-shrink-0 mt-1" style={{background:emp.color_hex}}/>}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="font-semibold text-sm" style={{color:C.txt}}>{emp?.name||'—'}</div>
-                    <div className="w-9 h-9 rounded-full flex items-center justify-center font-black text-base flex-shrink-0"
-                      style={{background:log.matched?C.ok+'22':'var(--err-bg)',color:log.matched?C.ok:C.err}}>
-                      {log.matched?'✓':'✗'}
-                    </div>
+            <div key={day}>
+              <button onClick={()=>setOpenDay(isOpen?null:day)}
+                className="w-full flex items-center justify-between px-4 py-3 rounded-2xl shadow-sm"
+                style={{background:C.card}}>
+                <div className="flex items-center gap-3">
+                  <div className="font-bold text-sm" style={{color:C.txt}}>{fmtDayLabel(day)}</div>
+                  <div className="flex gap-1.5">
+                    {okCount>0&&<span className="text-xs font-bold px-2 py-0.5 rounded-lg" style={{background:'var(--ok-bg)',color:C.ok}}>{okCount} ✓</span>}
+                    {failCount>0&&<span className="text-xs font-bold px-2 py-0.5 rounded-lg" style={{background:'var(--err-bg)',color:C.err}}>{failCount} ✗</span>}
                   </div>
-                  <div className="text-xs mt-1" style={{color:C.txt,opacity:.5}}>{fmtTs(log.matched_at)}</div>
-                  <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 mt-2 text-xs" style={{color:C.txt,opacity:.7}}>
-                    <span>بوكسي: <strong>{fmt(log.boxki_amount)}</strong> د.ع</span>
-                    <span>طلبات: <strong>{log.boxki_orders}</strong></span>
-                    <span>Loyverse: <strong>{fmt(log.loyverse_total)}</strong> د.ع</span>
-                    <span>طلبات L: <strong>{log.loyverse_orders}</strong></span>
-                  </div>
-                  {!log.matched && log.diff!==0 && (
-                    <div className="mt-1.5 text-xs font-bold" style={{color:C.err}}>
-                      فرق: {fmt(Math.abs(log.diff))} د.ع {log.diff>0?'(بوكسي أكثر)':'(Loyverse أكثر)'}
-                    </div>
-                  )}
-                  {log.period_from && (
-                    <div className="text-xs mt-1" style={{color:C.txt,opacity:.35}}>
-                      {fmtPeriod(log.period_from)} — {fmtPeriod(log.period_to)}
-                    </div>
-                  )}
                 </div>
-              </div>
+                <Ic n={isOpen?'chL':'chR'} s={18} c={C.primary}/>
+              </button>
+              {isOpen&&(
+                <div className="mt-2 space-y-2 pr-1">
+                  {dayLogs.map((log,i)=>(
+                    <BoxkiLogCard key={i} log={log} emp={getEmpByAuth(log.auth_user_id)}/>
+                  ))}
+                </div>
+              )}
             </div>
           );
         })}
       </div>
+    </div>
+  );
+}
+
+// ── BOXKI MATCH LOG (EMPLOYEE) — today & yesterday only ──────────────────────
+function EmpBoxkiLogView({me}) {
+  const [logs, setLogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(()=>{
+    const now=iraqNow();
+    const today=now.toISOString().slice(0,10);
+    const yest=new Date(now.getTime()-24*3600000).toISOString().slice(0,10);
+    sb.from('boxki_match_log')
+      .select('*')
+      .eq('auth_user_id', me.auth_user_id)
+      .gte('matched_at', new Date(yest+'T00:00:00.000+03:00').toISOString())
+      .order('matched_at',{ascending:false})
+      .then(({data})=>{setLogs(data||[]);setLoading(false);});
+  },[]);
+
+  const iraqDate = iso => new Date(new Date(iso).getTime()+3*3600000).toISOString().slice(0,10);
+  const fmtDayLabel = ds => {
+    const [y,m,d]=ds.split('-');
+    return `${parseInt(d)} ${MONTHS[parseInt(m)-1]} ${y}`;
+  };
+
+  const grouped = logs.reduce((acc,log)=>{
+    const key=iraqDate(log.matched_at);
+    if(!acc[key]) acc[key]=[];
+    acc[key].push(log);
+    return acc;
+  },{});
+  const days = Object.keys(grouped).sort((a,b)=>b.localeCompare(a));
+
+  return (
+    <div className="space-y-4">
+      <div className="font-black text-lg" style={{color:C.txt}}>سجل المطابقات</div>
+      {loading&&<div className="text-center py-8 text-sm" style={{color:C.txt,opacity:.4}}>جاري التحميل...</div>}
+      {!loading&&days.length===0&&(
+        <div className="text-center py-12 text-sm" style={{color:C.txt,opacity:.4}}>لا توجد مطابقات خلال اليومين الأخيرين</div>
+      )}
+      {days.map(day=>(
+        <div key={day}>
+          <div className="text-xs font-bold mb-2 px-1" style={{color:C.txt,opacity:.4}}>{fmtDayLabel(day)}</div>
+          <div className="space-y-2">
+            {grouped[day].map((log,i)=>(
+              <BoxkiLogCard key={i} log={log} emp={null}/>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -3938,7 +4044,9 @@ function App() {
       {id:'employees',label:'الموظفون',icon:'user'},
       {id:'audit',label:'السجل',icon:'clock'},
       {id:'notif',label:'الإشعارات',icon:'bell'},
-    ]:[]),
+    ]:[
+      {id:'log',label:'السجل',icon:'clock'},
+    ]),
   ];
 
   const dismissWhatsNew = () => {
@@ -4065,6 +4173,7 @@ function App() {
         {tab==='payslips'&&isAdmin&&<PayslipsView employees={employees} settings={settings}/>}
         {tab==='employees'&&isAdmin&&<EmployeesView employees={employees} settings={settings} onRefresh={()=>loadData(session)}/>}
         {tab==='audit'&&isAdmin&&<AuditLogView employees={employees}/>}
+        {tab==='log'&&!isAdmin&&<EmpBoxkiLogView me={me}/>}
         {tab==='notif'&&isAdmin&&<NotificationSettingsView me={me}/>}
       </div>
 
