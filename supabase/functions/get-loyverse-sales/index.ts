@@ -227,6 +227,85 @@ Deno.serve(async (req) => {
     }
   }
 
+  // ── MODE: top items / categories stats ────────────────────────────────────
+  if (mode === 'top_items') {
+    const { from, to } = body as { from: string; to: string };
+    if (!from || !to) return json({ error: 'from و to مطلوبان' }, 400);
+
+    type LineItem = {
+      item_id: string; item_name: string; category_id?: string;
+      quantity: number; total_money: number;
+    };
+    type RawReceipt = { receipt_type: string; line_items: LineItem[] };
+
+    const allReceipts: RawReceipt[] = [];
+    let cursor: string | null = null;
+    try {
+      do {
+        const params = new URLSearchParams({ created_at_min: from, created_at_max: to, limit: '250' });
+        if (cursor) params.set('cursor', cursor);
+        const res = await fetch(`https://api.loyverse.com/v1.0/receipts?${params}`, {
+          headers: { Authorization: `Bearer ${loyToken}` },
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          return json({
+            error: (err as { errors?: { message: string }[] })?.errors?.[0]?.message ?? `Loyverse ${res.status}`,
+          }, 502);
+        }
+        const data = await res.json() as { receipts: RawReceipt[]; cursor?: string };
+        allReceipts.push(...(data.receipts ?? []));
+        cursor = data.cursor ?? null;
+      } while (cursor);
+
+      // Fetch categories for display names
+      const catMap: Record<string, string> = {};
+      try {
+        const catRes = await fetch('https://api.loyverse.com/v1.0/categories?limit=250', {
+          headers: { Authorization: `Bearer ${loyToken}` },
+        });
+        if (catRes.ok) {
+          const catData = await catRes.json() as { categories: { id: string; name: string }[] };
+          for (const c of catData.categories ?? []) catMap[c.id] = c.name;
+        }
+      } catch { /* ignore */ }
+
+      const itemMap: Record<string, { name: string; qty: number; revenue: number }> = {};
+      const catMap2: Record<string, { name: string; qty: number; revenue: number }> = {};
+
+      for (const r of allReceipts) {
+        if (r.receipt_type !== 'SALE') continue;
+        for (const li of r.line_items ?? []) {
+          const id = li.item_id ?? li.item_name;
+          if (!itemMap[id]) itemMap[id] = { name: li.item_name, qty: 0, revenue: 0 };
+          itemMap[id].qty += li.quantity ?? 0;
+          itemMap[id].revenue += li.total_money ?? 0;
+
+          if (li.category_id) {
+            const catName = catMap[li.category_id] ?? 'غير مصنف';
+            if (!catMap2[li.category_id]) catMap2[li.category_id] = { name: catName, qty: 0, revenue: 0 };
+            catMap2[li.category_id].qty += li.quantity ?? 0;
+            catMap2[li.category_id].revenue += li.total_money ?? 0;
+          }
+        }
+      }
+
+      const top_items = Object.entries(itemMap)
+        .map(([id, v]) => ({ id, name: v.name, qty: Math.round(v.qty), revenue: Math.round(v.revenue) }))
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 20);
+
+      const top_categories = Object.entries(catMap2)
+        .map(([id, v]) => ({ id, name: v.name, qty: Math.round(v.qty), revenue: Math.round(v.revenue) }))
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 10);
+
+      return json({ top_items, top_categories });
+    } catch (e) {
+      return json({ error: (e as Error).message }, 500);
+    }
+  }
+
   // ── MODE: daily total (single day, all payment methods) ───────────────────
   if (mode === 'daily_total') {
     const { date } = body as { date: string };
