@@ -1190,12 +1190,13 @@ function EmpDashboard({me,employees,settings,onRefresh}) {
   useEffect(()=>{
     const n=iraqNow();
     const today=n.toISOString().slice(0,10);
-    const lastWeek=new Date(n.getTime()-7*24*3600000).toISOString().slice(0,10);
-    sb.from('daily_sales').select('date,total_amount').in('date',[today,lastWeek])
+    const pm=new Date(n);pm.setUTCMonth(pm.getUTCMonth()-1);
+    const lastMonth=pm.toISOString().slice(0,10);
+    sb.from('daily_sales').select('date,total_amount').in('date',[today,lastMonth])
       .then(({data})=>{
         const map=(data||[]).reduce((a,r)=>({...a,[r.date]:r.total_amount}),{});
         setTodaySales(map[today]??null);
-        setLastWeekSales(map[lastWeek]??null);
+        setLastWeekSales(map[lastMonth]??null);
       });
   },[]);
 
@@ -1347,7 +1348,7 @@ function EmpDashboard({me,employees,settings,onRefresh}) {
                   <div className="text-lg font-black" style={{color:up?C.ok:C.err}}>
                     {up?'↑':'↓'} {pct}%
                   </div>
-                  <div className="text-xs" style={{color:C.txt,opacity:.4}}>مقارنة بالأسبوع الماضي</div>
+                  <div className="text-xs" style={{color:C.txt,opacity:.4}}>مقارنة بنفس اليوم الشهر الماضي</div>
                   <div className="text-xs mt-0.5 font-semibold" style={{color:C.txt,opacity:.35}}>{fmt(lastWeekSales)} د.ع</div>
                 </div>
               );
@@ -1364,7 +1365,7 @@ function EmpDashboard({me,employees,settings,onRefresh}) {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="text-xs w-14 text-left" style={{color:C.txt,opacity:.45}}>الأسبوع</div>
+                  <div className="text-xs w-14 text-left" style={{color:C.txt,opacity:.45}}>الشهر</div>
                   <div className="flex-1 rounded-full overflow-hidden" style={{height:6,background:C.soft}}>
                     <div className="h-full rounded-full" style={{width:`${Math.round(lastWeekSales/mx*100)}%`,background:C.border}}/>
                   </div>
@@ -2115,12 +2116,13 @@ function AdminDashboard({employees,settings,me,onRefresh}) {
   useEffect(()=>{
     const n=iraqNow();
     const today=n.toISOString().slice(0,10);
-    const lastWeek=new Date(n.getTime()-7*24*3600000).toISOString().slice(0,10);
-    sb.from('daily_sales').select('date,total_amount').in('date',[today,lastWeek])
+    const pm=new Date(n);pm.setUTCMonth(pm.getUTCMonth()-1);
+    const lastMonth=pm.toISOString().slice(0,10);
+    sb.from('daily_sales').select('date,total_amount').in('date',[today,lastMonth])
       .then(({data})=>{
         const map=(data||[]).reduce((a,r)=>({...a,[r.date]:r.total_amount}),{});
         setTodaySales(map[today]??null);
-        setLastWeekSales(map[lastWeek]??null);
+        setLastWeekSales(map[lastMonth]??null);
       });
   },[]);
   const empOnlyIds = new Set(empOnly.map(e => e.id));
@@ -2213,7 +2215,7 @@ function AdminDashboard({employees,settings,me,onRefresh}) {
                   <div className="text-lg font-black" style={{color:up?C.ok:C.err}}>
                     {up?'↑':'↓'} {pct}%
                   </div>
-                  <div className="text-xs" style={{color:C.txt,opacity:.4}}>مقارنة بالأسبوع الماضي</div>
+                  <div className="text-xs" style={{color:C.txt,opacity:.4}}>مقارنة بنفس اليوم الشهر الماضي</div>
                   <div className="text-xs mt-0.5 font-semibold" style={{color:C.txt,opacity:.35}}>{fmt(lastWeekSales)} د.ع</div>
                 </div>
               );
@@ -2230,7 +2232,7 @@ function AdminDashboard({employees,settings,me,onRefresh}) {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="text-xs w-14 text-left" style={{color:C.txt,opacity:.45}}>الأسبوع</div>
+                  <div className="text-xs w-14 text-left" style={{color:C.txt,opacity:.45}}>الشهر</div>
                   <div className="flex-1 rounded-full overflow-hidden" style={{height:6,background:C.soft}}>
                     <div className="h-full rounded-full" style={{width:`${Math.round(lastWeekSales/mx*100)}%`,background:C.border}}/>
                   </div>
@@ -4101,13 +4103,20 @@ function ProductsView() {
   const [synced,setSynced]=useState(null);
   const [lastSync,setLastSync]=useState(null);
   const [error,setError]=useState(null);
+  const abortRef=useRef(null);
 
   const load=async(force=false)=>{
+    // Cancel any previous background fetch to free the browser
+    if(abortRef.current) abortRef.current.abort();
+    const ctrl=new AbortController();
+    abortRef.current=ctrl;
+
     setError(null);
 
     // Phase 1: show DB data immediately — no waiting for Loyverse API
     if(!force){
       const {data:quick}=await sb.from('products').select('*').order('name');
+      if(ctrl.signal.aborted) return;
       if(quick&&quick.length>0){
         setProducts(quick);
         setLoading(false);
@@ -4125,17 +4134,22 @@ function ProductsView() {
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':`Bearer ${session.access_token}`},
         body:JSON.stringify({force}),
+        signal:ctrl.signal,
       });
       const data=await res.json();
+      if(ctrl.signal.aborted) return;
       if(data.error){setError(data.error);return;}
       setProducts(data.products??[]);
       setLastSync(new Date());
       setSynced(data.cached?'من الذاكرة المؤقتة':'محدّث من لويرفز');
-    }catch(e){setError(e.message);}
-    finally{setLoading(false);}
+    }catch(e){if(e.name!=='AbortError')setError(e.message);}
+    finally{if(!ctrl.signal.aborted)setLoading(false);}
   };
 
-  useEffect(()=>{load();},[]);
+  useEffect(()=>{
+    load();
+    return()=>{if(abortRef.current)abortRef.current.abort();};
+  },[]);
   useEffect(()=>{
     const t=setInterval(()=>load(false),5*60*1000);
     return()=>clearInterval(t);
