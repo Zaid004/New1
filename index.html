@@ -4372,7 +4372,7 @@ function StatsView() {
       const res=await fetch(`${SUPA_URL}/functions/v1/get-loyverse-sales`,{
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':`Bearer ${session.access_token}`},
-        body:JSON.stringify({mode:'top_items',...r}),
+        body:JSON.stringify({mode:'top_items',compare:true,...r}),
       });
       const d=await res.json();
       if(d.error){setError(d.error);return;}
@@ -4391,8 +4391,32 @@ function StatsView() {
     {id:'custom',label:'مخصص'},
   ];
 
+  const fmtK=v=>v>=1000000?(v/1000000).toFixed(1).replace(/\.0$/,'')+'m':v>=1000?Math.round(v/1000)+'k':String(Math.round(v));
+  const pct=(cur,prev)=>prev==null||prev===0?null:Math.round((cur-prev)/prev*100);
+
+  const totalRev=data?.total_revenue??0;
+  const prevRev=data?.prev_revenue??null;
+  const recCount=data?.receipt_count??0;
+  const prevRec=data?.prev_receipts??null;
+  const avgOrder=data?.avg_order??0;
+  const prevAvg=(prevRev!=null&&prevRec!=null&&prevRec>0)?Math.round(prevRev/prevRec):null;
+  const pctRev=pct(totalRev,prevRev);
+  const pctRec=pct(recCount,prevRec);
+  const pctAvg=pct(avgOrder,prevAvg);
+
+  const dailyEntries=Object.entries(data?.daily??{}).sort(([a],[b])=>a.localeCompare(b));
+  const maxDaily=Math.max(...dailyEntries.map(([,v])=>Math.max(0,v)),1);
+  const showDaily=dailyEntries.length>1;
+
   const maxItem=data?.top_items?.[0]?.revenue||1;
   const maxCat=data?.top_categories?.[0]?.revenue||1;
+  const catTotal=totalRev||1;
+
+  const PctBadge=({p})=>p==null?null:(
+    <div className="text-xs font-bold mt-0.5" style={{color:p>=0?C.ok:C.err}}>
+      {p>=0?'▲':'▼'} {Math.abs(p)}%
+    </div>
+  );
 
   return (
     <div>
@@ -4444,6 +4468,45 @@ function StatsView() {
 
       {!loading&&data&&(
         <div className="space-y-6">
+
+          {/* KPI summary cards */}
+          <div className="flex gap-3 overflow-x-auto pb-1" style={{scrollbarWidth:'none'}}>
+            {[
+              {label:'إجمالي المبيعات',val:fmt(totalRev),p:pctRev},
+              {label:'عدد الفواتير',val:fmt(recCount),p:pctRec},
+              {label:'متوسط الفاتورة',val:fmt(avgOrder),p:pctAvg},
+            ].map(({label,val,p})=>(
+              <div key={label} className="rounded-2xl p-4 flex-shrink-0" style={{background:C.card,border:`1px solid ${C.border}`,minWidth:'130px'}}>
+                <div className="text-xs opacity-50 mb-1" style={{color:C.txt}}>{label}</div>
+                <div className="text-sm font-black" style={{color:C.primary}}>{val}</div>
+                <PctBadge p={p}/>
+              </div>
+            ))}
+          </div>
+
+          {/* Daily trend chart */}
+          {showDaily&&(
+            <div>
+              <div className="font-black text-sm mb-3" style={{color:C.txt}}>المبيعات اليومية</div>
+              <div className="rounded-2xl p-4" style={{background:C.card,border:`1px solid ${C.border}`}}>
+                <div className="flex items-end gap-1.5 overflow-x-auto" style={{scrollbarWidth:'none',height:'96px'}}>
+                  {dailyEntries.map(([date,val])=>{
+                    const barH=Math.max(4,Math.round(Math.max(0,val)/maxDaily*72));
+                    return (
+                      <div key={date} className="flex flex-col items-center justify-end flex-shrink-0" style={{minWidth:'30px',height:'96px'}}>
+                        <div className="text-center w-full" style={{color:C.primary,fontSize:'8px',fontWeight:'bold',marginBottom:'2px',lineHeight:1}}>
+                          {val>0?fmtK(val):''}
+                        </div>
+                        <div className="w-5 rounded-t-md" style={{height:`${barH}px`,background:C.primary,opacity:.85}}/>
+                        <div className="text-center mt-1 w-full" style={{color:C.txt,opacity:.5,fontSize:'8px'}}>{date.slice(5).replace('-','/')}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Top items */}
           {(data.top_items||[]).length>0&&(
             <div>
@@ -4472,7 +4535,7 @@ function StatsView() {
             </div>
           )}
 
-          {/* Top categories */}
+          {/* Top categories with % of total */}
           {(data.top_categories||[]).length>0&&(
             <div>
               <div className="font-black text-sm mb-3" style={{color:C.txt}}>أكثر الأصناف مبيعاً</div>
@@ -4481,7 +4544,12 @@ function StatsView() {
                   <div key={cat.id||i} className="rounded-2xl p-3" style={{background:C.card,border:`1px solid ${C.border}`}}>
                     <div className="flex items-center justify-between mb-1.5">
                       <div className="text-xs font-bold" style={{color:C.txt}}>{cat.name}</div>
-                      <div className="text-xs font-black" style={{color:C.ok}}>{fmt(cat.revenue)}</div>
+                      <div className="flex items-center gap-2">
+                        <div className="text-xs font-bold px-1.5 py-0.5 rounded-lg" style={{background:C.soft,color:C.txt,opacity:.7}}>
+                          {Math.round(cat.revenue/catTotal*100)}%
+                        </div>
+                        <div className="text-xs font-black" style={{color:C.ok}}>{fmt(cat.revenue)}</div>
+                      </div>
                     </div>
                     <div className="h-1.5 rounded-full overflow-hidden" style={{background:C.soft}}>
                       <div className="h-full rounded-full" style={{

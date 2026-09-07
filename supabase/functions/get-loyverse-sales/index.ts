@@ -229,10 +229,9 @@ Deno.serve(async (req) => {
 
   // ── MODE: top items / categories stats ────────────────────────────────────
   if (mode === 'top_items') {
-    const { from, to } = body as { from: string; to: string };
+    const { from, to, compare } = body as { from: string; to: string; compare?: boolean };
     if (!from || !to) return json({ error: 'from و to مطلوبان' }, 400);
 
-    // Convert to UTC ISO (Loyverse rejects +03:00 timezone offsets in query params)
     const fromUTC = new Date(from).toISOString();
     const toUTC   = new Date(to).toISOString();
 
@@ -240,7 +239,12 @@ Deno.serve(async (req) => {
       item_id: string; item_name: string;
       quantity: number; gross_total_money?: number; total_money?: number; price?: number;
     };
-    type RawReceipt = { receipt_type: string; line_items: LineItem[] };
+    type RawReceipt = {
+      receipt_type: string;
+      line_items: LineItem[];
+      total_money?: number;
+      created_at?: string;
+    };
 
     const allReceipts: RawReceipt[] = [];
     let cursor: string | null = null;
@@ -262,7 +266,6 @@ Deno.serve(async (req) => {
         cursor = data.cursor ?? null;
       } while (cursor);
 
-      // Load item→category mapping from cached products table
       const itemCatMap: Record<string, { cat_id: string; cat_name: string }> = {};
       try {
         const { data: prods } = await supabase.from('products').select('id, category_id, category_name');
@@ -273,24 +276,43 @@ Deno.serve(async (req) => {
 
       const itemMap: Record<string, { name: string; qty: number; revenue: number }> = {};
       const catMap2: Record<string, { name: string; qty: number; revenue: number }> = {};
+      let totalRevenue = 0;
+      let receiptCount = 0;
+      const daily: Record<string, number> = {};
 
       for (const r of allReceipts) {
-        if (r.receipt_type !== 'SALE') continue;
-        for (const li of r.line_items ?? []) {
-          const id = li.item_id ?? li.item_name;
-          const rev = li.gross_total_money ?? li.total_money ?? ((li.price ?? 0) * (li.quantity ?? 0));
-          if (!itemMap[id]) itemMap[id] = { name: li.item_name, qty: 0, revenue: 0 };
-          itemMap[id].qty += li.quantity ?? 0;
-          itemMap[id].revenue += rev;
-
-          const catInfo = li.item_id ? itemCatMap[li.item_id] : undefined;
-          if (catInfo) {
-            if (!catMap2[catInfo.cat_id]) catMap2[catInfo.cat_id] = { name: catInfo.cat_name, qty: 0, revenue: 0 };
-            catMap2[catInfo.cat_id].qty += li.quantity ?? 0;
-            catMap2[catInfo.cat_id].revenue += rev;
+        if (r.receipt_type === 'SALE') {
+          totalRevenue += r.total_money ?? 0;
+          receiptCount++;
+          if (r.created_at) {
+            const iraqTs = new Date(new Date(r.created_at).getTime() + 3 * 3600000);
+            const ds = iraqTs.toISOString().slice(0, 10);
+            daily[ds] = (daily[ds] ?? 0) + (r.total_money ?? 0);
+          }
+          for (const li of r.line_items ?? []) {
+            const id = li.item_id ?? li.item_name;
+            const rev = li.gross_total_money ?? li.total_money ?? ((li.price ?? 0) * (li.quantity ?? 0));
+            if (!itemMap[id]) itemMap[id] = { name: li.item_name, qty: 0, revenue: 0 };
+            itemMap[id].qty += li.quantity ?? 0;
+            itemMap[id].revenue += rev;
+            const catInfo = li.item_id ? itemCatMap[li.item_id] : undefined;
+            if (catInfo) {
+              if (!catMap2[catInfo.cat_id]) catMap2[catInfo.cat_id] = { name: catInfo.cat_name, qty: 0, revenue: 0 };
+              catMap2[catInfo.cat_id].qty += li.quantity ?? 0;
+              catMap2[catInfo.cat_id].revenue += rev;
+            }
+          }
+        } else if (r.receipt_type === 'REFUND') {
+          totalRevenue -= Math.abs(r.total_money ?? 0);
+          if (r.created_at) {
+            const iraqTs = new Date(new Date(r.created_at).getTime() + 3 * 3600000);
+            const ds = iraqTs.toISOString().slice(0, 10);
+            daily[ds] = (daily[ds] ?? 0) - Math.abs(r.total_money ?? 0);
           }
         }
       }
+
+      for (const d in daily) daily[d] = Math.round(daily[d]);
 
       const top_items = Object.entries(itemMap)
         .map(([id, v]) => ({ id, name: v.name, qty: Math.round(v.qty), revenue: Math.round(v.revenue) }))
@@ -302,7 +324,45 @@ Deno.serve(async (req) => {
         .sort((a, b) => b.revenue - a.revenue)
         .slice(0, 10);
 
-      return json({ top_items, top_categories });
+      // Fetch previous period for comparison (same duration, shifted back)
+      let prevRevenue: number | null = null;
+      let prevReceipts: number | null = null;
+      if (compare) {
+        const fromMs = new Date(fromUTC).getTime();
+        const toMs   = new Date(toUTC).getTime();
+        const dur    = toMs - fromMs;
+        const pFrom  = new Date(fromMs - dur).toISOString();
+        const pTo    = new Date(toMs - dur).toISOString();
+        let pTotal = 0, pCount = 0, pCursor: string | null = null;
+        try {
+          do {
+            const pp = new URLSearchParams({ created_at_min: pFrom, created_at_max: pTo, limit: '250' });
+            if (pCursor) pp.set('cursor', pCursor);
+            const pRes = await fetch(`https://api.loyverse.com/v1.0/receipts?${pp}`, {
+              headers: { Authorization: `Bearer ${loyToken}` },
+            });
+            if (!pRes.ok) break;
+            const pd = await pRes.json() as { receipts: { total_money: number; receipt_type: string }[]; cursor?: string };
+            for (const r of pd.receipts ?? []) {
+              if (r.receipt_type === 'SALE')        { pTotal += r.total_money ?? 0; pCount++; }
+              else if (r.receipt_type === 'REFUND') pTotal -= Math.abs(r.total_money ?? 0);
+            }
+            pCursor = pd.cursor ?? null;
+          } while (pCursor);
+          prevRevenue  = Math.round(pTotal);
+          prevReceipts = pCount;
+        } catch { /* ignore comparison errors */ }
+      }
+
+      return json({
+        top_items,
+        top_categories,
+        total_revenue: Math.round(totalRevenue),
+        receipt_count: receiptCount,
+        avg_order: receiptCount > 0 ? Math.round(totalRevenue / receiptCount) : 0,
+        daily,
+        ...(prevRevenue !== null ? { prev_revenue: prevRevenue, prev_receipts: prevReceipts } : {}),
+      });
     } catch (e) {
       return json({ error: (e as Error).message }, 500);
     }
