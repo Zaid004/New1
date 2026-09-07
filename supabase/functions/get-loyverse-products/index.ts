@@ -52,7 +52,11 @@ Deno.serve(async (req) => {
       item_name: string;
       category_id?: string;
       image_url?: string;
-      variants: { id: string; price?: number }[];
+      variants: {
+        id: string;
+        price?: number;
+        stores?: { store_id: string; in_stock?: number }[];
+      }[];
     };
     const allItems: LoyItem[] = [];
     let cursor: string | null = null;
@@ -85,29 +89,7 @@ Deno.serve(async (req) => {
       }
     } catch { /* ignore */ }
 
-    // 3. Fetch inventory levels
-    const invMap: Record<string, number> = {};
-    try {
-      let invCursor: string | null = null;
-      do {
-        const params = new URLSearchParams({ limit: '250' });
-        if (invCursor) params.set('cursor', invCursor);
-        const invRes = await fetch(`https://api.loyverse.com/v1.0/inventory?${params}`, {
-          headers: { Authorization: `Bearer ${loyToken}` },
-        });
-        if (!invRes.ok) break;
-        const invData = await invRes.json() as {
-          inventory_levels: { variant_id: string; in_stock: number }[];
-          cursor?: string;
-        };
-        for (const iv of invData.inventory_levels ?? []) {
-          invMap[iv.variant_id] = (invMap[iv.variant_id] ?? 0) + (iv.in_stock ?? 0);
-        }
-        invCursor = invData.cursor ?? null;
-      } while (invCursor);
-    } catch { /* ignore */ }
-
-    // 4. Build records and upsert in batches of 100
+    // 3. Build records — stock comes from variant.stores[].in_stock (included in items response)
     const now = new Date().toISOString();
     const records = allItems.map(item => ({
       id: item.id,
@@ -116,7 +98,10 @@ Deno.serve(async (req) => {
       category_name: item.category_id ? (catMap[item.category_id] ?? null) : null,
       image_url: item.image_url ?? null,
       price: item.variants[0]?.price ?? null,
-      stock: item.variants.reduce((s, v) => s + (invMap[v.id] ?? 0), 0),
+      stock: item.variants.reduce(
+        (total, v) => total + (v.stores ?? []).reduce((s, store) => s + (store.in_stock ?? 0), 0),
+        0,
+      ),
       synced_at: now,
     }));
 
