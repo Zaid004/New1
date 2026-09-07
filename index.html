@@ -4230,7 +4230,25 @@ function ProductsView() {
               <div className="p-2.5">
                 <div className="font-bold text-xs leading-snug mb-1" style={{color:C.txt}}>{p.name}</div>
                 {p.category_name&&<div className="text-xs mb-1 opacity-50" style={{color:C.txt}}>{p.category_name}</div>}
-                {p.price!=null&&<div className="text-xs font-black" style={{color:C.primary}}>{fmt(p.price)} د.ع</div>}
+                {p.price!=null&&<div className="text-xs font-black mb-1" style={{color:C.primary}}>{fmt(p.price)} د.ع</div>}
+                {(()=>{
+                  const vars=(p.variants&&typeof p.variants==='string'?JSON.parse(p.variants):p.variants)??[];
+                  const named=vars.filter(v=>v.name);
+                  if(named.length<2) return null;
+                  const show=named.slice(0,5);
+                  const rest=named.length-5;
+                  return (
+                    <div style={{borderTop:`1px solid ${C.border}`,paddingTop:5,marginTop:2}}>
+                      {show.map((v,i)=>(
+                        <div key={v.id||i} className="flex justify-between items-center" style={{marginBottom:2}}>
+                          <span className="text-xs" style={{color:C.txt,opacity:.7,maxWidth:'60%',overflow:'hidden',whiteSpace:'nowrap',textOverflow:'ellipsis'}}>{v.name}</span>
+                          <span className="text-xs font-black" style={{color:v.stock>0?C.ok:C.err}}>{v.stock>0?v.stock:'نفد'}</span>
+                        </div>
+                      ))}
+                      {rest>0&&<div className="text-xs opacity-40" style={{color:C.txt}}>و {rest} أخرى…</div>}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           ))}

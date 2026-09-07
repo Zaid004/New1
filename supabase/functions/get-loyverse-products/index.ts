@@ -47,16 +47,21 @@ Deno.serve(async (req) => {
 
   try {
     // 1. Fetch all items (paginated)
+    type LoyVariant = {
+      id: string;
+      price?: number;
+      option1_value?: string;
+      option2_value?: string;
+      option3_value?: string;
+      sku?: string;
+      stores?: { store_id: string; in_stock?: number }[];
+    };
     type LoyItem = {
       id: string;
       item_name: string;
       category_id?: string;
       image_url?: string;
-      variants: {
-        id: string;
-        price?: number;
-        stores?: { store_id: string; in_stock?: number }[];
-      }[];
+      variants: LoyVariant[];
     };
     const allItems: LoyItem[] = [];
     let cursor: string | null = null;
@@ -90,20 +95,31 @@ Deno.serve(async (req) => {
     } catch { /* ignore */ }
 
     // 3. Build records — stock comes from variant.stores[].in_stock (included in items response)
+    const varName = (v: LoyVariant) =>
+      [v.option1_value, v.option2_value, v.option3_value].filter(Boolean).join(' / ') || v.sku || null;
+
     const now = new Date().toISOString();
-    const records = allItems.map(item => ({
-      id: item.id,
-      name: item.item_name,
-      category_id: item.category_id ?? null,
-      category_name: item.category_id ? (catMap[item.category_id] ?? null) : null,
-      image_url: item.image_url ?? null,
-      price: item.variants[0]?.price ?? null,
-      stock: item.variants.reduce(
-        (total, v) => total + (v.stores ?? []).reduce((s, store) => s + (store.in_stock ?? 0), 0),
-        0,
-      ),
-      synced_at: now,
-    }));
+    const records = allItems.map(item => {
+      const variantStock = (v: LoyVariant) =>
+        (v.stores ?? []).reduce((s, store) => s + (store.in_stock ?? 0), 0);
+      const variantsData = item.variants.map(v => ({
+        id: v.id,
+        name: varName(v),
+        price: v.price ?? null,
+        stock: variantStock(v),
+      }));
+      return {
+        id: item.id,
+        name: item.item_name,
+        category_id: item.category_id ?? null,
+        category_name: item.category_id ? (catMap[item.category_id] ?? null) : null,
+        image_url: item.image_url ?? null,
+        price: item.variants[0]?.price ?? null,
+        stock: variantsData.reduce((t, v) => t + v.stock, 0),
+        variants: JSON.stringify(variantsData),
+        synced_at: now,
+      };
+    });
 
     for (let i = 0; i < records.length; i += 100) {
       await supabase.from('products').upsert(records.slice(i, i + 100), { onConflict: 'id' });
