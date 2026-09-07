@@ -184,11 +184,55 @@ Deno.serve(async (req) => {
       };
     });
 
+    // ── Image caching: download Loyverse images → Supabase Storage (CDN) ──────
+    // Only download images not yet cached (up to 30 per sync to stay within timeout).
+    // Already-cached products keep their Storage URL from the previous DB record.
+    const BUCKET = 'product-images';
+
+    // 1. Load already-cached Storage URLs from DB
+    const { data: cachedImgs } = await supabase
+      .from('products')
+      .select('id, image_url')
+      .not('image_url', 'is', null)
+      .not('image_url', 'like', '%api.loyverse.com%');
+
+    const cachedMap: Record<string, string> = {};
+    for (const row of cachedImgs ?? []) {
+      if (row.image_url) cachedMap[row.id] = row.image_url;
+    }
+
+    // 2. Apply cached URLs; download & cache up to 30 new images
+    let downloaded = 0;
+    for (const rec of records) {
+      if (cachedMap[rec.id]) {
+        rec.image_url = cachedMap[rec.id]; // already in CDN
+        continue;
+      }
+      if (downloaded >= 30) continue;
+      if (!rec.image_url?.includes('api.loyverse.com')) continue;
+
+      try {
+        const imgRes = await fetch(rec.image_url, { signal: AbortSignal.timeout(8000) });
+        if (!imgRes.ok) continue;
+        const contentType = imgRes.headers.get('content-type') || 'image/jpeg';
+        const buf = await imgRes.arrayBuffer();
+        const { error: upErr } = await supabase.storage
+          .from(BUCKET)
+          .upload(rec.id, buf, { contentType, upsert: false });
+        if (!upErr || (upErr as { message?: string }).message?.includes('exists')) {
+          const { data: { publicUrl } } = supabase.storage.from(BUCKET).getPublicUrl(rec.id);
+          rec.image_url = publicUrl;
+          downloaded++;
+        }
+      } catch { /* ignore — keep Loyverse URL for now */ }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     for (let i = 0; i < records.length; i += 100) {
       await supabase.from('products').upsert(records.slice(i, i + 100), { onConflict: 'id' });
     }
 
-    return json({ products: records, cached: false, total: records.length });
+    return json({ products: records, cached: false, total: records.length, images_cached: downloaded });
   } catch (e) {
     return json({ error: (e as Error).message }, 500);
   }
