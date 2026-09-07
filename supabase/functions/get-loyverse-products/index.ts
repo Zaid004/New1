@@ -38,7 +38,7 @@ Deno.serve(async (req) => {
       .limit(1);
     if (latest && latest.length > 0) {
       const ageMin = (Date.now() - new Date(latest[0].synced_at).getTime()) / 60000;
-      if (ageMin < 30) {
+      if (ageMin < 5) {
         const { data: cached } = await supabase.from('products').select('*').order('name');
         return json({ products: cached ?? [], cached: true });
       }
@@ -49,6 +49,7 @@ Deno.serve(async (req) => {
     // 1. Fetch all items (paginated)
     type LoyVariant = {
       id: string;
+      default_price?: number;
       price?: number;
       option1_value?: string;
       option2_value?: string;
@@ -94,18 +95,40 @@ Deno.serve(async (req) => {
       }
     } catch { /* ignore */ }
 
-    // 3. Build records — stock comes from variant.stores[].in_stock (included in items response)
+    // 3. Fetch inventory via dedicated endpoint using explicit variant_ids (most reliable)
+    const invMap: Record<string, number> = {};
+    try {
+      const allVarIds = allItems.flatMap(item => item.variants.map(v => v.id));
+      for (let i = 0; i < allVarIds.length; i += 100) {
+        const batch = allVarIds.slice(i, i + 100).join(',');
+        const invRes = await fetch(
+          `https://api.loyverse.com/v1.0/inventory?variant_ids=${encodeURIComponent(batch)}`,
+          { headers: { Authorization: `Bearer ${loyToken}` } },
+        );
+        if (!invRes.ok) continue;
+        const invData = await invRes.json() as {
+          inventory_levels?: { variant_id: string; in_stock: number }[];
+        };
+        for (const iv of invData.inventory_levels ?? []) {
+          invMap[iv.variant_id] = (invMap[iv.variant_id] ?? 0) + (iv.in_stock ?? 0);
+        }
+      }
+    } catch { /* ignore */ }
+
+    // 4. Build records
     const varName = (v: LoyVariant) =>
       [v.option1_value, v.option2_value, v.option3_value].filter(Boolean).join(' / ') || v.sku || null;
 
     const now = new Date().toISOString();
     const records = allItems.map(item => {
-      const variantStock = (v: LoyVariant) =>
-        (v.stores ?? []).reduce((s, store) => s + (store.in_stock ?? 0), 0);
+      const variantStock = (v: LoyVariant) => {
+        if (invMap[v.id] !== undefined) return invMap[v.id];
+        return (v.stores ?? []).reduce((s, store) => s + (store.in_stock ?? 0), 0);
+      };
       const variantsData = item.variants.map(v => ({
         id: v.id,
         name: varName(v),
-        price: v.price ?? null,
+        price: v.default_price ?? v.price ?? null,
         stock: variantStock(v),
       }));
       return {
@@ -114,7 +137,7 @@ Deno.serve(async (req) => {
         category_id: item.category_id ?? null,
         category_name: item.category_id ? (catMap[item.category_id] ?? null) : null,
         image_url: item.image_url ?? null,
-        price: item.variants[0]?.price ?? null,
+        price: item.variants[0]?.default_price ?? item.variants[0]?.price ?? null,
         stock: variantsData.reduce((t, v) => t + v.stock, 0),
         variants: JSON.stringify(variantsData),
         synced_at: now,
