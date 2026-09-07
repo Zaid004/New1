@@ -201,30 +201,37 @@ Deno.serve(async (req) => {
       if (row.image_url) cachedMap[row.id] = row.image_url;
     }
 
-    // 2. Apply cached URLs; download & cache up to 30 new images
-    let downloaded = 0;
+    // 2. Apply cached URLs; collect records needing download (up to 50)
     for (const rec of records) {
-      if (cachedMap[rec.id]) {
-        rec.image_url = cachedMap[rec.id]; // already in CDN
-        continue;
-      }
-      if (downloaded >= 30) continue;
-      if (!rec.image_url?.includes('api.loyverse.com')) continue;
+      if (cachedMap[rec.id]) rec.image_url = cachedMap[rec.id];
+    }
 
-      try {
-        const imgRes = await fetch(rec.image_url, { signal: AbortSignal.timeout(8000) });
-        if (!imgRes.ok) continue;
+    const toDownload = records.filter(r => r.image_url?.includes('api.loyverse.com')).slice(0, 50);
+
+    // Parallel download + upload (Promise.allSettled so one failure doesn't block others)
+    const results = await Promise.allSettled(
+      toDownload.map(async rec => {
+        const imgRes = await fetch(rec.image_url!, { signal: AbortSignal.timeout(10000) });
+        if (!imgRes.ok) throw new Error(`HTTP ${imgRes.status}`);
         const contentType = imgRes.headers.get('content-type') || 'image/jpeg';
         const buf = await imgRes.arrayBuffer();
         const { error: upErr } = await supabase.storage
           .from(BUCKET)
           .upload(rec.id, buf, { contentType, upsert: false });
-        if (!upErr || (upErr as { message?: string }).message?.includes('exists')) {
-          const { data: { publicUrl } } = supabase.storage.from(BUCKET).getPublicUrl(rec.id);
-          rec.image_url = publicUrl;
-          downloaded++;
-        }
-      } catch { /* ignore — keep Loyverse URL for now */ }
+        if (upErr && !(upErr as { message?: string }).message?.includes('exists')) throw upErr;
+        const { data: { publicUrl } } = supabase.storage.from(BUCKET).getPublicUrl(rec.id);
+        return { id: rec.id, publicUrl };
+      })
+    );
+
+    // Apply successful CDN URLs back to records
+    const cdnMap: Record<string, string> = {};
+    for (const r of results) {
+      if (r.status === 'fulfilled') cdnMap[r.value.id] = r.value.publicUrl;
+    }
+    let downloaded = 0;
+    for (const rec of records) {
+      if (cdnMap[rec.id]) { rec.image_url = cdnMap[rec.id]; downloaded++; }
     }
     // ─────────────────────────────────────────────────────────────────────────
 

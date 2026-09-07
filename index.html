@@ -4103,7 +4103,22 @@ function ProductsView() {
   const [error,setError]=useState(null);
 
   const load=async(force=false)=>{
-    setLoading(true);setError(null);
+    setError(null);
+
+    // Phase 1: show DB data immediately — no waiting for Loyverse API
+    if(!force){
+      const {data:quick}=await sb.from('products').select('*').order('name');
+      if(quick&&quick.length>0){
+        setProducts(quick);
+        setLoading(false);
+        setLastSync(new Date());
+        setSynced('من الذاكرة المؤقتة');
+      }
+    } else {
+      setLoading(true);
+    }
+
+    // Phase 2: sync with Loyverse in background; update display when done
     try{
       const {data:{session}}=await sb.auth.getSession();
       const res=await fetch(`${SUPA_URL}/functions/v1/get-loyverse-products`,{
