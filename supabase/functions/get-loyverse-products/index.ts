@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { Image } from 'https://deno.land/x/imagescript@1.2.15/mod.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -201,23 +202,36 @@ Deno.serve(async (req) => {
       if (row.image_url) cachedMap[row.id] = row.image_url;
     }
 
-    // 2. Apply cached URLs; collect records needing download (up to 50)
+    // 2. Apply cached URLs (skip when force=true so existing images get re-compressed)
     for (const rec of records) {
-      if (cachedMap[rec.id]) rec.image_url = cachedMap[rec.id];
+      if (!forceRefresh && cachedMap[rec.id]) rec.image_url = cachedMap[rec.id];
     }
 
     const toDownload = records.filter(r => r.image_url?.includes('api.loyverse.com')).slice(0, 50);
 
-    // Parallel download + upload (Promise.allSettled so one failure doesn't block others)
+    // Parallel download + resize to 300px + JPEG 80 + upload
     const results = await Promise.allSettled(
       toDownload.map(async rec => {
         const imgRes = await fetch(rec.image_url!, { signal: AbortSignal.timeout(10000) });
         if (!imgRes.ok) throw new Error(`HTTP ${imgRes.status}`);
-        const contentType = imgRes.headers.get('content-type') || 'image/jpeg';
-        const buf = await imgRes.arrayBuffer();
+        const raw = await imgRes.arrayBuffer();
+
+        // Compress: decode → resize max 300px → JPEG 80
+        let finalBuf: ArrayBuffer = raw;
+        let finalType = 'image/jpeg';
+        try {
+          const img = await Image.decode(new Uint8Array(raw));
+          const maxDim = 300;
+          if (img.width > maxDim || img.height > maxDim) {
+            if (img.width >= img.height) img.resize(maxDim, Image.RESIZE_AUTO);
+            else img.resize(Image.RESIZE_AUTO, maxDim);
+          }
+          finalBuf = (await img.encodeJPEG(80)).buffer as ArrayBuffer;
+        } catch { /* fallback to original if decode fails */ }
+
         const { error: upErr } = await supabase.storage
           .from(BUCKET)
-          .upload(rec.id, buf, { contentType, upsert: false });
+          .upload(rec.id, finalBuf, { contentType: finalType, upsert: true });
         if (upErr && !(upErr as { message?: string }).message?.includes('exists')) throw upErr;
         const { data: { publicUrl } } = supabase.storage.from(BUCKET).getPublicUrl(rec.id);
         return { id: rec.id, publicUrl };
