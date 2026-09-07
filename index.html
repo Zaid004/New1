@@ -4103,22 +4103,27 @@ function ProductsView() {
   const [synced,setSynced]=useState(null);
   const [lastSync,setLastSync]=useState(null);
   const [error,setError]=useState(null);
+  const [visibleCount,setVisibleCount]=useState(50);
   const abortRef=useRef(null);
 
+  const fetchFromDB=async(ctrl)=>{
+    const {data}=await sb.from('products').select('*').order('name');
+    if(ctrl&&ctrl.signal.aborted) return null;
+    return data||[];
+  };
+
   const load=async(force=false)=>{
-    // Cancel any previous background fetch to free the browser
     if(abortRef.current) abortRef.current.abort();
     const ctrl=new AbortController();
     abortRef.current=ctrl;
-
     setError(null);
 
-    // Phase 1: show DB data immediately — no waiting for Loyverse API
+    // Phase 1: show DB data immediately
     if(!force){
-      const {data:quick}=await sb.from('products').select('*').order('name');
-      if(ctrl.signal.aborted) return;
-      if(quick&&quick.length>0){
-        setProducts(quick);
+      const rows=await fetchFromDB(ctrl);
+      if(!rows) return;
+      if(rows.length>0){
+        setProducts(rows);
         setLoading(false);
         setLastSync(new Date());
         setSynced('من الذاكرة المؤقتة');
@@ -4127,21 +4132,28 @@ function ProductsView() {
       setLoading(true);
     }
 
-    // Phase 2: sync with Loyverse in background; update display when done
+    // Phase 2: trigger sync, avoid parsing large response — re-query DB after
     try{
       const {data:{session}}=await sb.auth.getSession();
+      if(ctrl.signal.aborted) return;
       const res=await fetch(`${SUPA_URL}/functions/v1/get-loyverse-products`,{
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':`Bearer ${session.access_token}`},
         body:JSON.stringify({force}),
         signal:ctrl.signal,
       });
-      const data=await res.json();
       if(ctrl.signal.aborted) return;
-      if(data.error){setError(data.error);return;}
-      setProducts(data.products??[]);
+      // Read a small slice to check for errors, avoid parsing the full payload
+      const txt=await res.text();
+      if(ctrl.signal.aborted) return;
+      let cached=false;
+      try{ const m=JSON.parse(txt); if(m.error){setError(m.error);return;} cached=!!m.cached; }catch{}
+      // Always re-query DB so we get the freshest data without a large client parse
+      const rows=await fetchFromDB(ctrl);
+      if(!rows) return;
+      setProducts(rows);
       setLastSync(new Date());
-      setSynced(data.cached?'من الذاكرة المؤقتة':'محدّث من لويرفز');
+      setSynced(cached?'من الذاكرة المؤقتة':'محدّث من لويرفز');
     }catch(e){if(e.name!=='AbortError')setError(e.message);}
     finally{if(!ctrl.signal.aborted)setLoading(false);}
   };
@@ -4166,6 +4178,11 @@ function ProductsView() {
     const mc=!catFilter||p.category_name===catFilter;
     return ms&&mc;
   });
+  // Reset pagination when search/category changes
+  const prevFilterKey=useRef('');
+  const filterKey=search+'|'+catFilter;
+  if(prevFilterKey.current!==filterKey){prevFilterKey.current=filterKey;if(visibleCount!==50)setVisibleCount(50);}
+  const visible=filtered.slice(0,visibleCount);
 
   return (
     <div>
@@ -4244,13 +4261,12 @@ function ProductsView() {
 
       {!loading&&(
         <div className="space-y-2">
-          {filtered.map((p,pi)=>{
+          {visible.map((p,pi)=>{
             const vars=(p.variants&&typeof p.variants==='string'?JSON.parse(p.variants):p.variants)??[];
             const open=expandedId===p.id;
             return (
               <div key={p.id} className="rounded-2xl overflow-hidden" style={{background:C.card,border:`1px solid ${C.border}`}}>
                 <div style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px'}}>
-                  {/* Thumbnail — shimmer shell hides behind image; stops animating on load */}
                   <div className="img-shell" style={{width:64,height:64,flexShrink:0,borderRadius:12,overflow:'hidden',position:'relative',display:'flex',alignItems:'center',justifyContent:'center'}}>
                     {p.image_url?(
                       <img src={p.image_url} alt={p.name}
@@ -4263,7 +4279,6 @@ function ProductsView() {
                       <Ic n="img" s={24} c={C.border}/>
                     )}
                   </div>
-                  {/* Info */}
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontWeight:700,fontSize:13,color:C.txt,lineHeight:1.3,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical'}}>{p.name}</div>
                     {p.category_name&&<div style={{fontSize:11,color:C.txt,opacity:.45,marginTop:2}}>{p.category_name}</div>}
@@ -4276,7 +4291,6 @@ function ProductsView() {
                       </div>
                     </div>
                   </div>
-                  {/* Variants toggle */}
                   {vars.length>=2&&(
                     <button onClick={e=>{e.stopPropagation();setExpandedId(open?null:p.id);}}
                       style={{flexShrink:0,display:'flex',flexDirection:'column',alignItems:'center',gap:2,padding:'6px 8px',borderRadius:10,background:open?C.soft:'transparent',border:'none',cursor:'pointer',color:C.primary}}>
@@ -4306,6 +4320,13 @@ function ProductsView() {
               <Ic n="grid" s={40} c="var(--muted)"/>
               <div className="mt-2 text-sm">لا توجد منتجات</div>
             </div>
+          )}
+          {visible.length<filtered.length&&(
+            <button onClick={()=>setVisibleCount(c=>c+50)}
+              className="w-full py-3 rounded-2xl text-sm font-bold mt-1"
+              style={{background:C.soft,color:C.primary}}>
+              تحميل المزيد ({filtered.length-visible.length} متبقي)
+            </button>
           )}
         </div>
       )}
