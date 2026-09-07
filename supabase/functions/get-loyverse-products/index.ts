@@ -29,7 +29,7 @@ Deno.serve(async (req) => {
   const body = await req.json().catch(() => ({}));
   const forceRefresh = body.force === true;
 
-  // Check cache freshness (30 minutes)
+  // Cache freshness: 5 minutes
   if (!forceRefresh) {
     const { data: latest } = await supabase
       .from('products')
@@ -46,9 +46,10 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // 1. Fetch all items (paginated)
+    // NOTE: Loyverse items API uses "variant_id" (not "id") for variant identifiers
     type LoyVariant = {
-      id: string;
+      variant_id?: string; // actual field name in Loyverse items response
+      id?: string;         // fallback just in case
       default_price?: number;
       price?: number;
       option1_value?: string;
@@ -64,6 +65,8 @@ Deno.serve(async (req) => {
       image_url?: string;
       variants: LoyVariant[];
     };
+
+    // 1. Fetch all items (paginated)
     const allItems: LoyItem[] = [];
     let cursor: string | null = null;
     do {
@@ -75,7 +78,7 @@ Deno.serve(async (req) => {
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         return json({
-          error: (err as { errors?: { message: string }[] })?.errors?.[0]?.message ?? `Loyverse ${res.status}`,
+          error: (err as { errors?: { message: string }[] })?.errors?.[0]?.message ?? `Loyverse items ${res.status}`,
         }, 502);
       }
       const data = await res.json() as { items: LoyItem[]; cursor?: string };
@@ -95,23 +98,33 @@ Deno.serve(async (req) => {
       }
     } catch { /* ignore */ }
 
-    // 3. Fetch inventory via dedicated endpoint using explicit variant_ids (most reliable)
+    // 3. Fetch inventory by explicit variant_ids (batches of 100)
+    // Key fix: use v.variant_id (Loyverse items API field name) not v.id
     const invMap: Record<string, number> = {};
     try {
-      const allVarIds = allItems.flatMap(item => item.variants.map(v => v.id));
+      const allVarIds = allItems
+        .flatMap(item => item.variants.map(v => v.variant_id ?? v.id))
+        .filter((id): id is string => !!id);
+
       for (let i = 0; i < allVarIds.length; i += 100) {
         const batch = allVarIds.slice(i, i + 100).join(',');
-        const invRes = await fetch(
-          `https://api.loyverse.com/v1.0/inventory?variant_ids=${encodeURIComponent(batch)}`,
-          { headers: { Authorization: `Bearer ${loyToken}` } },
-        );
-        if (!invRes.ok) continue;
-        const invData = await invRes.json() as {
-          inventory_levels?: { variant_id: string; in_stock: number }[];
-        };
-        for (const iv of invData.inventory_levels ?? []) {
-          invMap[iv.variant_id] = (invMap[iv.variant_id] ?? 0) + (iv.in_stock ?? 0);
-        }
+        let invCursor: string | null = null;
+        do {
+          const params = new URLSearchParams({ variant_ids: batch, limit: '250' });
+          if (invCursor) params.set('cursor', invCursor);
+          const invRes = await fetch(`https://api.loyverse.com/v1.0/inventory?${params}`, {
+            headers: { Authorization: `Bearer ${loyToken}` },
+          });
+          if (!invRes.ok) break;
+          const invData = await invRes.json() as {
+            inventory_levels?: { variant_id: string; in_stock: number }[];
+            cursor?: string;
+          };
+          for (const iv of invData.inventory_levels ?? []) {
+            invMap[iv.variant_id] = (invMap[iv.variant_id] ?? 0) + (iv.in_stock ?? 0);
+          }
+          invCursor = invData.cursor ?? null;
+        } while (invCursor);
       }
     } catch { /* ignore */ }
 
@@ -122,11 +135,12 @@ Deno.serve(async (req) => {
     const now = new Date().toISOString();
     const records = allItems.map(item => {
       const variantStock = (v: LoyVariant) => {
-        if (invMap[v.id] !== undefined) return invMap[v.id];
+        const vid = v.variant_id ?? v.id;
+        if (vid && invMap[vid] !== undefined) return invMap[vid];
         return (v.stores ?? []).reduce((s, store) => s + (store.in_stock ?? 0), 0);
       };
       const variantsData = item.variants.map(v => ({
-        id: v.id,
+        id: v.variant_id ?? v.id,
         name: varName(v),
         price: v.default_price ?? v.price ?? null,
         stock: variantStock(v),
