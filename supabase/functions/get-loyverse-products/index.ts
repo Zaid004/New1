@@ -92,7 +92,7 @@ Deno.serve(async (req) => {
       do {
         const params = new URLSearchParams({ limit: '250' });
         if (invCursor) params.set('cursor', invCursor);
-        const invRes = await fetch(`https://api.loyverse.com/v1.0/inventory?${params}`, {
+        const invRes = await fetch(`https://api.loyverse.com/v1.0/inventory_levels?${params}`, {
           headers: { Authorization: `Bearer ${loyToken}` },
         });
         if (!invRes.ok) break;

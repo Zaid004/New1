@@ -232,9 +232,13 @@ Deno.serve(async (req) => {
     const { from, to } = body as { from: string; to: string };
     if (!from || !to) return json({ error: 'from و to مطلوبان' }, 400);
 
+    // Convert to UTC ISO (Loyverse rejects +03:00 timezone offsets in query params)
+    const fromUTC = new Date(from).toISOString();
+    const toUTC   = new Date(to).toISOString();
+
     type LineItem = {
-      item_id: string; item_name: string; category_id?: string;
-      quantity: number; total_money: number;
+      item_id: string; item_name: string;
+      quantity: number; gross_total_money?: number; total_money?: number; price?: number;
     };
     type RawReceipt = { receipt_type: string; line_items: LineItem[] };
 
@@ -242,7 +246,7 @@ Deno.serve(async (req) => {
     let cursor: string | null = null;
     try {
       do {
-        const params = new URLSearchParams({ created_at_min: from, created_at_max: to, limit: '250' });
+        const params = new URLSearchParams({ created_at_min: fromUTC, created_at_max: toUTC, limit: '250' });
         if (cursor) params.set('cursor', cursor);
         const res = await fetch(`https://api.loyverse.com/v1.0/receipts?${params}`, {
           headers: { Authorization: `Bearer ${loyToken}` },
@@ -258,17 +262,14 @@ Deno.serve(async (req) => {
         cursor = data.cursor ?? null;
       } while (cursor);
 
-      // Fetch categories for display names
-      const catMap: Record<string, string> = {};
+      // Load item→category mapping from cached products table
+      const itemCatMap: Record<string, { cat_id: string; cat_name: string }> = {};
       try {
-        const catRes = await fetch('https://api.loyverse.com/v1.0/categories?limit=250', {
-          headers: { Authorization: `Bearer ${loyToken}` },
-        });
-        if (catRes.ok) {
-          const catData = await catRes.json() as { categories: { id: string; name: string }[] };
-          for (const c of catData.categories ?? []) catMap[c.id] = c.name;
+        const { data: prods } = await supabase.from('products').select('id, category_id, category_name');
+        for (const p of prods ?? []) {
+          if (p.category_id) itemCatMap[p.id] = { cat_id: p.category_id, cat_name: p.category_name ?? 'غير مصنف' };
         }
-      } catch { /* ignore */ }
+      } catch { /* ignore if products table empty */ }
 
       const itemMap: Record<string, { name: string; qty: number; revenue: number }> = {};
       const catMap2: Record<string, { name: string; qty: number; revenue: number }> = {};
@@ -277,15 +278,16 @@ Deno.serve(async (req) => {
         if (r.receipt_type !== 'SALE') continue;
         for (const li of r.line_items ?? []) {
           const id = li.item_id ?? li.item_name;
+          const rev = li.gross_total_money ?? li.total_money ?? ((li.price ?? 0) * (li.quantity ?? 0));
           if (!itemMap[id]) itemMap[id] = { name: li.item_name, qty: 0, revenue: 0 };
           itemMap[id].qty += li.quantity ?? 0;
-          itemMap[id].revenue += li.total_money ?? 0;
+          itemMap[id].revenue += rev;
 
-          if (li.category_id) {
-            const catName = catMap[li.category_id] ?? 'غير مصنف';
-            if (!catMap2[li.category_id]) catMap2[li.category_id] = { name: catName, qty: 0, revenue: 0 };
-            catMap2[li.category_id].qty += li.quantity ?? 0;
-            catMap2[li.category_id].revenue += li.total_money ?? 0;
+          const catInfo = li.item_id ? itemCatMap[li.item_id] : undefined;
+          if (catInfo) {
+            if (!catMap2[catInfo.cat_id]) catMap2[catInfo.cat_id] = { name: catInfo.cat_name, qty: 0, revenue: 0 };
+            catMap2[catInfo.cat_id].qty += li.quantity ?? 0;
+            catMap2[catInfo.cat_id].revenue += rev;
           }
         }
       }
