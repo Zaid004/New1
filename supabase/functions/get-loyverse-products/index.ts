@@ -64,7 +64,8 @@ Deno.serve(async (req) => {
 
     // 1. Fetch ALL inventory first (no filter → all inventory levels)
     // This avoids needing to know the exact variant ID field name in the items response
-    const invMap: Record<string, number> = {};
+    type InvEntry = { stock: number; low: number | null };
+    const invMap: Record<string, InvEntry> = {};
     try {
       let invCursor: string | null = null;
       do {
@@ -75,12 +76,16 @@ Deno.serve(async (req) => {
         });
         if (!invRes.ok) break;
         const invData = await invRes.json() as {
-          inventory_levels?: { variant_id: string; in_stock: number }[];
+          inventory_levels?: { variant_id: string; in_stock: number; low_stock?: number | null }[];
           cursor?: string;
         };
         for (const iv of invData.inventory_levels ?? []) {
           if (iv.variant_id) {
-            invMap[iv.variant_id] = (invMap[iv.variant_id] ?? 0) + (iv.in_stock ?? 0);
+            const prev = invMap[iv.variant_id];
+            invMap[iv.variant_id] = {
+              stock: (prev?.stock ?? 0) + (iv.in_stock ?? 0),
+              low: iv.low_stock ?? prev?.low ?? null,
+            };
           }
         }
         invCursor = invData.cursor ?? null;
@@ -119,13 +124,13 @@ Deno.serve(async (req) => {
       }
     } catch { /* ignore */ }
 
-    // 4. Find the variant's stock by scanning ALL its string fields against invMap.
+    // 4. Find the variant's ID by scanning ALL its string fields against invMap keys.
     // This is resilient to API field name changes (variant_id, id, item_variant_id, etc.)
     const getVariantId = (v: LoyVariant): string | null => {
       for (const val of Object.values(v)) {
         if (typeof val === 'string' && invMap[val] !== undefined) return val;
       }
-      // If no invMap match, return the first UUID-shaped string field as fallback
+      // Fallback: first UUID-shaped string field
       for (const val of Object.values(v)) {
         if (typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val)) {
           return val;
@@ -143,14 +148,20 @@ Deno.serve(async (req) => {
     const records = allItems.map(item => {
       const variantsData = item.variants.map(v => {
         const vid = getVariantId(v);
-        const stock = vid !== null ? (invMap[vid] ?? 0) : 0;
+        const entry = vid !== null ? invMap[vid] : null;
+        const stock = entry?.stock ?? 0;
+        const low = entry?.low ?? null;
+        const is_low = stock > 0 && low !== null && low > 0 && stock <= low;
         return {
           id: vid,
           name: varName(v),
           price: (v.default_price as number | undefined) ?? (v.price as number | undefined) ?? null,
           stock,
+          is_low,
         };
       });
+      const totalStock = variantsData.reduce((t, v) => t + v.stock, 0);
+      const isProductLow = variantsData.some(v => v.is_low);
       return {
         id: item.id,
         name: item.item_name,
@@ -158,7 +169,8 @@ Deno.serve(async (req) => {
         category_name: item.category_id ? (catMap[item.category_id] ?? null) : null,
         image_url: item.image_url ?? null,
         price: (item.variants[0]?.default_price as number | undefined) ?? (item.variants[0]?.price as number | undefined) ?? null,
-        stock: variantsData.reduce((t, v) => t + v.stock, 0),
+        stock: totalStock,
+        is_low: isProductLow,
         variants: JSON.stringify(variantsData),
         synced_at: now,
       };
