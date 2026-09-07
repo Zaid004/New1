@@ -36,6 +36,9 @@ body{background:var(--bg);margin:0;color:var(--txt)}
 .day-cell{border-radius:10px;position:relative;overflow:hidden;min-height:64px}
 input[type=month]::-webkit-calendar-picker-indicator{opacity:0.5;cursor:pointer}
 select,input,textarea{-webkit-appearance:none}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.img-shell{background:var(--soft);background-image:linear-gradient(90deg,var(--soft) 25%,var(--border) 50%,var(--soft) 75%);background-size:200% 100%;animation:shimmer 1.2s infinite linear}
+.img-shell.loaded{background-image:none;animation:none}
 </style>
 </head>
 <body>
@@ -4212,20 +4215,21 @@ function ProductsView() {
 
       {!loading&&(
         <div className="space-y-2">
-          {filtered.map(p=>{
+          {filtered.map((p,pi)=>{
             const vars=(p.variants&&typeof p.variants==='string'?JSON.parse(p.variants):p.variants)??[];
             const open=expandedId===p.id;
             return (
               <div key={p.id} className="rounded-2xl overflow-hidden" style={{background:C.card,border:`1px solid ${C.border}`}}>
                 <div style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px'}}>
-                  {/* Thumbnail */}
-                  <div style={{width:64,height:64,flexShrink:0,borderRadius:12,overflow:'hidden',background:C.soft,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                  {/* Thumbnail — shimmer shell hides behind image; stops animating on load */}
+                  <div className="img-shell" style={{width:64,height:64,flexShrink:0,borderRadius:12,overflow:'hidden',position:'relative',display:'flex',alignItems:'center',justifyContent:'center'}}>
                     {p.image_url?(
                       <img src={p.image_url} alt={p.name}
-                        loading="lazy"
+                        loading={pi<8?'eager':'lazy'}
                         decoding="async"
-                        style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}}
-                        onError={e=>{e.target.style.display='none';}}/>
+                        style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover'}}
+                        onLoad={e=>{e.target.parentElement.classList.add('loaded');}}
+                        onError={e=>{e.target.style.display='none';e.target.parentElement.classList.add('loaded');}}/>
                     ):(
                       <Ic n="img" s={24} c={C.border}/>
                     )}

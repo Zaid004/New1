@@ -53,6 +53,7 @@ Deno.serve(async (req) => {
       option2_value?: string;
       option3_value?: string;
       sku?: string;
+      stores?: { store_id?: string; low_stock?: number | null }[];
     };
     type LoyItem = {
       id: string;
@@ -64,8 +65,7 @@ Deno.serve(async (req) => {
 
     // 1. Fetch ALL inventory first (no filter → all inventory levels)
     // This avoids needing to know the exact variant ID field name in the items response
-    type InvEntry = { stock: number; low: number | null };
-    const invMap: Record<string, InvEntry> = {};
+    const invMap: Record<string, number> = {};
     try {
       let invCursor: string | null = null;
       do {
@@ -76,16 +76,12 @@ Deno.serve(async (req) => {
         });
         if (!invRes.ok) break;
         const invData = await invRes.json() as {
-          inventory_levels?: { variant_id: string; in_stock: number; low_stock?: number | null }[];
+          inventory_levels?: { variant_id: string; in_stock: number }[];
           cursor?: string;
         };
         for (const iv of invData.inventory_levels ?? []) {
           if (iv.variant_id) {
-            const prev = invMap[iv.variant_id];
-            invMap[iv.variant_id] = {
-              stock: (prev?.stock ?? 0) + (iv.in_stock ?? 0),
-              low: iv.low_stock ?? prev?.low ?? null,
-            };
+            invMap[iv.variant_id] = (invMap[iv.variant_id] ?? 0) + (iv.in_stock ?? 0);
           }
         }
         invCursor = invData.cursor ?? null;
@@ -144,14 +140,26 @@ Deno.serve(async (req) => {
       (v.sku as string | undefined) ||
       null;
 
+    // Build low_stock threshold map from items API (variant.stores[].low_stock)
+    const lowMap: Record<string, number> = {};
+    for (const item of allItems) {
+      for (const v of item.variants) {
+        const vid = getVariantId(v);
+        if (!vid) continue;
+        const threshold = (v.stores ?? [])
+          .map(s => s.low_stock ?? 0)
+          .find(t => t > 0) ?? 0;
+        if (threshold > 0) lowMap[vid] = threshold;
+      }
+    }
+
     const now = new Date().toISOString();
     const records = allItems.map(item => {
       const variantsData = item.variants.map(v => {
         const vid = getVariantId(v);
-        const entry = vid !== null ? invMap[vid] : null;
-        const stock = entry?.stock ?? 0;
-        const low = entry?.low ?? null;
-        const is_low = stock > 0 && low !== null && low > 0 && stock <= low;
+        const stock = vid !== null ? (invMap[vid] ?? 0) : 0;
+        const low = vid ? (lowMap[vid] ?? 0) : 0;
+        const is_low = stock > 0 && low > 0 && stock <= low;
         return {
           id: vid,
           name: varName(v),
