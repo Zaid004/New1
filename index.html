@@ -4203,78 +4203,73 @@ function ProductsView() {
       {error&&<div className="p-3 rounded-2xl mb-3 text-sm" style={{background:'var(--err-bg)',color:C.err}}>{error}</div>}
 
       {loading&&(
-        <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-2">
           {[...Array(8)].map((_,i)=>(
-            <div key={i} className="rounded-2xl h-40 animate-pulse" style={{background:C.soft}}/>
+            <div key={i} className="rounded-2xl h-20 animate-pulse" style={{background:C.soft}}/>
           ))}
         </div>
       )}
 
       {!loading&&(
-        <div className="grid grid-cols-2 gap-3">
-          {filtered.map(p=>(
-            <div key={p.id} className="rounded-2xl overflow-hidden" style={{background:C.card,border:`1px solid ${C.border}`}}>
-              <div className="h-28 relative flex items-center justify-center" style={{background:C.soft}}>
-                {p.image_url?(
-                  <img src={p.image_url} alt={p.name}
-                    loading="lazy"
-                    decoding="async"
-                    fetchpriority="low"
-                    className="w-full h-full object-cover"
-                    style={{opacity:0,transition:'opacity .2s'}}
-                    ref={el=>{if(el){if(el.complete&&el.naturalWidth>0)el.style.opacity='1';}}}
-                    onLoad={e=>{e.target.style.opacity='1';}}
-                    onError={e=>{e.target.style.display='none';const n=e.target.parentNode.querySelector('.no-img');if(n)n.style.display='flex';}}/>
-                ):null}
-                <div className="no-img w-full h-full items-center justify-center"
-                  style={{display:p.image_url?'none':'flex'}}>
-                  <Ic n="img" s={32} c={C.border}/>
+        <div className="space-y-2">
+          {filtered.map(p=>{
+            const vars=(p.variants&&typeof p.variants==='string'?JSON.parse(p.variants):p.variants)??[];
+            const open=expandedId===p.id;
+            return (
+              <div key={p.id} className="rounded-2xl overflow-hidden" style={{background:C.card,border:`1px solid ${C.border}`}}>
+                <div style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px'}}>
+                  {/* Thumbnail */}
+                  <div style={{width:64,height:64,flexShrink:0,borderRadius:12,overflow:'hidden',background:C.soft,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                    {p.image_url?(
+                      <img src={p.image_url} alt={p.name}
+                        loading="lazy"
+                        decoding="async"
+                        style={{width:'100%',height:'100%',objectFit:'cover',display:'block',opacity:0,transition:'opacity .15s'}}
+                        ref={el=>{if(el&&el.complete&&el.naturalWidth>0)el.style.opacity='1';}}
+                        onLoad={e=>{e.target.style.opacity='1';}}
+                        onError={e=>{e.target.style.display='none';}}/>
+                    ):(
+                      <Ic n="img" s={24} c={C.border}/>
+                    )}
+                  </div>
+                  {/* Info */}
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontWeight:700,fontSize:13,color:C.txt,lineHeight:1.3,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical'}}>{p.name}</div>
+                    {p.category_name&&<div style={{fontSize:11,color:C.txt,opacity:.45,marginTop:2}}>{p.category_name}</div>}
+                    <div style={{display:'flex',alignItems:'center',gap:6,marginTop:4,flexWrap:'wrap'}}>
+                      {p.price!=null&&<div style={{fontSize:12,fontWeight:900,color:C.primary}}>{fmt(p.price)} <span style={{fontSize:10}}>د.ع</span></div>}
+                      <div style={{fontSize:11,fontWeight:700,padding:'1px 8px',borderRadius:8,background:p.stock>0?'var(--ok-bg)':'var(--err-bg)',color:p.stock>0?C.ok:C.err}}>
+                        {p.stock>0?p.stock:'نفد'}
+                      </div>
+                    </div>
+                  </div>
+                  {/* Variants toggle */}
+                  {vars.length>=2&&(
+                    <button onClick={e=>{e.stopPropagation();setExpandedId(open?null:p.id);}}
+                      style={{flexShrink:0,display:'flex',flexDirection:'column',alignItems:'center',gap:2,padding:'6px 8px',borderRadius:10,background:open?C.soft:'transparent',border:'none',cursor:'pointer',color:C.primary}}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+                        style={{transform:open?'rotate(180deg)':'none',transition:'transform .2s'}}>
+                        <polyline points="6 9 12 15 18 9"/>
+                      </svg>
+                      <span style={{fontSize:10,fontWeight:700}}>{vars.length}</span>
+                    </button>
+                  )}
                 </div>
-                <div className="absolute top-2 left-2 text-xs font-bold px-2 py-0.5 rounded-lg"
-                  style={{
-                    background:p.stock>0?'var(--ok-bg)':'var(--err-bg)',
-                    color:p.stock>0?C.ok:C.err
-                  }}>
-                  {p.stock>0?p.stock:'نفد'}
-                </div>
+                {open&&vars.length>=2&&(
+                  <div style={{borderTop:`1px solid ${C.border}`,padding:'8px 12px',maxHeight:160,overflowY:'auto'}}>
+                    {vars.map((v,i)=>(
+                      <div key={v.id||i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'3px 0'}}>
+                        <span style={{fontSize:12,color:C.txt,opacity:.7,maxWidth:'70%',overflow:'hidden',whiteSpace:'nowrap',textOverflow:'ellipsis'}}>{v.name||`#${i+1}`}</span>
+                        <span style={{fontSize:12,fontWeight:700,color:v.stock>0?C.ok:C.err}}>{v.stock>0?v.stock:'نفد'}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-              <div className="p-2.5">
-                <div className="font-bold text-xs leading-snug mb-1" style={{color:C.txt}}>{p.name}</div>
-                {p.category_name&&<div className="text-xs mb-1 opacity-50" style={{color:C.txt}}>{p.category_name}</div>}
-                {p.price!=null&&<div className="text-xs font-black" style={{color:C.primary}}>{fmt(p.price)} د.ع</div>}
-                {(()=>{
-                  const vars=(p.variants&&typeof p.variants==='string'?JSON.parse(p.variants):p.variants)??[];
-                  if(vars.length<2) return null;
-                  const open=expandedId===p.id;
-                  return (
-                    <>
-                      <button onClick={e=>{e.stopPropagation();setExpandedId(open?null:p.id);}}
-                        className="w-full flex items-center justify-between text-xs font-bold mt-1.5 pt-1.5"
-                        style={{borderTop:`1px solid ${C.border}`,color:C.primary,background:'none',outline:'none'}}>
-                        <span>{vars.length} أصناف</span>
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
-                          style={{transform:open?'rotate(180deg)':'none',transition:'transform .2s'}}>
-                          <polyline points="6 9 12 15 18 9"/>
-                        </svg>
-                      </button>
-                      {open&&(
-                        <div style={{maxHeight:180,overflowY:'auto',marginTop:4}}>
-                          {vars.map((v,i)=>(
-                            <div key={v.id||i} className="flex justify-between items-center py-0.5">
-                              <span className="text-xs" style={{color:C.txt,opacity:.7,maxWidth:'65%',overflow:'hidden',whiteSpace:'nowrap',textOverflow:'ellipsis'}}>{v.name||`#${i+1}`}</span>
-                              <span className="text-xs font-bold" style={{color:v.stock>0?C.ok:C.err}}>{v.stock>0?v.stock:'نفد'}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </>
-                  );
-                })()}
-              </div>
-            </div>
-          ))}
+            );
+          })}
           {filtered.length===0&&(
-            <div className="col-span-2 py-16 text-center" style={{color:C.txt,opacity:.35}}>
+            <div className="py-16 text-center" style={{color:C.txt,opacity:.35}}>
               <Ic n="grid" s={40} c="var(--muted)"/>
               <div className="mt-2 text-sm">لا توجد منتجات</div>
             </div>
