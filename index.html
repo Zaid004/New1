@@ -4372,7 +4372,7 @@ function StatsView() {
       const res=await fetch(`${SUPA_URL}/functions/v1/get-loyverse-sales`,{
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':`Bearer ${session.access_token}`},
-        body:JSON.stringify({mode:'top_items',compare:true,...r}),
+        body:JSON.stringify({mode:'top_items',...r}),
       });
       const d=await res.json();
       if(d.error){setError(d.error);return;}
@@ -4391,32 +4391,90 @@ function StatsView() {
     {id:'custom',label:'مخصص'},
   ];
 
-  const fmtK=v=>v>=1000000?(v/1000000).toFixed(1).replace(/\.0$/,'')+'m':v>=1000?Math.round(v/1000)+'k':String(Math.round(v));
-  const pct=(cur,prev)=>prev==null||prev===0?null:Math.round((cur-prev)/prev*100);
+  const PIE_COLORS=['#6B5876','#A08850','#4A8A6A','#7B5EA7','#5E7BA0','#A05E7B','#7BA05E','#8A6A4A'];
 
   const totalRev=data?.total_revenue??0;
-  const prevRev=data?.prev_revenue??null;
   const recCount=data?.receipt_count??0;
-  const prevRec=data?.prev_receipts??null;
   const avgOrder=data?.avg_order??0;
-  const prevAvg=(prevRev!=null&&prevRec!=null&&prevRec>0)?Math.round(prevRev/prevRec):null;
-  const pctRev=pct(totalRev,prevRev);
-  const pctRec=pct(recCount,prevRec);
-  const pctAvg=pct(avgOrder,prevAvg);
-
   const dailyEntries=Object.entries(data?.daily??{}).sort(([a],[b])=>a.localeCompare(b));
-  const maxDaily=Math.max(...dailyEntries.map(([,v])=>Math.max(0,v)),1);
   const showDaily=dailyEntries.length>1;
-
   const maxItem=data?.top_items?.[0]?.revenue||1;
   const maxCat=data?.top_categories?.[0]?.revenue||1;
   const catTotal=totalRev||1;
 
-  const PctBadge=({p})=>p==null?null:(
-    <div className="text-xs font-bold mt-0.5" style={{color:p>=0?C.ok:C.err}}>
-      {p>=0?'▲':'▼'} {Math.abs(p)}%
-    </div>
-  );
+  // SVG donut pie chart
+  const DonutChart=({cats})=>{
+    if(!cats||cats.length===0) return null;
+    const total=cats.reduce((s,c)=>s+c.revenue,0)||1;
+    const R=48,r=26,cx=56,cy=56;
+    if(cats.length===1) return (
+      <svg viewBox="0 0 112 112" style={{width:'100px',height:'100px',flexShrink:0}}>
+        <circle cx={cx} cy={cy} r={R} fill={PIE_COLORS[0]} opacity={0.85}/>
+        <circle cx={cx} cy={cy} r={r} fill={C.card}/>
+      </svg>
+    );
+    let angle=-Math.PI/2;
+    const paths=cats.map((cat,i)=>{
+      const theta=(cat.revenue/total)*2*Math.PI;
+      const x1o=cx+R*Math.cos(angle),y1o=cy+R*Math.sin(angle);
+      const x1i=cx+r*Math.cos(angle),y1i=cy+r*Math.sin(angle);
+      angle+=theta;
+      const x2o=cx+R*Math.cos(angle),y2o=cy+R*Math.sin(angle);
+      const x2i=cx+r*Math.cos(angle),y2i=cy+r*Math.sin(angle);
+      const large=theta>Math.PI?1:0;
+      const d=`M${x1o.toFixed(1)},${y1o.toFixed(1)} A${R},${R},0,${large},1,${x2o.toFixed(1)},${y2o.toFixed(1)} L${x2i.toFixed(1)},${y2i.toFixed(1)} A${r},${r},0,${large},0,${x1i.toFixed(1)},${y1i.toFixed(1)} Z`;
+      return {d,color:PIE_COLORS[i%PIE_COLORS.length]};
+    });
+    return (
+      <svg viewBox="0 0 112 112" style={{width:'100px',height:'100px',flexShrink:0}}>
+        {paths.map((p,i)=><path key={i} d={p.d} fill={p.color} opacity={0.85}/>)}
+        <circle cx={cx} cy={cy} r={r} fill={C.card}/>
+      </svg>
+    );
+  };
+
+  // SVG line chart with trend indicator
+  const LineChart=({entries})=>{
+    if(entries.length<2) return null;
+    const W=280,H=64,pad=8;
+    const vals=entries.map(([,v])=>Math.max(0,v));
+    const maxV=Math.max(...vals,1);
+    const pts=vals.map((v,i)=>({
+      x:pad+(i/(vals.length-1))*(W-2*pad),
+      y:H-pad-v/maxV*(H-2*pad)
+    }));
+    const poly=pts.map(p=>`${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+    const first=pts[0],last=pts[pts.length-1];
+    const fillPts=`${first.x.toFixed(1)},${(H-pad).toFixed(1)} ${poly} ${last.x.toFixed(1)},${(H-pad).toFixed(1)}`;
+    const half=Math.ceil(vals.length/2);
+    const avg1=vals.slice(0,half).reduce((s,v)=>s+v,0)/half;
+    const avg2=vals.slice(half).reduce((s,v)=>s+v,0)/Math.max(vals.length-half,1);
+    const up=avg2>=avg1;
+    const labelIdxs=[0,Math.floor(entries.length/2),entries.length-1].filter((v,i,a)=>a.indexOf(v)===i);
+    return (
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <div className="font-black text-sm" style={{color:C.txt}}>اتجاه المبيعات</div>
+          <div className="text-xs font-bold px-2 py-0.5 rounded-lg"
+            style={{background:up?'rgba(74,138,106,0.15)':'rgba(180,60,60,0.15)',color:up?C.ok:C.err}}>
+            {up?'▲ صاعد':'▼ هابط'}
+          </div>
+        </div>
+        <div className="rounded-2xl p-4" style={{background:C.card,border:`1px solid ${C.border}`}}>
+          <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H}>
+            <polygon points={fillPts} fill={C.primary} opacity={0.1}/>
+            <polyline points={poly} fill="none" stroke={C.primary} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            {pts.map((p,i)=><circle key={i} cx={p.x.toFixed(1)} cy={p.y.toFixed(1)} r="2.5" fill={C.primary}/>)}
+          </svg>
+          <div className="flex justify-between mt-1">
+            {labelIdxs.map(i=>(
+              <div key={i} style={{color:C.txt,opacity:.45,fontSize:'9px'}}>{entries[i][0].slice(5).replace('-','/')}</div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div>
@@ -4472,40 +4530,19 @@ function StatsView() {
           {/* KPI summary cards */}
           <div className="flex gap-3 overflow-x-auto pb-1" style={{scrollbarWidth:'none'}}>
             {[
-              {label:'إجمالي المبيعات',val:fmt(totalRev),p:pctRev},
-              {label:'عدد الفواتير',val:fmt(recCount),p:pctRec},
-              {label:'متوسط الفاتورة',val:fmt(avgOrder),p:pctAvg},
-            ].map(({label,val,p})=>(
+              {label:'إجمالي المبيعات',val:fmt(totalRev)},
+              {label:'عدد الفواتير',val:fmt(recCount)},
+              {label:'متوسط الفاتورة',val:fmt(avgOrder)},
+            ].map(({label,val})=>(
               <div key={label} className="rounded-2xl p-4 flex-shrink-0" style={{background:C.card,border:`1px solid ${C.border}`,minWidth:'130px'}}>
                 <div className="text-xs opacity-50 mb-1" style={{color:C.txt}}>{label}</div>
                 <div className="text-sm font-black" style={{color:C.primary}}>{val}</div>
-                <PctBadge p={p}/>
               </div>
             ))}
           </div>
 
-          {/* Daily trend chart */}
-          {showDaily&&(
-            <div>
-              <div className="font-black text-sm mb-3" style={{color:C.txt}}>المبيعات اليومية</div>
-              <div className="rounded-2xl p-4" style={{background:C.card,border:`1px solid ${C.border}`}}>
-                <div className="flex items-end gap-1.5 overflow-x-auto" style={{scrollbarWidth:'none',height:'96px'}}>
-                  {dailyEntries.map(([date,val])=>{
-                    const barH=Math.max(4,Math.round(Math.max(0,val)/maxDaily*72));
-                    return (
-                      <div key={date} className="flex flex-col items-center justify-end flex-shrink-0" style={{minWidth:'30px',height:'96px'}}>
-                        <div className="text-center w-full" style={{color:C.primary,fontSize:'8px',fontWeight:'bold',marginBottom:'2px',lineHeight:1}}>
-                          {val>0?fmtK(val):''}
-                        </div>
-                        <div className="w-5 rounded-t-md" style={{height:`${barH}px`,background:C.primary,opacity:.85}}/>
-                        <div className="text-center mt-1 w-full" style={{color:C.txt,opacity:.5,fontSize:'8px'}}>{date.slice(5).replace('-','/')}</div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          )}
+          {/* Trend line chart */}
+          {showDaily&&<LineChart entries={dailyEntries}/>}
 
           {/* Top items */}
           {(data.top_items||[]).length>0&&(
@@ -4535,15 +4572,32 @@ function StatsView() {
             </div>
           )}
 
-          {/* Top categories with % of total */}
+          {/* Categories: pie chart + list */}
           {(data.top_categories||[]).length>0&&(
             <div>
-              <div className="font-black text-sm mb-3" style={{color:C.txt}}>أكثر الأصناف مبيعاً</div>
+              <div className="font-black text-sm mb-3" style={{color:C.txt}}>توزيع الأصناف</div>
+              {/* Donut + legend */}
+              <div className="rounded-2xl p-4 mb-3 flex gap-4 items-center" style={{background:C.card,border:`1px solid ${C.border}`}}>
+                <DonutChart cats={data.top_categories||[]}/>
+                <div className="flex-1 space-y-1.5 overflow-hidden">
+                  {(data.top_categories||[]).slice(0,6).map((cat,i)=>(
+                    <div key={cat.id||i} className="flex items-center gap-2">
+                      <div className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{background:PIE_COLORS[i%PIE_COLORS.length]}}/>
+                      <div className="flex-1 text-xs font-bold truncate" style={{color:C.txt}}>{cat.name}</div>
+                      <div className="text-xs font-black flex-shrink-0" style={{color:C.txt,opacity:.6}}>{Math.round(cat.revenue/catTotal*100)}%</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {/* Detailed list */}
               <div className="space-y-2">
                 {(data.top_categories||[]).map((cat,i)=>(
                   <div key={cat.id||i} className="rounded-2xl p-3" style={{background:C.card,border:`1px solid ${C.border}`}}>
                     <div className="flex items-center justify-between mb-1.5">
-                      <div className="text-xs font-bold" style={{color:C.txt}}>{cat.name}</div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-sm flex-shrink-0" style={{background:PIE_COLORS[i%PIE_COLORS.length]}}/>
+                        <div className="text-xs font-bold" style={{color:C.txt}}>{cat.name}</div>
+                      </div>
                       <div className="flex items-center gap-2">
                         <div className="text-xs font-bold px-1.5 py-0.5 rounded-lg" style={{background:C.soft,color:C.txt,opacity:.7}}>
                           {Math.round(cat.revenue/catTotal*100)}%
@@ -4554,7 +4608,7 @@ function StatsView() {
                     <div className="h-1.5 rounded-full overflow-hidden" style={{background:C.soft}}>
                       <div className="h-full rounded-full" style={{
                         width:`${Math.round(cat.revenue/maxCat*100)}%`,
-                        background:'var(--ok)'
+                        background:PIE_COLORS[i%PIE_COLORS.length]
                       }}/>
                     </div>
                     <div className="text-xs mt-1 opacity-40" style={{color:C.txt}}>{fmt(cat.qty)} وحدة</div>
