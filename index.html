@@ -4446,19 +4446,11 @@ function StatsView() {
     const poly=pts.map(p=>`${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
     const first=pts[0],last=pts[pts.length-1];
     const fillPts=`${first.x.toFixed(1)},${(H-pad).toFixed(1)} ${poly} ${last.x.toFixed(1)},${(H-pad).toFixed(1)}`;
-    const half=Math.ceil(vals.length/2);
-    const avg1=vals.slice(0,half).reduce((s,v)=>s+v,0)/half;
-    const avg2=vals.slice(half).reduce((s,v)=>s+v,0)/Math.max(vals.length-half,1);
-    const up=avg2>=avg1;
     const labelIdxs=[0,Math.floor(entries.length/2),entries.length-1].filter((v,i,a)=>a.indexOf(v)===i);
     return (
       <div>
-        <div className="flex items-center justify-between mb-2">
+        <div className="mb-2">
           <div className="font-black text-sm" style={{color:C.txt}}>اتجاه المبيعات</div>
-          <div className="text-xs font-bold px-2 py-0.5 rounded-lg"
-            style={{background:up?'rgba(74,138,106,0.15)':'rgba(180,60,60,0.15)',color:up?C.ok:C.err}}>
-            {up?'▲ صاعد':'▼ هابط'}
-          </div>
         </div>
         <div className="rounded-2xl p-4" style={{background:C.card,border:`1px solid ${C.border}`}}>
           <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H}>
