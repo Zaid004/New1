@@ -981,7 +981,7 @@ function CalendarView({me,employees,isAdmin,settings}) {
                     const emp=employees.find(e=>e.id===r.employee_id);
                     return (
                       <div key={r.id} className="text-white leading-tight" style={{fontSize:9,fontWeight:700}}>
-                        {emp?.name?.split(' ')[0]} · {r.shift_type==='full'?'ك':'ن'}
+                        {emp?.name?.split(' ')[0]} · {r.shift_type==='full'?'●':'◐'}
                       </div>
                     );
                   })}
