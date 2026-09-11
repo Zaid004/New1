@@ -929,10 +929,13 @@ function CalendarView({me,employees,isAdmin,settings}) {
               bg=getEmpColor(dr[0].employee_id);
             } else {
               const c=getEmpColor(dr[0].employee_id);
+              const r0=dr[0];
+              const iraqHr=r0.checkin_hour!=null?r0.checkin_hour:(new Date(new Date(r0.created_at).getTime()+3*3600*1000)).getUTCHours();
+              const isFirst=iraqHr<12;
               overlay=(
                 <>
-                  <div style={{position:'absolute',top:0,left:0,right:0,bottom:'50%',background:C.soft}}/>
-                  <div style={{position:'absolute',top:'50%',left:0,right:0,bottom:0,background:c}}/>
+                  <div style={{position:'absolute',top:0,left:0,right:0,bottom:'50%',background:isFirst?c:C.soft}}/>
+                  <div style={{position:'absolute',top:'50%',left:0,right:0,bottom:0,background:isFirst?C.soft:c}}/>
                 </>
               );
               bg='transparent';
