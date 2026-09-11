@@ -925,7 +925,18 @@ function CalendarView({me,employees,isAdmin,settings}) {
           let overlay = null;
           let splitEmps = null;
           if(dr.length===1){
-            bg=getEmpColor(dr[0].employee_id);
+            if(dr[0].shift_type==='full'){
+              bg=getEmpColor(dr[0].employee_id);
+            } else {
+              const c=getEmpColor(dr[0].employee_id);
+              overlay=(
+                <>
+                  <div style={{position:'absolute',top:0,left:0,right:0,bottom:'50%',background:C.soft}}/>
+                  <div style={{position:'absolute',top:'50%',left:0,right:0,bottom:0,background:c}}/>
+                </>
+              );
+              bg='transparent';
+            }
           } else if(dr.length>=2){
             // Sort by checkin_hour (Iraq hour stored at insert time) for reliable ordering;
             // fall back to time-of-day from created_at for older records without the column
@@ -981,7 +992,7 @@ function CalendarView({me,employees,isAdmin,settings}) {
                     const emp=employees.find(e=>e.id===r.employee_id);
                     return (
                       <div key={r.id} className="text-white leading-tight" style={{fontSize:9,fontWeight:700}}>
-                        {emp?.name?.split(' ')[0]} · {r.shift_type==='full'?'●':'◐'}
+                        {emp?.name?.split(' ')[0]}
                       </div>
                     );
                   })}
