@@ -1752,10 +1752,8 @@ function BoxkiMatcher() {
   const toISO = dt => new Date(dt+':00.000+03:00').toISOString();
 
   const [show,setShow]=useState(false);
-  const [amountCash,setAmountCash]=useState('');
-  const [ordersCash,setOrdersCash]=useState('');
-  const [amountCard,setAmountCard]=useState('');
-  const [ordersCard,setOrdersCard]=useState('');
+  const [amount,setAmount]=useState('');
+  const [orders,setOrders]=useState('');
   const [fromDt,setFromDt]=useState(()=>`${getIraqToday()}T00:00`);
   const [toDt,setToDt]=useState(()=>`${getIraqToday()}T23:59`);
   const [loyLoading,setLoyLoading]=useState(false);
@@ -1831,13 +1829,11 @@ function BoxkiMatcher() {
     }
   };
 
-  const amtCash=parseFloat(amountCash)||0;
-  const ordCash=parseFloat(ordersCash)||0;
-  const amtCard=parseFloat(amountCard)||0;
-  const ordCard=parseFloat(ordersCard)||0;
-  const deduction=ordCard*5000;
-  const netResult=amtCash-deduction;
-  const hasResult=amtCash>0||ordCash>0||amtCard>0||ordCard>0;
+  const amt=parseFloat(amount)||0;
+  const ord=parseFloat(orders)||0;
+  const deduction=ord*5000;
+  const result=amt-deduction;
+  const hasResult=amt>0&&ord>0;
 
   const matchLoyverse = async () => {
     const {data:{session}} = await sb.auth.getSession();
@@ -1858,12 +1854,12 @@ function BoxkiMatcher() {
       const data = await res.json();
       if(data.error){ setLoyErr(data.error); return; }
       setLoyData(data);
-      const netAmt = Math.round(amtCash - ordCard*5000);
+      const netAmt = Math.round(amt - ord*5000);
       const matched = data.total === netAmt;
       const {error: logErr} = await sb.from('boxki_match_log').insert({
         auth_user_id: session.user.id,
-        boxki_amount: netAmt,
-        boxki_orders: ordCash + ordCard,
+        boxki_amount: amt,
+        boxki_orders: ord,
         loyverse_total: data.total,
         loyverse_orders: data.orders,
         matched,
@@ -1901,9 +1897,8 @@ function BoxkiMatcher() {
         const msgLines = [
           `${icon} <b>مطابقة بوكسي</b>`,
           `👤 ${empName}`,
-          `🚚 توصيل: ${ordCash} طلب — ${fmtAmt(amtCash)} د.ع`,
-          `💳 ماستر توصيل: ${ordCard} طلب — ${fmtAmt(amtCard)} د.ع`,
-          `💰 صافي بوكسي: ${fmtAmt(netAmt)} د.ع`,
+          `📦 الطلبات: ${ord}`,
+          `💰 بوكسي: ${fmtAmt(netAmt)} د.ع`,
           `🏪 لويفرز: ${fmtAmt(data.total)} د.ع`,
           `📊 الحالة: ${statusTxt}`,
         ];
@@ -1916,10 +1911,10 @@ function BoxkiMatcher() {
     }
   };
 
-  const diff = loyData ? Math.round(netResult) - loyData.total : 0;
+  const diff = loyData ? Math.round(result) - loyData.total : 0;
   const isMatch = loyData && diff === 0;
   const diagHint = loyData && !isMatch ? (() => {
-    const cd = Math.round(ordCash + ordCard) - loyData.orders;
+    const cd = Math.round(ord) - loyData.orders;
     if (cd === 0) return `ابحث عن طلب سعره خاطئ أو عليه خصم (${fmt(Math.abs(diff))} دينار)`;
     if (cd === 1) return `ابحث في بوكسي عن طلب قيمته ~${fmt(diff+5000)} د.ع غير مسجّل في لويفرز`;
     if (cd ===-1) return `ابحث عن طلب مكرر أو تاريخه خاطئ في لويفرز`;
@@ -1989,75 +1984,29 @@ function BoxkiMatcher() {
       </button>
       {show&&(
         <div className="rounded-2xl p-5 shadow-sm space-y-4" style={{background:C.card}}>
-          {/* توصيل */}
-          <div className="rounded-xl p-3 space-y-2" style={{background:C.soft}}>
-            <div className="text-xs font-bold" style={{color:C.primary}}>🚚 توصيل</div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>عدد الطلبات</label>
-                <input type="text" inputMode="numeric" value={ordersCash}
-                  onChange={e=>{setOrdersCash(parseNum(e.target.value));reset();}}
-                  className="w-full p-2.5 rounded-lg border text-sm outline-none"
-                  style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}} placeholder="0"/>
-              </div>
-              <div>
-                <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>المبلغ (د.ع)</label>
-                <input type="text" inputMode="numeric" value={fmtNum(amountCash)}
-                  onChange={e=>{setAmountCash(parseNum(e.target.value));reset();}}
-                  className="w-full p-2.5 rounded-lg border text-sm outline-none"
-                  style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}} placeholder="0"/>
-              </div>
-            </div>
+          <div>
+            <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>المبلغ الكلي من بوكسي (د.ع)</label>
+            <input type="text" inputMode="numeric" value={fmtNum(amount)}
+              onChange={e=>{setAmount(parseNum(e.target.value));reset();}}
+              className="w-full p-3 rounded-xl border text-sm outline-none"
+              style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}} placeholder="0"/>
           </div>
-          {/* ماستر توصيل */}
-          <div className="rounded-xl p-3 space-y-2" style={{background:C.soft}}>
-            <div className="text-xs font-bold" style={{color:C.primary}}>💳 ماستر توصيل</div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>عدد الطلبات</label>
-                <input type="text" inputMode="numeric" value={ordersCard}
-                  onChange={e=>{setOrdersCard(parseNum(e.target.value));reset();}}
-                  className="w-full p-2.5 rounded-lg border text-sm outline-none"
-                  style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}} placeholder="0"/>
-              </div>
-              <div>
-                <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>المبلغ (د.ع)</label>
-                <input type="text" inputMode="numeric" value={fmtNum(amountCard)}
-                  onChange={e=>{setAmountCard(parseNum(e.target.value));reset();}}
-                  className="w-full p-2.5 rounded-lg border text-sm outline-none"
-                  style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}} placeholder="0"/>
-              </div>
-            </div>
+          <div>
+            <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>عدد الطلبات</label>
+            <input type="text" inputMode="numeric" value={orders}
+              onChange={e=>{setOrders(parseNum(e.target.value));reset();}}
+              className="w-full p-3 rounded-xl border text-sm outline-none"
+              style={{borderColor:C.border,background:'var(--input-bg)',color:C.txt}} placeholder="0"/>
           </div>
           {hasResult&&(
             <div className="space-y-3">
-              {/* ملخص النوعين */}
-              <div className="rounded-xl overflow-hidden" style={{border:`1px solid ${C.border}`}}>
-                <div className="flex justify-between items-center px-3 py-2.5" style={{background:C.soft}}>
-                  <div>
-                    <div className="text-xs font-bold" style={{color:C.txt}}>🚚 توصيل</div>
-                    <div className="text-xs" style={{color:C.txt,opacity:.55}}>{ordCash} طلب</div>
-                  </div>
-                  <div className="font-black text-sm" style={{color:C.txt}}>{fmt(amtCash)} د.ع</div>
-                </div>
-                <div style={{height:1,background:C.border}}/>
-                <div className="flex justify-between items-center px-3 py-2.5" style={{background:C.soft}}>
-                  <div>
-                    <div className="text-xs font-bold" style={{color:C.txt}}>💳 ماستر توصيل</div>
-                    <div className="text-xs" style={{color:C.txt,opacity:.55}}>{ordCard} طلب</div>
-                  </div>
-                  <div className="font-black text-sm" style={{color:C.txt}}>{fmt(amtCard)} د.ع</div>
-                </div>
+              <div className="flex justify-between items-center text-sm px-1">
+                <span style={{color:C.txt,opacity:.6}}>خصم التوصيل ({ord} × 5,000)</span>
+                <span className="font-bold" style={{color:C.err}}>- {fmt(deduction)} د.ع</span>
               </div>
-              {ordCard>0&&(
-                <div className="flex justify-between items-center text-sm px-1">
-                  <span style={{color:C.txt,opacity:.6}}>خصم أجور التوصيل ({ordCard} × 5,000)</span>
-                  <span className="font-bold" style={{color:C.err}}>- {fmt(deduction)} د.ع</span>
-                </div>
-              )}
               <div className="p-4 rounded-2xl text-center" style={{background:C.primary}}>
-                <div className="text-white text-xs opacity-70 mb-1">صافي الاستلام من بوكسي</div>
-                <div className="text-white text-3xl font-black">{fmt(netResult)}</div>
+                <div className="text-white text-xs opacity-70 mb-1">صافي المبلغ</div>
+                <div className="text-white text-3xl font-black">{fmt(result)}</div>
                 <div className="text-white text-sm opacity-70">د.ع</div>
               </div>
 
@@ -2095,6 +2044,23 @@ function BoxkiMatcher() {
 
               {loyData&&(
                 <div className="space-y-2">
+                  {/* breakdown by payment type */}
+                  {loyData.by_type&&Object.keys(loyData.by_type).length>0&&(
+                    <div className="rounded-xl overflow-hidden" style={{border:`1px solid ${C.border}`}}>
+                      {Object.entries(loyData.by_type).map(([name,v],i,arr)=>(
+                        <div key={name}>
+                          <div className="flex justify-between items-center px-3 py-2.5" style={{background:C.soft}}>
+                            <div>
+                              <div className="text-xs font-bold" style={{color:C.txt}}>{name}</div>
+                              <div className="text-xs" style={{color:C.txt,opacity:.5}}>{v.orders} طلب</div>
+                            </div>
+                            <div className="font-black text-sm" style={{color:C.txt}}>{fmt(v.total)} د.ع</div>
+                          </div>
+                          {i<arr.length-1&&<div style={{height:1,background:C.border}}/>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <div className="flex justify-between items-center text-sm px-1">
                     <span style={{color:C.txt,opacity:.6}}>Loyverse توصيل — {loyData.orders} طلب</span>
                     <span className="font-bold" style={{color:C.txt}}>{fmt(loyData.total)} د.ع</span>

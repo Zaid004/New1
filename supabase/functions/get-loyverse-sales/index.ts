@@ -77,11 +77,17 @@ Deno.serve(async (req) => {
         cursor = data.cursor ?? null;
       } while (cursor);
 
-      // Build set of delivery SALE receipt numbers within this period
+      // Build set of delivery SALE receipt numbers + breakdown by payment type
       const periodSaleNumbers = new Set<string>();
+      const byType: Record<string, { total: number; orders: number }> = {};
+
       for (const r of allReceipts) {
-        const isDelivery = r.payments?.some(p => p.name?.includes('توصيل'));
-        if (!isDelivery || r.receipt_type !== 'SALE') continue;
+        const dp = r.payments?.filter(p => p.name?.includes('توصيل')) ?? [];
+        if (dp.length === 0 || r.receipt_type !== 'SALE') continue;
+        const typeName = dp[0].name;
+        if (!byType[typeName]) byType[typeName] = { total: 0, orders: 0 };
+        byType[typeName].total += r.total_money ?? 0;
+        byType[typeName].orders++;
         deliveryTotal += r.total_money ?? 0;
         deliveryOrders++;
         periodSaleNumbers.add(r.receipt_number);
@@ -89,15 +95,23 @@ Deno.serve(async (req) => {
 
       // Only subtract REFUNDs whose original SALE is within the same period
       for (const r of allReceipts) {
-        const isDelivery = r.payments?.some(p => p.name?.includes('توصيل'));
-        if (!isDelivery || r.receipt_type !== 'REFUND') continue;
+        const dp = r.payments?.filter(p => p.name?.includes('توصيل')) ?? [];
+        if (dp.length === 0 || r.receipt_type !== 'REFUND') continue;
         if (r.refund_for && periodSaleNumbers.has(r.refund_for)) {
+          const typeName = dp[0].name;
+          if (byType[typeName]) {
+            byType[typeName].total -= Math.abs(r.total_money ?? 0);
+            byType[typeName].orders = Math.max(0, byType[typeName].orders - 1);
+          }
           deliveryTotal -= Math.abs(r.total_money ?? 0);
           deliveryOrders = Math.max(0, deliveryOrders - 1);
         }
       }
 
-      return json({ total: Math.round(deliveryTotal), orders: deliveryOrders });
+      const by_type = Object.fromEntries(
+        Object.entries(byType).map(([k, v]) => [k, { total: Math.round(v.total), orders: v.orders }])
+      );
+      return json({ total: Math.round(deliveryTotal), orders: deliveryOrders, by_type });
     } catch (e) {
       return json({ error: (e as Error).message }, 500);
     }
