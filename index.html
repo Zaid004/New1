@@ -1760,6 +1760,9 @@ function BoxkiMatcher() {
   const [loyData,setLoyData]=useState(null);
   const [loyErr,setLoyErr]=useState('');
   const [dayTotal,setDayTotal]=useState(null);
+  const [boxyLoading,setBoxyLoading]=useState(false);
+  const [boxyData,setBoxyData]=useState(null);
+  const [boxyErr,setBoxyErr]=useState('');
 
   // ── Photo verification state ──
   const [photoStep,setPhotoStep]=useState(false);
@@ -1767,7 +1770,7 @@ function BoxkiMatcher() {
   const [photoUploading,setPhotoUploading]=useState(false);
   const [photoErr,setPhotoErr]=useState('');
 
-  const reset = () => { setLoyData(null); setLoyErr(''); setDayTotal(null); };
+  const reset = () => { setLoyData(null); setLoyErr(''); setDayTotal(null); setBoxyData(null); setBoxyErr(''); };
 
   // Resize + encode photo to base64 JPEG (max 1200px, 85% quality)
   const processPhoto = file => new Promise(resolve => {
@@ -1912,6 +1915,25 @@ function BoxkiMatcher() {
       setLoyErr('خطأ في الاتصال');
     } finally {
       setLoyLoading(false);
+    }
+  };
+
+  const fetchBoxyOrders = async () => {
+    setBoxyLoading(true); setBoxyData(null); setBoxyErr('');
+    try {
+      const {data:{session}} = await sb.auth.getSession();
+      const res = await fetch(`${SUPA_URL}/functions/v1/get-boxy-orders`, {
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':`Bearer ${session.access_token}`},
+        body: JSON.stringify({from: fromDt.slice(0,10), to: toDt.slice(0,10)}),
+      });
+      const data = await res.json();
+      if(data.error){ setBoxyErr(data.error); return; }
+      setBoxyData(data);
+    } catch(e) {
+      setBoxyErr('خطأ في الاتصال ببوكسي');
+    } finally {
+      setBoxyLoading(false);
     }
   };
 
@@ -2138,6 +2160,98 @@ function BoxkiMatcher() {
                   )}
                 </div>
               )}
+
+              {/* ── Boxy API section ── */}
+              <div className="mt-3 pt-3" style={{borderTop:`1px solid ${C.border}`}}>
+                <button onClick={fetchBoxyOrders} disabled={boxyLoading}
+                  className="w-full py-2.5 rounded-xl font-bold text-sm"
+                  style={{background:boxyLoading?C.soft:C.soft,color:boxyLoading?C.txt+'80':C.primary,border:`1.5px solid ${C.border}`}}>
+                  {boxyLoading?'جاري جلب طلبات بوكسي...':'📦 جلب طلبات بوكسي'}
+                </button>
+                {boxyErr&&(
+                  <div className="mt-2 p-3 rounded-xl text-sm" style={{background:'var(--err-bg)',color:C.err}}>
+                    {boxyErr}
+                  </div>
+                )}
+                {boxyData&&(()=>{
+                  const statusAr = {
+                    new:'جديد', accepted:'مقبول', assigned:'تم التوزيع',
+                    picked_up:'تم الاستلام', out_for_delivery:'في الطريق',
+                    delivered:'تم التسليم', failed:'فشل', returned:'مرتجع',
+                    cancelled:'ملغي', completed:'مكتمل', settled:'محسوم',
+                  };
+                  const deliveredSlugs = new Set(['delivered','completed','settled']);
+                  const entries = Object.entries(boxyData.by_status||{});
+                  const deliveredEntry = entries.filter(([s])=>deliveredSlugs.has(s));
+                  const deliveredCount = deliveredEntry.reduce((s,[,v])=>s+v.count,0);
+                  const deliveredTotal = deliveredEntry.reduce((s,[,v])=>s+v.total,0);
+                  return (
+                    <div className="mt-2 space-y-2">
+                      {/* Status breakdown */}
+                      {entries.length>0&&(
+                        <div className="rounded-xl overflow-hidden" style={{border:`1px solid ${C.border}`}}>
+                          {entries.map(([slug,v],i,arr)=>{
+                            const isDelivered=deliveredSlugs.has(slug);
+                            return (
+                              <div key={slug}>
+                                <div className="flex justify-between items-center px-3 py-2" style={{background:C.soft}}>
+                                  <div>
+                                    <div className="text-xs font-bold" style={{color:isDelivered?C.ok:C.txt}}>
+                                      {statusAr[slug]||slug} {isDelivered&&'✓'}
+                                    </div>
+                                    <div className="text-xs" style={{color:C.txt,opacity:.45}}>{v.count} طلب</div>
+                                  </div>
+                                  <div className="font-black text-sm" style={{color:isDelivered?C.ok:C.txt}}>{fmt(v.total)} د.ع</div>
+                                </div>
+                                {i<arr.length-1&&<div style={{height:1,background:C.border}}/>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {/* Totals */}
+                      <div className="rounded-xl p-3 space-y-1" style={{background:C.soft}}>
+                        <div className="flex justify-between text-xs" style={{color:C.txt,opacity:.6}}>
+                          <span>إجمالي الطلبات</span>
+                          <span className="font-bold" style={{opacity:1}}>{boxyData.total_orders} طلب</span>
+                        </div>
+                        <div className="flex justify-between text-xs" style={{color:C.txt,opacity:.6}}>
+                          <span>طلبات مُسلَّمة</span>
+                          <span className="font-bold" style={{opacity:1,color:C.ok}}>{deliveredCount} طلب</span>
+                        </div>
+                        <div style={{height:1,background:C.border}}/>
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs font-bold" style={{color:C.txt}}>إجمالي المُسلَّم (بوكسي)</span>
+                          <span className="font-black text-sm" style={{color:C.ok}}>{fmt(deliveredTotal)} د.ع</span>
+                        </div>
+                      </div>
+                      {/* Cross-check with Loyverse if available */}
+                      {loyData&&(()=>{
+                        const cashAmt=loyData.by_type?.['توصيل']?.total??0;
+                        const cardOrd=loyData.by_type?.['ماستر توصيل']?.orders??0;
+                        const loyNet=cashAmt-(cardOrd*5000);
+                        const crossDiff=loyNet-deliveredTotal;
+                        const crossMatch=Math.abs(crossDiff)<10;
+                        return (
+                          <div className="p-3 rounded-xl text-center" style={{background:crossMatch?'var(--ok-bg)':'var(--err-bg)'}}>
+                            {crossMatch?(
+                              <div className="text-sm font-black" style={{color:C.ok}}>بوكسي ولويفرز متطابقان ✓</div>
+                            ):(
+                              <>
+                                <div className="text-xs font-semibold mb-0.5" style={{color:C.err}}>فرق بين بوكسي ولويفرز</div>
+                                <div className="text-xl font-black" style={{color:C.err}}>{fmt(Math.abs(crossDiff))} د.ع</div>
+                                <div className="text-xs mt-0.5" style={{color:C.err,opacity:.8}}>
+                                  {crossDiff>0?'لويفرز أكثر من بوكسي':'بوكسي أكثر من لويفرز'}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  );
+                })()}
+              </div>
             </div>
           )}
         </div>
