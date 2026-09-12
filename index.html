@@ -1856,12 +1856,16 @@ function BoxkiMatcher() {
       setLoyData(data);
       const netAmt = Math.round(amt - ord*5000);
       const matched = data.total === netAmt;
+      const loyCashAmt = data.by_type?.['توصيل']?.total ?? null;
+      const loyCardOrd = data.by_type?.['ماستر توصيل']?.orders ?? null;
       const {error: logErr} = await sb.from('boxki_match_log').insert({
         auth_user_id: session.user.id,
         boxki_amount: amt,
         boxki_orders: ord,
         loyverse_total: data.total,
         loyverse_orders: data.orders,
+        loyverse_cash_amount: loyCashAmt,
+        loyverse_card_orders: loyCardOrd,
         matched,
         diff: netAmt - data.total,
         period_from: toISO(fromDt),
@@ -3578,6 +3582,28 @@ function BoxkiLogCard({log, emp}) {
             <span>Loyverse: <strong>{fmt(log.loyverse_total)}</strong> د.ع</span>
             <span>طلبات L: <strong>{log.loyverse_orders}</strong></span>
           </div>
+          {(log.loyverse_cash_amount!=null||log.loyverse_card_orders!=null)&&(()=>{
+            const cashAmt=log.loyverse_cash_amount??0;
+            const cardOrd=log.loyverse_card_orders??0;
+            const net=cashAmt-(cardOrd*5000);
+            return (
+              <div className="mt-2 rounded-lg px-2.5 py-2 space-y-0.5" style={{background:C.soft}}>
+                <div className="flex justify-between text-xs" style={{color:C.txt,opacity:.6}}>
+                  <span>توصيل (نقد)</span><span className="font-bold" style={{opacity:1}}>{fmt(cashAmt)} د.ع</span>
+                </div>
+                {cardOrd>0&&(
+                  <div className="flex justify-between text-xs" style={{color:C.txt,opacity:.6}}>
+                    <span>خصم ماستر ({cardOrd} × 5,000)</span>
+                    <span className="font-bold" style={{opacity:1,color:C.err}}>- {fmt(cardOrd*5000)} د.ع</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-xs font-black pt-0.5" style={{borderTop:`1px solid ${C.border}`}}>
+                  <span style={{color:C.txt}}>صافي الاستلام</span>
+                  <span style={{color:C.primary}}>{fmt(net)} د.ع</span>
+                </div>
+              </div>
+            );
+          })()}
           {!log.matched && log.diff!==0 && (
             <div className="mt-1.5 text-xs font-bold" style={{color:C.err}}>
               فرق: {fmt(Math.abs(log.diff))} د.ع {log.diff>0?'(بوكسي أكثر)':'(Loyverse أكثر)'}
