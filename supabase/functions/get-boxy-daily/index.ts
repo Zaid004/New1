@@ -26,6 +26,11 @@ type BoxyListResponse = {
   perPage: number;
 };
 
+// Convert ISO date string to Iraq date string (YYYY-MM-DD) in UTC+3
+function toIraqDate(isoStr: string): string {
+  return new Date(new Date(isoStr).getTime() + 3 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
@@ -69,48 +74,54 @@ Deno.serve(async (req) => {
     'Accept':     'application/json',
   };
 
-  const allOrders: BoxyOrder[] = [];
-  let page = 1;
+  const MAX_PAGES = 50;
   const perPage = 100;
 
   try {
-    while (true) {
-      const params = new URLSearchParams({
-        page: String(page), perPage: String(perPage),
-        date_from: from, date_to: to,
-      });
+    // Fetch page 1 first to learn total pages
+    const firstRes = await fetch(
+      `https://api.tryboxy.com/api/v1/merchants/orders?page=1&perPage=${perPage}`,
+      { headers: boxyHeaders }
+    );
+    if (!firstRes.ok) {
+      const errText = await firstRes.text().catch(() => '');
+      return json({ error: `Boxy API ${firstRes.status}: ${errText}` }, 502);
+    }
+    const firstRaw = await firstRes.json() as BoxyListResponse;
+    const totalPages = Math.min(firstRaw.pages ?? 1, MAX_PAGES);
+    const firstBatch = firstRaw.data ?? [];
+
+    // Fetch remaining pages in parallel
+    const fetchPage = async (p: number): Promise<BoxyOrder[]> => {
       const res = await fetch(
-        `https://api.tryboxy.com/api/v1/merchants/orders?${params}`,
+        `https://api.tryboxy.com/api/v1/merchants/orders?page=${p}&perPage=${perPage}`,
         { headers: boxyHeaders }
       );
-      if (!res.ok) {
-        const errText = await res.text().catch(() => '');
-        return json({ error: `Boxy API ${res.status}: ${errText}` }, 502);
-      }
+      if (!res.ok) return [];
       const raw = await res.json() as BoxyListResponse;
-      const batch = raw.data ?? [];
-      allOrders.push(...batch);
-      if (page >= (raw.pages ?? 1) || batch.length === 0) break;
-      page++;
-    }
+      return raw.data ?? [];
+    };
 
-    // Group by Iraq day (UTC+3)
+    const remainingPages = Array.from({ length: totalPages - 1 }, (_, i) => i + 2);
+    const remaining = await Promise.all(remainingPages.map(fetchPage));
+    const allOrders: BoxyOrder[] = [...firstBatch, ...remaining.flat()];
+
+    // Filter to requested date range (Iraq UTC+3) and group by day
     type DayEntry = {
       date: string;
       total: number;
       delivered_count: number;
       active_count: number;
       returned_count: number;
-      delivered_net: number;   // actual net from delivered orders
-      theoretical_net: number; // net if ALL orders were delivered
+      delivered_net: number;
+      theoretical_net: number;
     };
 
     const byDay: Record<string, DayEntry> = {};
 
     for (const o of allOrders) {
-      // Shift to Iraq UTC+3
-      const iqDate = new Date(new Date(o.created_at).getTime() + 3 * 3600 * 1000);
-      const date = iqDate.toISOString().slice(0, 10);
+      const date = toIraqDate(o.created_at);
+      if (date < from || date > to) continue;
 
       if (!byDay[date]) {
         byDay[date] = { date, total: 0, delivered_count: 0, active_count: 0, returned_count: 0, delivered_net: 0, theoretical_net: 0 };
@@ -140,7 +151,12 @@ Deno.serve(async (req) => {
       }))
       .sort((a, b) => b.date.localeCompare(a.date));
 
-    return json({ days, total_orders: allOrders.length });
+    return json({
+      days,
+      total_orders: allOrders.length,
+      in_range: days.reduce((s, d) => s + d.total, 0),
+      truncated: (firstRaw.pages ?? 1) > MAX_PAGES,
+    });
   } catch (e) {
     return json({ error: (e as Error).message }, 500);
   }
