@@ -4215,43 +4215,44 @@ function BoxyInspect() {
       {err&&<div className="p-3 rounded-xl text-sm" style={{background:'var(--err-bg)',color:C.err}}>{err}</div>}
       {result&&(
         <div className="space-y-3">
-          {/* Order field keys */}
-          <div className="text-xs font-bold mb-1" style={{color:C.txt,opacity:.5}}>حقول الطلب (ابحث عن BXTR)</div>
+          {/* Order status slugs */}
+          <div className="text-xs font-bold mb-1" style={{color:C.txt,opacity:.5}}>حالات الطلبات (status slugs)</div>
           <div className="rounded-xl p-3" style={{background:C.soft}}>
-            <div className="flex flex-wrap gap-1">
-              {(result.first_order_keys||[]).map(k=>(
-                <span key={k} className="text-xs font-mono px-2 py-0.5 rounded-lg"
+            <div className="flex flex-wrap gap-1.5">
+              {Object.entries(result.order_status_counts||{}).map(([slug,cnt])=>(
+                <span key={slug} className="text-xs font-mono px-2 py-1 rounded-lg"
                   style={{background:C.card,color:C.primary,border:`1px solid ${C.border}`}}>
-                  {k}
+                  {slug} <span style={{color:C.txt,opacity:.5}}>×{cnt}</span>
                 </span>
               ))}
             </div>
           </div>
-          {/* TX status slugs */}
-          <div className="text-xs font-bold mb-1" style={{color:C.txt,opacity:.5}}>حالات المعاملات (status slugs)</div>
-          <div className="rounded-xl p-3" style={{background:C.soft}}>
-            <pre className="text-xs font-mono" style={{color:C.txt,whiteSpace:'pre-wrap',wordBreak:'break-all'}}>
-              {JSON.stringify(result.tx_status_slugs||[], null, 2)}
-            </pre>
-          </div>
-          {/* Full first order */}
-          <div className="text-xs font-bold mb-1" style={{color:C.txt,opacity:.5}}>بيانات أول طلب كاملة</div>
-          <div className="rounded-xl p-3 overflow-x-auto" style={{background:C.soft}}>
-            <pre className="text-xs font-mono" style={{color:C.txt,whiteSpace:'pre-wrap',wordBreak:'break-all'}}>
-              {JSON.stringify(result.first_order_full||result.first_order||null, null, 2)}
-            </pre>
-          </div>
-          {/* Sample transactions */}
-          {(result.transactions_sample||result.transactions)&&(
-            <>
-              <div className="text-xs font-bold mb-1" style={{color:C.txt,opacity:.5}}>عينة معاملات</div>
-              <div className="rounded-xl p-3 overflow-x-auto" style={{background:C.soft}}>
-                <pre className="text-xs font-mono" style={{color:C.txt,whiteSpace:'pre-wrap',wordBreak:'break-all'}}>
-                  {JSON.stringify(result.transactions_sample||result.transactions, null, 2)}
-                </pre>
+          {/* Transaction count & date filter test */}
+          <div className="text-xs font-bold mb-1" style={{color:C.txt,opacity:.5}}>إجمالي المعاملات وفلتر التاريخ</div>
+          <div className="rounded-xl p-3 space-y-1.5" style={{background:C.soft}}>
+            <div className="flex justify-between text-xs">
+              <span style={{color:C.txt,opacity:.6}}>إجمالي المعاملات</span>
+              <span className="font-bold font-mono" style={{color:C.primary}}>{result.tx_total_count?.toLocaleString()||'—'}</span>
+            </div>
+            <div className="flex justify-between text-xs">
+              <span style={{color:C.txt,opacity:.6}}>عدد الصفحات</span>
+              <span className="font-bold font-mono" style={{color:C.primary}}>{result.tx_total_pages||'—'}</span>
+            </div>
+            <div style={{height:1,background:C.border}}/>
+            {[
+              ['created_from/created_to',result.date_filter_created],
+              ['from_date/to_date',result.date_filter_from_date],
+            ].map(([label,d])=>(
+              <div key={label}>
+                <div className="text-xs font-mono mb-0.5" style={{color:C.txt,opacity:.5}}>{label}</div>
+                <div className="text-xs" style={{color:d?.total!==null?C.ok:C.err}}>
+                  {d?.total!==null
+                    ? `✓ يدعم — ${d.total?.toLocaleString()} معاملة في 30 يوم (${d.pages} صفحة)`
+                    : `✗ لا يدعم (HTTP ${d?.status})`}
+                </div>
               </div>
-            </>
-          )}
+            ))}
+          </div>
         </div>
       )}
     </div>
