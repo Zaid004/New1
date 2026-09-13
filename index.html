@@ -4625,10 +4625,7 @@ function BoxyDailyLogView() {
   const pendingBal   = balance?.pending?.balance   ?? null;
   const availableBal = balance?.available?.balance ?? null;
   const paidBal      = balance?.paid?.total        ?? null;
-  // True reconciliation: earned = available + pending + already-paid-to-bank + any real discrepancy
   const hasBalance  = pendingBal!==null || availableBal!==null;
-  const boxyTotal   = (availableBal??0) + (pendingBal??0) + (paidBal??0);
-  const diff        = hasBalance && paidBal!==null ? totalDeliveredNet - boxyTotal : null;
 
   // Build order→transactions lookup from balance data
   const orderTxMap = React.useMemo(()=>{
@@ -4687,17 +4684,6 @@ function BoxyDailyLogView() {
               <div className="flex justify-between items-center">
                 <span className="text-sm" style={{color:C.txt,opacity:.7}}>تم تحويله للبنك</span>
                 <span className="font-bold text-sm" style={{color:C.txt,opacity:.6}}>{fmtAmt(paidBal)}</span>
-              </div>
-            )}
-            {/* True reconciliation: earned = available + pending + paid + discrepancy */}
-            {diff!==null&&(
-              <div className="flex justify-between items-center pt-2 border-t" style={{borderColor:C.border}}>
-                <span className="text-sm font-semibold" style={{color:Math.abs(diff)>500?C.err:C.ok}}>
-                  {Math.abs(diff)>500?'يوجد خلل حقيقي':'مطابق ✓'}
-                </span>
-                <span className="font-bold text-sm" style={{color:Math.abs(diff)>500?C.err:C.ok}}>
-                  {Math.abs(diff)>500?fmtAmt(Math.abs(diff)):'الحسابات صحيحة'}
-                </span>
               </div>
             )}
             {hasBalance&&paidBal===null&&(
