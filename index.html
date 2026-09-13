@@ -4617,8 +4617,9 @@ function BoxyDailyLogView() {
   const monthLabel=`${MONTHS[mmo-1]} ${my}`;
   const isCurrentMonth = month===curMonthStr();
 
-  const orderColor = slug => BOXY_DELIVERED.has(slug)?C.ok : BOXY_RETURNED.has(slug)?C.err : '#d97706';
-  const orderIcon  = slug => BOXY_DELIVERED.has(slug)?'✓' : BOXY_RETURNED.has(slug)?'✗' : '—';
+  const isReturned = slug => BOXY_RETURNED.has(slug) || (slug||'').startsWith('rto-');
+  const orderColor = slug => BOXY_DELIVERED.has(slug)?C.ok : isReturned(slug)?C.err : '#d97706';
+  const orderIcon  = slug => BOXY_DELIVERED.has(slug)?'✓' : isReturned(slug)?'✗' : '—';
 
   const totalDeliveredNet   = (days||[]).reduce((s,d)=>s+d.delivered_net,0);
   const totalTheoreticalNet = (days||[]).reduce((s,d)=>s+d.theoretical_net,0);

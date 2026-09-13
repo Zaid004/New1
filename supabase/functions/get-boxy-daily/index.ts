@@ -12,7 +12,8 @@ const RETURNED  = new Set([
   'cancelled', 'cancel',
   'rto-delivered', 'rto-out-for-delivery', 'rto-scheduled', 'rto-warehouse',
 ]);
-const IS_FINAL  = new Set([...DELIVERED, ...RETURNED]);
+const isReturned = (slug: string) => RETURNED.has(slug) || slug.startsWith('rto-');
+const IS_FINAL  = (slug: string) => DELIVERED.has(slug) || isReturned(slug);
 
 type BoxyOrder = {
   uid: string;
@@ -176,7 +177,7 @@ Deno.serve(async (req) => {
             iraq_date:     d,
             net,
             // Final = terminal status AND day is fully past
-            is_final: IS_FINAL.has(slug) && d < yesterday,
+            is_final: IS_FINAL(slug) && d < yesterday,
             synced_at: new Date().toISOString(),
           };
         });
@@ -229,7 +230,7 @@ Deno.serve(async (req) => {
       byDay[date].delivered_count++;
       byDay[date].delivered_net   += net;
       byDay[date].theoretical_net += net;
-    } else if (RETURNED.has(status_slug)) {
+    } else if (isReturned(status_slug)) {
       byDay[date].returned_count++;
     } else {
       byDay[date].active_count++;
@@ -259,7 +260,7 @@ Deno.serve(async (req) => {
       delivered_net:   Math.round(d.delivered_net),
       theoretical_net: Math.round(d.theoretical_net),
       orders: d.orders.sort((a, b) => {
-        const rank = (s: string) => DELIVERED.has(s) ? 0 : RETURNED.has(s) ? 2 : 1;
+        const rank = (s: string) => DELIVERED.has(s) ? 0 : isReturned(s) ? 2 : 1;
         return rank(a.status_slug) - rank(b.status_slug);
       }),
     }))
