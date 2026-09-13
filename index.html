@@ -252,6 +252,9 @@ const PATHS = {
   settings:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm8.9-3a8.1 8.1 0 0 1-.1 1.2l2.1 1.6c.2.2.3.4.1.6l-2 3.5c-.1.2-.4.3-.6.2l-2.5-1a8.9 8.9 0 0 1-2 1.2l-.4 2.6c0 .3-.2.4-.5.4h-4c-.3 0-.5-.2-.5-.4l-.4-2.6a8.9 8.9 0 0 1-2-1.2l-2.5 1c-.2.1-.5 0-.6-.2l-2-3.5c-.1-.2-.1-.5.1-.6l2.1-1.6A8.4 8.4 0 0 1 3 12a8.4 8.4 0 0 1 .1-1.2L1 9.2c-.2-.2-.3-.4-.1-.6l2-3.5c.1-.2.4-.3.6-.2l2.5 1a8.9 8.9 0 0 1 2-1.2L8.4 2c0-.3.2-.4.5-.4h4c.3 0 .5.2.5.4l.4 2.6a8.9 8.9 0 0 1 2 1.2l2.5-1c.2-.1.5 0 .6.2l2 3.5c.1.2.1.5-.1.6l-2.1 1.6c.1.4.2.8.2 1.3z',
   eye:'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z',
   'eye-off':'M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24M1 1l22 22',
+  chart:'M18 20V10M12 20V4M6 20v-6',
+  'chevron-up':'M18 15l-6-6-6 6',
+  'chevron-down':'M6 9l6 6 6-6',
 };
 const Ic = ({n,s=20,c='currentColor'}) => (
   <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -3988,8 +3991,176 @@ function AdminSettingsView() {
         </button>
       </div>
 
+      {/* Balance verification */}
+      <BoxyBalanceView/>
+
       {/* Diagnostic */}
       <BoxyInspect/>
+    </div>
+  );
+}
+
+function BoxyBalanceView() {
+  const todayIQ  = ()=>{ const d=new Date(); d.setHours(d.getHours()+3); return d.toISOString().slice(0,10); };
+  const monthAgo = ()=>{ const d=new Date(); d.setHours(d.getHours()+3); d.setDate(d.getDate()-30); return d.toISOString().slice(0,10); };
+
+  const [from,setFrom]=useState(monthAgo);
+  const [to,setTo]=useState(todayIQ);
+  const [loading,setLoading]=useState(false);
+  const [data,setData]=useState(null);
+  const [err,setErr]=useState('');
+  const [showSettled,setShowSettled]=useState(false);
+
+  const run = async () => {
+    setLoading(true); setData(null); setErr('');
+    try {
+      const {data:{session}} = await sb.auth.getSession();
+      const res = await fetch(`${SUPA_URL}/functions/v1/get-boxy-balance`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':`Bearer ${session.access_token}`},
+        body:JSON.stringify({from,to}),
+      });
+      const d = await res.json();
+      if(d.error){ setErr(d.error); return; }
+      setData(d);
+    } catch(e){ setErr('خطأ في الاتصال'); }
+    finally{ setLoading(false); }
+  };
+
+  const ptLabel = pt => pt==='COLLECT_ON_DELIVERY'?'نقدي':pt==='PREPAID'?'مسبق':pt;
+  const fmtAmt  = n => (n>=0?'+':'')+n.toLocaleString('ar-IQ')+' د.ع';
+
+  return (
+    <div className="rounded-2xl p-5 shadow-sm space-y-4" style={{background:C.card}}>
+      <div className="flex items-center gap-2">
+        <Ic n='chart' s={15} c={C.primary}/>
+        <span className="font-bold text-sm" style={{color:C.txt}}>التحقق من رصيد بوكسي</span>
+      </div>
+      <p className="text-xs" style={{color:C.txt,opacity:.5}}>
+        يحسب الرصيد المتوقع من معاملات بوكسي ويقارنه مع ما هو معلق (لم يُسحب بعد).
+      </p>
+
+      {/* Date range */}
+      <div className="flex gap-2">
+        <div className="flex-1">
+          <div className="text-xs mb-1" style={{color:C.txt,opacity:.5}}>من</div>
+          <input type="date" value={from} onChange={e=>setFrom(e.target.value)}
+            className="w-full rounded-xl px-3 py-2 text-sm border"
+            style={{background:C.soft,color:C.txt,borderColor:C.border}}/>
+        </div>
+        <div className="flex-1">
+          <div className="text-xs mb-1" style={{color:C.txt,opacity:.5}}>إلى</div>
+          <input type="date" value={to} onChange={e=>setTo(e.target.value)}
+            className="w-full rounded-xl px-3 py-2 text-sm border"
+            style={{background:C.soft,color:C.txt,borderColor:C.border}}/>
+        </div>
+      </div>
+
+      <button onClick={run} disabled={loading}
+        className="w-full py-2.5 rounded-xl font-bold text-sm"
+        style={{background:C.soft,color:C.primary,border:`1.5px solid ${C.border}`}}>
+        {loading?'جاري الجلب...':'💰 فحص الرصيد'}
+      </button>
+
+      {err&&<div className="p-3 rounded-xl text-sm" style={{background:'var(--err-bg)',color:C.err}}>{err}</div>}
+
+      {data&&(
+        <div className="space-y-4">
+          {/* Summary cards */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-xl p-3 text-center" style={{background:C.soft}}>
+              <div className="text-xs mb-1" style={{color:C.txt,opacity:.5}}>الرصيد المعلق في بوكسي</div>
+              <div className="font-bold text-base" style={{color:data.pending.balance>=0?C.ok:C.err}}>
+                {fmtAmt(data.pending.balance)}
+              </div>
+              <div className="text-xs mt-0.5" style={{color:C.txt,opacity:.4}}>
+                {data.pending.count} طلب
+              </div>
+            </div>
+            <div className="rounded-xl p-3 text-center" style={{background:C.soft}}>
+              <div className="text-xs mb-1" style={{color:C.txt,opacity:.5}}>إجمالي المعاملات</div>
+              <div className="font-bold text-base" style={{color:C.primary}}>
+                {data.total_transactions.toLocaleString()}
+              </div>
+              <div className="text-xs mt-0.5" style={{color:C.txt,opacity:.4}}>
+                {data.settled.count} مسوّاة
+              </div>
+            </div>
+          </div>
+
+          {/* Pending orders table */}
+          {data.pending.count>0&&(
+            <div>
+              <div className="text-xs font-bold mb-2" style={{color:C.txt,opacity:.5}}>
+                طلبات في الرصيد الحالي (معلقة)
+              </div>
+              <div className="rounded-xl overflow-hidden" style={{border:`1px solid ${C.border}`}}>
+                {/* Header */}
+                <div className="grid grid-cols-3 px-3 py-2" style={{background:C.primary+'22',borderBottom:`1px solid ${C.border}`}}>
+                  <div className="text-xs font-bold" style={{color:C.primary}}>رقم الطلب</div>
+                  <div className="text-xs font-bold text-center" style={{color:C.primary}}>النوع</div>
+                  <div className="text-xs font-bold text-left" style={{color:C.primary}}>الصافي</div>
+                </div>
+                {data.pending.orders.map((o,i,arr)=>(
+                  <div key={o.order_platform_code+i}>
+                    <div className="grid grid-cols-3 px-3 py-2.5 items-center" style={{background:i%2===0?C.soft:'transparent'}}>
+                      <div className="font-mono text-xs" style={{color:C.txt,opacity:.8}}>{o.order_platform_code||'—'}</div>
+                      <div className="text-xs text-center" style={{color:C.txt,opacity:.6}}>{ptLabel(o.payment_type)}</div>
+                      <div className="text-xs font-bold text-left" style={{color:o.net>=0?C.ok:C.err}}>
+                        {fmtAmt(o.net)}
+                      </div>
+                    </div>
+                    {i<arr.length-1&&<div style={{height:1,background:C.border}}/>}
+                  </div>
+                ))}
+                {/* Total row */}
+                <div className="grid grid-cols-3 px-3 py-2.5" style={{background:C.primary+'11',borderTop:`1px solid ${C.border}`}}>
+                  <div className="text-xs font-bold col-span-2" style={{color:C.txt}}>المجموع</div>
+                  <div className="text-xs font-bold text-left" style={{color:data.pending.balance>=0?C.ok:C.err}}>
+                    {fmtAmt(data.pending.balance)}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          {data.pending.count===0&&(
+            <div className="p-4 rounded-xl text-sm text-center" style={{background:C.soft,color:C.txt,opacity:.5}}>
+              لا توجد معاملات معلقة في الفترة المحددة
+            </div>
+          )}
+
+          {/* Settled orders toggle */}
+          {data.settled.count>0&&(
+            <div>
+              <button onClick={()=>setShowSettled(s=>!s)}
+                className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm"
+                style={{background:C.soft,color:C.txt,border:`1px solid ${C.border}`}}>
+                <span>طلبات مدفوعة (مسوّاة): {data.settled.count} طلب</span>
+                <Ic n={showSettled?'chevron-up':'chevron-down'} s={14} c={C.txt}/>
+              </button>
+              {showSettled&&(
+                <div className="rounded-xl overflow-hidden mt-2" style={{border:`1px solid ${C.border}`}}>
+                  <div className="grid grid-cols-3 px-3 py-2" style={{background:C.soft,borderBottom:`1px solid ${C.border}`}}>
+                    <div className="text-xs font-bold" style={{color:C.txt,opacity:.5}}>رقم الطلب</div>
+                    <div className="text-xs font-bold text-center" style={{color:C.txt,opacity:.5}}>النوع</div>
+                    <div className="text-xs font-bold text-left" style={{color:C.txt,opacity:.5}}>الصافي</div>
+                  </div>
+                  {data.settled.orders.map((o,i,arr)=>(
+                    <div key={o.order_platform_code+i}>
+                      <div className="grid grid-cols-3 px-3 py-2 items-center" style={{background:i%2===0?C.soft+'80':'transparent'}}>
+                        <div className="font-mono text-xs" style={{color:C.txt,opacity:.6}}>{o.order_platform_code||'—'}</div>
+                        <div className="text-xs text-center" style={{color:C.txt,opacity:.4}}>{ptLabel(o.payment_type)}</div>
+                        <div className="text-xs font-bold text-left" style={{color:C.txt,opacity:.5}}>{fmtAmt(o.net)}</div>
+                      </div>
+                      {i<arr.length-1&&<div style={{height:1,background:C.border}}/>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
