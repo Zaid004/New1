@@ -237,10 +237,7 @@ Deno.serve(async (req) => {
     } else {
       byDay[date].active_count++;
       byDay[date].theoretical_net += net;
-      // Prepaid active: Boxy holds the products value — merchant only risks the fee
-      // COD active: merchant expects to receive net upon delivery
-      const isCod = (payment_type ?? '').toLowerCase() === 'cod';
-      byDay[date].active_net += isCod ? net : -fee;
+      byDay[date].active_net += net;
     }
   };
 
