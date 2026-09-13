@@ -109,19 +109,22 @@ Deno.serve(async (req) => {
   // A date needs Boxy fetch if: recent, OR no cache, OR has non-final cached orders
   const needsBoxy = (date: string) => mustFetch(date) || !cachedByDate[date] || hasNonFinal[date];
 
-  // ── 2. Fetch from Boxy for uncached/recent/non-final days ───────────────────
+  // ── 2. Fetch from Boxy — only recent days (yesterday → tomorrow) for speed ────
+  // Older dates are served from cache; non-final old orders show stale status.
+  const tomorrow    = toIraqDate(new Date(Date.now() + 86400 * 1000).toISOString());
+  const boxyFrom    = yesterday;   // 2 days window: yesterday + today
+  const boxyTo      = tomorrow;    // use tomorrow so today's late orders are included
+
   const boxyHeaders = {
     'api-key':    apiKey,
     'api-secret': apiSecret,
     'Accept':     'application/json',
   };
 
-  // Boxy orders API also returns max 5 per page regardless of perPage param
-  const perPage   = 5;
-  const SAFETY_CAP = 500; // 500 × 5 = 2500 orders max
+  const perPage    = 5;
+  const SAFETY_CAP = 200; // 200 × 5 = 1000 orders for ~2 days is more than enough
 
-  // Use date filter to limit pages fetched (created_from/created_to on orders API)
-  const dateParams = `&created_from=${from}&created_to=${to}`;
+  const dateParams = `&created_from=${boxyFrom}&created_to=${boxyTo}`;
   const baseUrl = `https://api.tryboxy.com/api/v1/merchants/orders?perPage=${perPage}${dateParams}`;
 
   const fetchPage = async (p: number): Promise<BoxyOrder[]> => {
@@ -251,9 +254,9 @@ Deno.serve(async (req) => {
     processOrder(o.uid, o.platform_code ?? '', o.payment_type ?? '', slug, net, fee, date);
   }
 
-  // Cached orders for days that didn't need Boxy fetch
+  // Cached orders for days outside the Boxy fetch window (older dates)
   for (const [date, rows] of Object.entries(cachedByDate)) {
-    if (needsBoxy(date)) continue;
+    if (date >= boxyFrom) continue; // covered by fresh Boxy data
     for (const r of rows ?? []) {
       processOrder(r.uid, r.platform_code, r.payment_type, r.status_slug, r.net, r.fee ?? 0, date);
     }
