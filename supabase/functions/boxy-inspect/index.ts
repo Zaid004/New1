@@ -30,7 +30,6 @@ Deno.serve(async (req) => {
     .maybeSingle();
   if (emp?.role !== 'admin') return json({ error: 'يحتاج صلاحية أدمن' }, 403);
 
-  // Read credentials from admin_secrets
   const { data: secrets } = await supabase
     .from('admin_secrets')
     .select('key, value')
@@ -53,48 +52,33 @@ Deno.serve(async (req) => {
   };
 
   try {
-    // Fetch first order to see all available fields
+    // Fetch first order — full raw object to see ALL fields including tracking
     const orderRes = await fetch(
       'https://api.tryboxy.com/api/v1/merchants/orders?page=1&perPage=1',
       { headers }
     );
     const orderData = orderRes.ok ? await orderRes.json().catch(() => null) : null;
-    // Handle both { data: [...] } and { object: { items: [...] } } response shapes
     const firstOrder = orderData?.data?.[0] ?? orderData?.object?.items?.[0] ?? null;
 
-    // Fetch first few transactions to understand the structure
+    // Fetch first few transactions — full raw to see status slugs
     const txRes = await fetch(
       'https://api.tryboxy.com/api/v1/merchants/transactions?page=1&perPage=5',
       { headers }
     );
     const txData = txRes.ok ? await txRes.json().catch(() => null) : null;
-
-    // Probe extra financial endpoints
-    const probeEndpoints = async (path: string) => {
-      const r = await fetch(`https://api.tryboxy.com/api/v1/merchants/${path}`, { headers });
-      return { status: r.status };
-    };
-
-    const [wallet, balance, payouts, settlements] = await Promise.all([
-      probeEndpoints('wallet'),
-      probeEndpoints('balance'),
-      probeEndpoints('payouts'),
-      probeEndpoints('settlements'),
-    ]);
+    const txItems = txData?.object?.items ?? txData?.data ?? [];
 
     return json({
-      first_order: firstOrder,
-      transactions: {
-        status: txRes.status,
-        data: txData,
-      },
-      extra_endpoints: {
-        wallet,
-        balance,
-        payouts,
-        settlements,
-        'transactions': { status: txRes.status },
-      },
+      // Full order object — look for tracking/BXTR field
+      first_order_full: firstOrder,
+      first_order_keys: firstOrder ? Object.keys(firstOrder) : [],
+
+      // Transaction samples — check status.slug values
+      transactions_sample: txItems.slice(0, 3),
+      tx_status_slugs: txItems.map((t: { status?: { slug?: string }; order_uid?: string }) => ({
+        order_uid: t.order_uid,
+        status_slug: t.status?.slug,
+      })),
     });
   } catch (e) {
     return json({ error: (e as Error).message }, 500);

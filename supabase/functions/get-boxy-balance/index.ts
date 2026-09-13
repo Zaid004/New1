@@ -163,18 +163,21 @@ Deno.serve(async (req) => {
       net: Math.round(o.net),
     }));
 
-    // Boxy transaction statuses: pending=قيد التدقيق, available=متوفرة للسحب, paid=مدفوعة
+    // Boxy statuses: pending=قيد التدقيق, paid=مدفوعة, everything else=متوفرة للسحب
     const sortDesc = (arr: typeof allOrders) => arr.sort((a, b) => b.created_at.localeCompare(a.created_at));
     const pending   = allOrders.filter(o => o.status === 'pending');
-    const available = allOrders.filter(o => o.status === 'available');
     const paid      = allOrders.filter(o => o.status === 'paid');
-    const other     = allOrders.filter(o => !['pending','available','paid'].includes(o.status));
+    const available = allOrders.filter(o => o.status !== 'pending' && o.status !== 'paid');
+
+    // Collect all unique slugs seen for debugging
+    const allSlugs = [...new Set(allOrders.map(o => o.status))];
 
     const realTotal = firstRaw.object?.total ?? allTxRaw.length;
     return json({
       total_transactions: allTx.length,
       real_total: realTotal,
       truncated: (firstRaw.object?.pages ?? 1) > MAX_PAGES,
+      all_status_slugs: allSlugs,
       pending: {
         count:   pending.length,
         balance: Math.round(pending.reduce((s, o) => s + o.net, 0)),
@@ -183,18 +186,13 @@ Deno.serve(async (req) => {
       available: {
         count:   available.length,
         balance: Math.round(available.reduce((s, o) => s + o.net, 0)),
+        statuses: [...new Set(available.map(o => o.status))],
         orders:  sortDesc(available),
       },
       paid: {
         count:  paid.length,
         total:  Math.round(paid.reduce((s, o) => s + o.net, 0)),
         orders: sortDesc(paid),
-      },
-      other: {
-        count:  other.length,
-        total:  Math.round(other.reduce((s, o) => s + o.net, 0)),
-        statuses: [...new Set(other.map(o => o.status))],
-        orders: sortDesc(other),
       },
     });
   } catch (e) {
