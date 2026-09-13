@@ -4032,7 +4032,7 @@ function BoxyInspect() {
       {err&&<div className="p-3 rounded-xl text-sm" style={{background:'var(--err-bg)',color:C.err}}>{err}</div>}
       {result&&(
         <div className="space-y-3">
-          {/* Extra endpoints */}
+          {/* Endpoints status */}
           <div className="text-xs font-bold mb-1" style={{color:C.txt,opacity:.5}}>الـ Endpoints المكتشفة</div>
           <div className="rounded-xl overflow-hidden" style={{border:`1px solid ${C.border}`}}>
             {Object.entries(result.extra_endpoints||{}).map(([ep,v],i,arr)=>(
@@ -4048,11 +4048,24 @@ function BoxyInspect() {
               </div>
             ))}
           </div>
+          {/* Transactions sample */}
+          {result.transactions&&(
+            <>
+              <div className="text-xs font-bold mb-1" style={{color:C.txt,opacity:.5}}>
+                عينة من Transactions (مهم لفهم البنية)
+              </div>
+              <div className="rounded-xl p-3 overflow-x-auto" style={{background:C.soft}}>
+                <pre className="text-xs font-mono" style={{color:C.txt,whiteSpace:'pre-wrap',wordBreak:'break-all'}}>
+                  {JSON.stringify(result.transactions, null, 2)}
+                </pre>
+              </div>
+            </>
+          )}
           {/* Raw first order */}
-          <div className="text-xs font-bold mb-1" style={{color:C.txt,opacity:.5}}>حقول أول طلب</div>
+          <div className="text-xs font-bold mb-1" style={{color:C.txt,opacity:.5}}>حقول أول طلب (بوكسي)</div>
           <div className="rounded-xl p-3 overflow-x-auto" style={{background:C.soft}}>
             <pre className="text-xs font-mono" style={{color:C.txt,whiteSpace:'pre-wrap',wordBreak:'break-all'}}>
-              {JSON.stringify(result.first_order?.data?.[0] ?? result.first_order, null, 2)}
+              {JSON.stringify(result.first_order, null, 2)}
             </pre>
           </div>
         </div>
