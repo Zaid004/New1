@@ -59,7 +59,8 @@ Deno.serve(async (req) => {
       { headers }
     );
     const orderData = orderRes.ok ? await orderRes.json().catch(() => null) : null;
-    const firstOrder = orderData?.data?.[0] ?? null;
+    // Handle both { data: [...] } and { object: { items: [...] } } response shapes
+    const firstOrder = orderData?.data?.[0] ?? orderData?.object?.items?.[0] ?? null;
 
     // Fetch first few transactions to understand the structure
     const txRes = await fetch(

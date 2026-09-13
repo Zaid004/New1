@@ -68,14 +68,11 @@ Deno.serve(async (req) => {
   };
 
   const perPage = 100;
-  const MAX_PAGES = 10; // max 1000 transactions per call
+  const MAX_PAGES = 50;
 
   const fetchPage = async (p: number): Promise<TxItem[]> => {
-    const params = new URLSearchParams({ page: String(p), perPage: String(perPage) });
-    if (from) params.set('date_from', from);
-    if (to)   params.set('date_to',   to);
     const res = await fetch(
-      `https://api.tryboxy.com/api/v1/merchants/transactions?${params}`,
+      `https://api.tryboxy.com/api/v1/merchants/transactions?page=${p}&perPage=${perPage}`,
       { headers: boxyHeaders }
     );
     if (!res.ok) return [];
@@ -84,12 +81,8 @@ Deno.serve(async (req) => {
   };
 
   try {
-    // Fetch page 1 first to learn total pages
-    const firstParams = new URLSearchParams({ page: '1', perPage: String(perPage) });
-    if (from) firstParams.set('date_from', from);
-    if (to)   firstParams.set('date_to',   to);
     const firstRes = await fetch(
-      `https://api.tryboxy.com/api/v1/merchants/transactions?${firstParams}`,
+      `https://api.tryboxy.com/api/v1/merchants/transactions?page=1&perPage=${perPage}`,
       { headers: boxyHeaders }
     );
     if (!firstRes.ok) {
@@ -100,11 +93,18 @@ Deno.serve(async (req) => {
     const totalPages = Math.min(firstRaw.object?.pages ?? 1, MAX_PAGES);
     const firstItems = firstRaw.object?.items ?? [];
 
-    // Fetch remaining pages in parallel
     const remainingPages = Array.from({ length: totalPages - 1 }, (_, i) => i + 2);
     const remaining = await Promise.all(remainingPages.map(fetchPage));
 
-    const allTx: TxItem[] = [...firstItems, ...remaining.flat()];
+    // Filter by date client-side (transactions API may not support date_from/date_to)
+    const allTxRaw: TxItem[] = [...firstItems, ...remaining.flat()];
+    const allTx = (from || to)
+      ? allTxRaw.filter(tx => {
+          if (!tx.created_at) return true;
+          const d = tx.created_at.slice(0, 10);
+          return (!from || d >= from) && (!to || d <= to);
+        })
+      : allTxRaw;
 
     // Group transactions by order_uid
     type OrderEntry = {
@@ -149,7 +149,7 @@ Deno.serve(async (req) => {
     const pending = allOrders.filter(o => o.status === 'pending');
     const settled = allOrders.filter(o => o.status !== 'pending');
 
-    const realTotal = firstRaw.object?.total ?? allTx.length;
+    const realTotal = firstRaw.object?.total ?? allTxRaw.length;
     return json({
       total_transactions: allTx.length,
       real_total: realTotal,
