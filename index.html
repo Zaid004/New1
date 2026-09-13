@@ -4209,42 +4209,43 @@ function BoxyInspect() {
       {err&&<div className="p-3 rounded-xl text-sm" style={{background:'var(--err-bg)',color:C.err}}>{err}</div>}
       {result&&(
         <div className="space-y-3">
-          {/* Endpoints status */}
-          <div className="text-xs font-bold mb-1" style={{color:C.txt,opacity:.5}}>الـ Endpoints المكتشفة</div>
-          <div className="rounded-xl overflow-hidden" style={{border:`1px solid ${C.border}`}}>
-            {Object.entries(result.extra_endpoints||{}).map(([ep,v],i,arr)=>(
-              <div key={ep}>
-                <div className="flex justify-between items-center px-3 py-2" style={{background:C.soft}}>
-                  <div className="font-mono text-xs" style={{color:C.txt,opacity:.7}}>/{ep}</div>
-                  <div className="text-xs font-bold px-2 py-0.5 rounded-lg"
-                    style={{background:v.status===200?'var(--ok-bg)':'var(--err-bg)',color:v.status===200?C.ok:C.err}}>
-                    {v.status}
-                  </div>
-                </div>
-                {i<arr.length-1&&<div style={{height:1,background:C.border}}/>}
-              </div>
-            ))}
+          {/* Order field keys */}
+          <div className="text-xs font-bold mb-1" style={{color:C.txt,opacity:.5}}>حقول الطلب (ابحث عن BXTR)</div>
+          <div className="rounded-xl p-3" style={{background:C.soft}}>
+            <div className="flex flex-wrap gap-1">
+              {(result.first_order_keys||[]).map(k=>(
+                <span key={k} className="text-xs font-mono px-2 py-0.5 rounded-lg"
+                  style={{background:C.card,color:C.primary,border:`1px solid ${C.border}`}}>
+                  {k}
+                </span>
+              ))}
+            </div>
           </div>
-          {/* Transactions sample */}
-          {result.transactions&&(
+          {/* TX status slugs */}
+          <div className="text-xs font-bold mb-1" style={{color:C.txt,opacity:.5}}>حالات المعاملات (status slugs)</div>
+          <div className="rounded-xl p-3" style={{background:C.soft}}>
+            <pre className="text-xs font-mono" style={{color:C.txt,whiteSpace:'pre-wrap',wordBreak:'break-all'}}>
+              {JSON.stringify(result.tx_status_slugs||[], null, 2)}
+            </pre>
+          </div>
+          {/* Full first order */}
+          <div className="text-xs font-bold mb-1" style={{color:C.txt,opacity:.5}}>بيانات أول طلب كاملة</div>
+          <div className="rounded-xl p-3 overflow-x-auto" style={{background:C.soft}}>
+            <pre className="text-xs font-mono" style={{color:C.txt,whiteSpace:'pre-wrap',wordBreak:'break-all'}}>
+              {JSON.stringify(result.first_order_full||result.first_order||null, null, 2)}
+            </pre>
+          </div>
+          {/* Sample transactions */}
+          {(result.transactions_sample||result.transactions)&&(
             <>
-              <div className="text-xs font-bold mb-1" style={{color:C.txt,opacity:.5}}>
-                عينة من Transactions (مهم لفهم البنية)
-              </div>
+              <div className="text-xs font-bold mb-1" style={{color:C.txt,opacity:.5}}>عينة معاملات</div>
               <div className="rounded-xl p-3 overflow-x-auto" style={{background:C.soft}}>
                 <pre className="text-xs font-mono" style={{color:C.txt,whiteSpace:'pre-wrap',wordBreak:'break-all'}}>
-                  {JSON.stringify(result.transactions, null, 2)}
+                  {JSON.stringify(result.transactions_sample||result.transactions, null, 2)}
                 </pre>
               </div>
             </>
           )}
-          {/* Raw first order */}
-          <div className="text-xs font-bold mb-1" style={{color:C.txt,opacity:.5}}>حقول أول طلب (بوكسي)</div>
-          <div className="rounded-xl p-3 overflow-x-auto" style={{background:C.soft}}>
-            <pre className="text-xs font-mono" style={{color:C.txt,whiteSpace:'pre-wrap',wordBreak:'break-all'}}>
-              {JSON.stringify(result.first_order, null, 2)}
-            </pre>
-          </div>
         </div>
       )}
     </div>
@@ -4625,7 +4626,7 @@ function BoxyDailyLogView() {
   const orderTxMap = React.useMemo(()=>{
     const map={};
     if(!balance) return map;
-    for(const o of [...(balance.pending?.orders||[]),...(balance.settled?.orders||[])]) {
+    for(const o of [...(balance.pending?.orders||[]),...(balance.available?.orders||[]),...(balance.paid?.orders||[])]) {
       map[o.uid]=o.transactions||[];
     }
     return map;
