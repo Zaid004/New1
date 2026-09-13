@@ -4637,6 +4637,16 @@ function BoxyDailyLogView() {
     return map;
   },[balance]);
 
+  // Build order→payment status (paid=وصل البنك, available=في بوكسي, pending=قيد التدقيق)
+  const boxyPaymentMap = React.useMemo(()=>{
+    const map={};
+    if(!balance) return map;
+    for(const o of (balance.paid?.orders||[]))      map[o.uid]='paid';
+    for(const o of (balance.available?.orders||[])) map[o.uid]='available';
+    for(const o of (balance.pending?.orders||[]))   map[o.uid]='pending';
+    return map;
+  },[balance]);
+
   return (
     <div className="space-y-3">
       {/* Month selector */}
@@ -4774,11 +4784,28 @@ function BoxyDailyLogView() {
                                   style={{color:orderColor(o.status_slug)}}>
                                   {orderIcon(o.status_slug)}
                                 </span>
-                                <span className="text-xs font-mono truncate" style={{color:C.txt}}>
-                                  {o.platform_code||o.uid.slice(0,8)}
-                                </span>
+                                <div className="min-w-0">
+                                  <div className="text-xs font-mono truncate" style={{color:C.txt}}>
+                                    {o.platform_code||o.uid.slice(0,8)}
+                                  </div>
+                                  <div className="text-xs mt-0.5" style={{color:C.txt,opacity:.4}}>
+                                    {o.status_slug||'—'}
+                                  </div>
+                                </div>
                               </div>
                               <div className="flex items-center gap-2 flex-shrink-0">
+                                {boxyPaymentMap[o.uid]==='paid'&&(
+                                  <span className="text-xs font-bold px-1.5 py-0.5 rounded-lg"
+                                    style={{background:'var(--ok-bg)',color:C.ok}}>استُلم ✓</span>
+                                )}
+                                {boxyPaymentMap[o.uid]==='available'&&(
+                                  <span className="text-xs px-1.5 py-0.5 rounded-lg"
+                                    style={{background:C.soft,color:C.primary}}>في بوكسي</span>
+                                )}
+                                {boxyPaymentMap[o.uid]==='pending'&&(
+                                  <span className="text-xs px-1.5 py-0.5 rounded-lg"
+                                    style={{background:'#f59e0b22',color:'#d97706'}}>تدقيق</span>
+                                )}
                                 <span className="text-xs font-bold"
                                   style={{color:o.net<0?C.err:orderColor(o.status_slug)}}>
                                   {o.net.toLocaleString('ar-IQ')} د.ع
