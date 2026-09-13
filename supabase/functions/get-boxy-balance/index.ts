@@ -7,9 +7,11 @@ const corsHeaders = {
 
 type TxItem = {
   uid: string;
+  platform_code: string;
   amount: number;
   type: string;
   subject: string;
+  subject_label?: string;
   order_uid: string;
   order_platform_code: string;
   status: { slug: string };
@@ -107,9 +109,11 @@ Deno.serve(async (req) => {
 
     type TxSummary = {
       uid: string;
+      platform_code: string;
       amount: number;
       type: string;
       subject: string;
+      subject_label: string;
       created_at: string;
     };
 
@@ -144,11 +148,13 @@ Deno.serve(async (req) => {
       byOrder[oid].net += tx.amount;
       byOrder[oid].tx_count++;
       byOrder[oid].transactions.push({
-        uid:        tx.uid,
-        amount:     tx.amount,
-        type:       tx.type    ?? '',
-        subject:    tx.subject ?? '',
-        created_at: tx.created_at,
+        uid:           tx.uid,
+        platform_code: tx.platform_code ?? '',
+        amount:        tx.amount,
+        type:          tx.type          ?? '',
+        subject:       tx.subject       ?? '',
+        subject_label: tx.subject_label ?? '',
+        created_at:    tx.created_at,
       });
       if (tx.status?.slug && tx.status.slug !== 'pending') {
         byOrder[oid].status = tx.status.slug;

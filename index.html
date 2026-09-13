@@ -4805,10 +4805,17 @@ function BoxyDailyLogView() {
                                   <div key={tx.uid||i}
                                     className="flex items-center justify-between px-3 py-1.5 border-b"
                                     style={{borderColor:C.border}}>
-                                    <span className="text-xs" style={{color:C.txt,opacity:.75}}>
-                                      {tx.subject||tx.type||'معاملة'}
-                                    </span>
-                                    <span className="text-xs font-bold"
+                                    <div className="min-w-0">
+                                      <div className="text-xs" style={{color:C.txt,opacity:.75}}>
+                                        {tx.subject_label||tx.subject||tx.type||'معاملة'}
+                                      </div>
+                                      {tx.platform_code&&(
+                                        <div className="text-xs font-mono mt-0.5" style={{color:C.primary,opacity:.6}}>
+                                          {tx.platform_code}
+                                        </div>
+                                      )}
+                                    </div>
+                                    <span className="text-xs font-bold flex-shrink-0 ml-2"
                                       style={{color:tx.amount>=0?C.ok:C.err}}>
                                       {fmtAmtSigned(tx.amount)}
                                     </span>
