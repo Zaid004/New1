@@ -4842,7 +4842,8 @@ function BoxyDailyLogView() {
                       {(day.orders||[]).map(o=>{
                         const isOrderOpen = openOrder===o.uid;
                         const txList = orderTxMap[o.uid]||[];
-                        const displayAmt = o.net;
+                        const isActive = !['delivered','partially-delivered'].includes(o.status_slug) && !(o.status_slug&&(o.status_slug.startsWith('rto-')||['returned','partially-returned','returned-warehouse','returning-origin','returning','return-requested','cancelled','cancel','rto-delivered','rto-out-for-delivery','rto-scheduled','rto-warehouse'].includes(o.status_slug)));
+                        const displayAmt = (isActive && o.payment_type && o.payment_type.toLowerCase()!=='cod') ? -(o.fee||0) : o.net;
                         return (
                           <div key={o.uid}>
                             <button onClick={()=>setOpenOrder(isOrderOpen?null:o.uid)}
@@ -4876,7 +4877,7 @@ function BoxyDailyLogView() {
                                     style={{background:'#f59e0b22',color:'#d97706'}}>تدقيق</span>
                                 )}
                                 <span className="text-xs font-bold"
-                                  style={{color:orderColor(o.status_slug)}}>
+                                  style={{color:displayAmt<0?C.err:orderColor(o.status_slug)}}>
                                   {displayAmt.toLocaleString('ar-IQ')} د.ع
                                 </span>
                                 {txList.length>0&&(
