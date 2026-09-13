@@ -206,7 +206,8 @@ Deno.serve(async (req) => {
     active_count: number;
     returned_count: number;
     delivered_net: number;
-    theoretical_net: number;
+    active_net: number;      // current financial position of active orders
+    theoretical_net: number; // if all active orders are delivered
     orders: OrderSummary[];
   };
 
@@ -215,13 +216,13 @@ Deno.serve(async (req) => {
 
   const processOrder = (
     uid: string, platform_code: string, payment_type: string,
-    status_slug: string, net: number, date: string
+    status_slug: string, net: number, fee: number, date: string
   ) => {
     if (seenUids.has(uid)) return;
     seenUids.add(uid);
 
     if (!byDay[date]) {
-      byDay[date] = { date, total: 0, delivered_count: 0, active_count: 0, returned_count: 0, delivered_net: 0, theoretical_net: 0, orders: [] };
+      byDay[date] = { date, total: 0, delivered_count: 0, active_count: 0, returned_count: 0, delivered_net: 0, active_net: 0, theoretical_net: 0, orders: [] };
     }
     byDay[date].total++;
     byDay[date].orders.push({ uid, platform_code, status_slug, net, payment_type });
@@ -235,6 +236,10 @@ Deno.serve(async (req) => {
     } else {
       byDay[date].active_count++;
       byDay[date].theoretical_net += net;
+      // Prepaid active: Boxy holds the products value — merchant only risks the fee
+      // COD active: merchant expects to receive net upon delivery
+      const isCod = (payment_type ?? '').toLowerCase() === 'cod';
+      byDay[date].active_net += isCod ? net : -fee;
     }
   };
 
@@ -242,15 +247,16 @@ Deno.serve(async (req) => {
   for (const o of freshOrders) {
     const date = toIraqDate(o.created_at);
     const slug = o.status?.slug ?? '';
-    const net  = Math.round((o.products_value ?? 0) - (o.fee ?? 0));
-    processOrder(o.uid, o.platform_code ?? '', o.payment_type ?? '', slug, net, date);
+    const fee  = Math.round(o.fee ?? 0);
+    const net  = Math.round((o.products_value ?? 0) - fee);
+    processOrder(o.uid, o.platform_code ?? '', o.payment_type ?? '', slug, net, fee, date);
   }
 
   // Cached orders for days that didn't need Boxy fetch
   for (const [date, rows] of Object.entries(cachedByDate)) {
     if (needsBoxy(date)) continue;
     for (const r of rows ?? []) {
-      processOrder(r.uid, r.platform_code, r.payment_type, r.status_slug, r.net, date);
+      processOrder(r.uid, r.platform_code, r.payment_type, r.status_slug, r.net, r.fee ?? 0, date);
     }
   }
 
@@ -258,6 +264,7 @@ Deno.serve(async (req) => {
     .map(d => ({
       ...d,
       delivered_net:   Math.round(d.delivered_net),
+      active_net:      Math.round(d.active_net),
       theoretical_net: Math.round(d.theoretical_net),
       orders: d.orders.sort((a, b) => {
         const rank = (s: string) => DELIVERED.has(s) ? 0 : isReturned(s) ? 2 : 1;

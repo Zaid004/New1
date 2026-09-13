@@ -4755,12 +4755,12 @@ function BoxyDailyLogView() {
                 )}
               </div>
             )}
-            {totalTheoreticalNet>totalDeliveredNet&&(
+            {totalActive>0&&(
               <>
                 <div style={{height:1,background:C.border}}/>
                 <div className="flex justify-between items-center">
-                  <span className="text-sm" style={{color:'#d97706',opacity:.85}}>قيد التوصيل</span>
-                  <span className="font-bold text-sm" style={{color:'#d97706'}}>{fmtAmt(totalTheoreticalNet-totalDeliveredNet)}</span>
+                  <span className="text-sm" style={{color:'#d97706',opacity:.85}}>قيد التوصيل ({totalActive})</span>
+                  <span className="font-bold text-sm" style={{color:'#d97706'}}>{fmtAmt((days||[]).reduce((s,d)=>s+(d.active_net||0),0))}</span>
                 </div>
               </>
             )}
@@ -4826,7 +4826,7 @@ function BoxyDailyLogView() {
                           <div style={{height:1,background:C.border}}/>
                           <div className="flex justify-between items-center px-3 py-2.5" style={{background:C.soft}}>
                             <span className="text-xs" style={{color:'#d97706',opacity:.85}}>قيد التوصيل ({day.active_count})</span>
-                            <span className="font-bold text-sm" style={{color:'#d97706'}}>{fmtAmt(day.theoretical_net-day.delivered_net)}</span>
+                            <span className="font-bold text-sm" style={{color:'#d97706'}}>{fmtAmt(day.active_net)}</span>
                           </div>
                         </>
                       )}
