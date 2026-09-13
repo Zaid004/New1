@@ -18,13 +18,22 @@ type BoxyOrder = {
   created_at: string;
 };
 
+// Boxy orders API may return { data: [...] } OR { object: { items: [...] } }
 type BoxyListResponse = {
-  data: BoxyOrder[];
-  total: number;
-  pages: number;
-  page: number;
-  perPage: number;
+  data?: BoxyOrder[];
+  object?: { items: BoxyOrder[]; pages: number; total: number };
+  total?: number;
+  pages?: number;
+  page?: number;
+  perPage?: number;
 };
+
+function extractOrders(raw: BoxyListResponse): BoxyOrder[] {
+  return raw.data ?? raw.object?.items ?? [];
+}
+function extractPages(raw: BoxyListResponse): number {
+  return raw.pages ?? raw.object?.pages ?? 1;
+}
 
 // Convert ISO date string to Iraq date string (YYYY-MM-DD) in UTC+3
 function toIraqDate(isoStr: string): string {
@@ -88,8 +97,8 @@ Deno.serve(async (req) => {
       return json({ error: `Boxy API ${firstRes.status}: ${errText}` }, 502);
     }
     const firstRaw = await firstRes.json() as BoxyListResponse;
-    const totalPages = Math.min(firstRaw.pages ?? 1, MAX_PAGES);
-    const firstBatch = firstRaw.data ?? [];
+    const totalPages = Math.min(extractPages(firstRaw), MAX_PAGES);
+    const firstBatch = extractOrders(firstRaw);
 
     // Fetch remaining pages in parallel
     const fetchPage = async (p: number): Promise<BoxyOrder[]> => {
@@ -99,7 +108,7 @@ Deno.serve(async (req) => {
       );
       if (!res.ok) return [];
       const raw = await res.json() as BoxyListResponse;
-      return raw.data ?? [];
+      return extractOrders(raw);
     };
 
     const remainingPages = Array.from({ length: totalPages - 1 }, (_, i) => i + 2);
@@ -155,7 +164,7 @@ Deno.serve(async (req) => {
       days,
       total_orders: allOrders.length,
       in_range: days.reduce((s, d) => s + d.total, 0),
-      truncated: (firstRaw.pages ?? 1) > MAX_PAGES,
+      truncated: extractPages(firstRaw) > MAX_PAGES,
     });
   } catch (e) {
     return json({ error: (e as Error).message }, 500);
