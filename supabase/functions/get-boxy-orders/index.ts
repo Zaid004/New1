@@ -34,7 +34,6 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
-  // ── Verify user ────────────────────────────────────────────────────────────
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL') ?? '',
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
@@ -43,12 +42,21 @@ Deno.serve(async (req) => {
   const { data: { user }, error: authErr } = await supabase.auth.getUser(token);
   if (authErr || !user) return json({ error: 'غير مصرح' }, 401);
 
-  // ── Boxy credentials ───────────────────────────────────────────────────────
-  const apiKey    = Deno.env.get('BOXY_API_KEY');
-  const apiSecret = Deno.env.get('BOXY_API_SECRET');
+  // Read credentials: DB first, env fallback
+  const { data: secrets } = await supabase
+    .from('admin_secrets')
+    .select('key, value')
+    .in('key', ['BOXY_API_KEY', 'BOXY_API_SECRET']);
+
+  const secretMap: Record<string, string> = {};
+  for (const s of secrets ?? []) secretMap[s.key] = s.value;
+
+  const apiKey    = secretMap['BOXY_API_KEY']    ?? Deno.env.get('BOXY_API_KEY');
+  const apiSecret = secretMap['BOXY_API_SECRET'] ?? Deno.env.get('BOXY_API_SECRET');
+
   if (!apiKey || !apiSecret) {
     return json({
-      error: 'BOXY_API_KEY أو BOXY_API_SECRET غير مضبوط في Supabase Secrets',
+      error: 'BOXY_API_KEY أو BOXY_API_SECRET غير مضبوط، أضفهما من إعدادات التطبيق',
       setup_needed: true,
     }, 500);
   }
@@ -96,7 +104,6 @@ Deno.serve(async (req) => {
       page++;
     }
 
-    // ── Build summary ──────────────────────────────────────────────────────
     const byStatus: Record<string, { count: number; total: number; fees: number }> = {};
     const byPaymentType: Record<string, { count: number; total: number; fees: number }> = {};
 
@@ -106,27 +113,17 @@ Deno.serve(async (req) => {
       const pv   = o.products_value ?? 0;
       const fee  = o.fee ?? 0;
 
-      if (!byStatus[slug])      byStatus[slug]      = { count: 0, total: 0, fees: 0 };
-      if (!byPaymentType[pt])   byPaymentType[pt]   = { count: 0, total: 0, fees: 0 };
+      if (!byStatus[slug])    byStatus[slug]    = { count: 0, total: 0, fees: 0 };
+      if (!byPaymentType[pt]) byPaymentType[pt] = { count: 0, total: 0, fees: 0 };
 
-      byStatus[slug].count++;
-      byStatus[slug].total += pv;
-      byStatus[slug].fees  += fee;
-
-      byPaymentType[pt].count++;
-      byPaymentType[pt].total += pv;
-      byPaymentType[pt].fees  += fee;
+      byStatus[slug].count++;    byStatus[slug].total    += pv; byStatus[slug].fees    += fee;
+      byPaymentType[pt].count++; byPaymentType[pt].total += pv; byPaymentType[pt].fees += fee;
     }
 
-    // Round totals
     for (const k of Object.keys(byStatus))      { byStatus[k].total = Math.round(byStatus[k].total); byStatus[k].fees = Math.round(byStatus[k].fees); }
     for (const k of Object.keys(byPaymentType)) { byPaymentType[k].total = Math.round(byPaymentType[k].total); byPaymentType[k].fees = Math.round(byPaymentType[k].fees); }
 
-    return json({
-      total_orders: allOrders.length,
-      by_status:       byStatus,
-      by_payment_type: byPaymentType,
-    });
+    return json({ total_orders: allOrders.length, by_status: byStatus, by_payment_type: byPaymentType });
   } catch (e) {
     return json({ error: (e as Error).message }, 500);
   }
