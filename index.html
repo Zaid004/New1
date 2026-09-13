@@ -4559,6 +4559,7 @@ function BoxyDailyLogView() {
   const [month,setMonth]=useState(curMonthStr);
   const [loading,setLoading]=useState(false);
   const [days,setDays]=useState(null);
+  const [balance,setBalance]=useState(null);
   const [err,setErr]=useState('');
   const [openDay,setOpenDay]=useState(null);
 
@@ -4575,19 +4576,21 @@ function BoxyDailyLogView() {
   });
 
   const load = async () => {
-    setLoading(true); setDays(null); setErr('');
+    setLoading(true); setDays(null); setBalance(null); setErr('');
     const {from,to}=monthRange(month);
     try {
       const {data:{session}} = await sb.auth.getSession();
-      const res = await fetch(`${SUPA_URL}/functions/v1/get-boxy-daily`,{
-        method:'POST',
-        headers:{'Content-Type':'application/json','Authorization':`Bearer ${session.access_token}`},
-        body:JSON.stringify({from,to}),
-      });
-      const d = await res.json();
-      if(d.error){ setErr(d.error); return; }
-      setDays(d.days||[]);
-      if(d.days&&d.days.length>0) setOpenDay(d.days[0].date);
+      const hdrs={'Content-Type':'application/json','Authorization':`Bearer ${session.access_token}`};
+      const body=JSON.stringify({from,to});
+      const [r1,r2] = await Promise.all([
+        fetch(`${SUPA_URL}/functions/v1/get-boxy-daily`,{method:'POST',headers:hdrs,body}),
+        fetch(`${SUPA_URL}/functions/v1/get-boxy-balance`,{method:'POST',headers:hdrs,body}),
+      ]);
+      const [d1,d2] = await Promise.all([r1.json(),r2.json()]);
+      if(d1.error){ setErr(d1.error); return; }
+      setDays(d1.days||[]);
+      if(d1.days?.length>0) setOpenDay(d1.days[0].date);
+      if(!d2.error) setBalance(d2);
     } catch(e){ setErr('خطأ في الاتصال'); }
     finally{ setLoading(false); }
   };
@@ -4607,6 +4610,11 @@ function BoxyDailyLogView() {
   const orderColor = slug => BOXY_DELIVERED.has(slug)?C.ok : BOXY_RETURNED.has(slug)?C.err : '#d97706';
   const orderIcon  = slug => BOXY_DELIVERED.has(slug)?'✓' : BOXY_RETURNED.has(slug)?'✗' : '—';
 
+  const totalDeliveredNet   = (days||[]).reduce((s,d)=>s+d.delivered_net,0);
+  const totalTheoreticalNet = (days||[]).reduce((s,d)=>s+d.theoretical_net,0);
+  const pendingBal = balance?.pending?.balance ?? null;
+  const diff = pendingBal!==null ? totalDeliveredNet - pendingBal : null;
+
   return (
     <div className="space-y-3">
       {/* Month selector */}
@@ -4625,6 +4633,47 @@ function BoxyDailyLogView() {
 
       {err&&<div className="p-3 rounded-xl text-sm" style={{background:'var(--err-bg)',color:C.err}}>{err}</div>}
       {loading&&<div className="text-center py-8 text-sm" style={{color:C.txt,opacity:.4}}>جاري الجلب...</div>}
+
+      {/* Balance summary card */}
+      {days&&days.length>0&&(
+        <div className="rounded-2xl p-4 shadow-sm" style={{background:C.card}}>
+          <div className="text-xs font-semibold mb-3" style={{color:C.txt,opacity:.4}}>ملخص {monthLabel}</div>
+          <div className="space-y-2.5">
+            <div className="flex justify-between items-center">
+              <span className="text-sm" style={{color:C.txt,opacity:.7}}>المبلغ المكتسب (مسلّمة)</span>
+              <span className="font-bold text-sm" style={{color:C.ok}}>{fmtAmt(totalDeliveredNet)}</span>
+            </div>
+            {pendingBal!==null&&(
+              <div className="flex justify-between items-center">
+                <span className="text-sm" style={{color:C.txt,opacity:.7}}>رصيد Boxy الجاهز</span>
+                <span className="font-bold text-sm" style={{color:C.primary}}>{fmtAmt(pendingBal)}</span>
+              </div>
+            )}
+            {diff!==null&&(
+              <div className="flex justify-between items-center pt-2 border-t" style={{borderColor:C.border}}>
+                <span className="text-sm font-semibold" style={{color:diff>100?C.err:C.ok}}>
+                  {diff>100?'يوجد فرق':'مطابق'}
+                </span>
+                <span className="font-bold text-sm" style={{color:diff>100?C.err:C.ok}}>
+                  {diff>100?fmtAmt(diff):''}
+                </span>
+              </div>
+            )}
+            {totalTheoreticalNet>totalDeliveredNet&&(
+              <div className="flex justify-between items-center pt-1" style={{opacity:.55}}>
+                <span className="text-xs" style={{color:C.txt}}>لو وصلت كلهن</span>
+                <span className="text-xs font-bold" style={{color:C.txt}}>{fmtAmt(totalTheoreticalNet)}</span>
+              </div>
+            )}
+            {balance?.truncated&&(
+              <div className="text-xs pt-1" style={{color:'#d97706'}}>
+                تحذير: أكثر من 1000 معاملة، الرصيد تقريبي
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {days&&days.length===0&&<div className="text-center py-10 text-sm" style={{color:C.txt,opacity:.4}}>لا توجد طلبات في هذا الشهر</div>}
 
       <div className="space-y-2">
