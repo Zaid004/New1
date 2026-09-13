@@ -6,7 +6,11 @@ const corsHeaders = {
 };
 
 const DELIVERED = new Set(['delivered', 'partially-delivered']);
-const RETURNED  = new Set(['returned', 'partially-returned', 'returned-warehouse', 'returning-origin']);
+const RETURNED  = new Set([
+  'returned', 'partially-returned', 'returned-warehouse',
+  'returning-origin', 'returning', 'return-requested',
+  'cancelled', 'cancel',
+]);
 
 type BoxyOrder = {
   uid: string;
@@ -24,8 +28,6 @@ type BoxyListResponse = {
   object?: { items: BoxyOrder[]; pages: number; total: number };
   total?: number;
   pages?: number;
-  page?: number;
-  perPage?: number;
 };
 
 function extractOrders(raw: BoxyListResponse): BoxyOrder[] {
@@ -35,7 +37,6 @@ function extractPages(raw: BoxyListResponse): number {
   return raw.pages ?? raw.object?.pages ?? 1;
 }
 
-// Convert ISO date string to Iraq date string (YYYY-MM-DD) in UTC+3
 function toIraqDate(isoStr: string): string {
   return new Date(new Date(isoStr).getTime() + 3 * 3600 * 1000).toISOString().slice(0, 10);
 }
@@ -87,7 +88,6 @@ Deno.serve(async (req) => {
   const perPage = 100;
 
   try {
-    // Fetch page 1 first to learn total pages
     const firstRes = await fetch(
       `https://api.tryboxy.com/api/v1/merchants/orders?page=1&perPage=${perPage}`,
       { headers: boxyHeaders }
@@ -100,7 +100,6 @@ Deno.serve(async (req) => {
     const totalPages = Math.min(extractPages(firstRaw), MAX_PAGES);
     const firstBatch = extractOrders(firstRaw);
 
-    // Fetch remaining pages in parallel
     const fetchPage = async (p: number): Promise<BoxyOrder[]> => {
       const res = await fetch(
         `https://api.tryboxy.com/api/v1/merchants/orders?page=${p}&perPage=${perPage}`,
@@ -115,7 +114,14 @@ Deno.serve(async (req) => {
     const remaining = await Promise.all(remainingPages.map(fetchPage));
     const allOrders: BoxyOrder[] = [...firstBatch, ...remaining.flat()];
 
-    // Filter to requested date range (Iraq UTC+3) and group by day
+    type OrderSummary = {
+      uid: string;
+      platform_code: string;
+      status_slug: string;
+      net: number;
+      payment_type: string;
+    };
+
     type DayEntry = {
       date: string;
       total: number;
@@ -124,6 +130,7 @@ Deno.serve(async (req) => {
       returned_count: number;
       delivered_net: number;
       theoretical_net: number;
+      orders: OrderSummary[];
     };
 
     const byDay: Record<string, DayEntry> = {};
@@ -133,22 +140,36 @@ Deno.serve(async (req) => {
       if (date < from || date > to) continue;
 
       if (!byDay[date]) {
-        byDay[date] = { date, total: 0, delivered_count: 0, active_count: 0, returned_count: 0, delivered_net: 0, theoretical_net: 0 };
+        byDay[date] = {
+          date, total: 0,
+          delivered_count: 0, active_count: 0, returned_count: 0,
+          delivered_net: 0, theoretical_net: 0,
+          orders: [],
+        };
       }
 
       const slug = o.status?.slug ?? '';
       const net  = (o.products_value ?? 0) - (o.fee ?? 0);
 
       byDay[date].total++;
-      byDay[date].theoretical_net += net;
+      byDay[date].orders.push({
+        uid: o.uid,
+        platform_code: o.platform_code ?? '',
+        status_slug: slug,
+        net: Math.round(net),
+        payment_type: o.payment_type ?? '',
+      });
 
       if (DELIVERED.has(slug)) {
         byDay[date].delivered_count++;
         byDay[date].delivered_net += net;
+        byDay[date].theoretical_net += net;
       } else if (RETURNED.has(slug)) {
         byDay[date].returned_count++;
+        // returned orders don't add to theoretical net
       } else {
         byDay[date].active_count++;
+        byDay[date].theoretical_net += net;
       }
     }
 
@@ -157,6 +178,11 @@ Deno.serve(async (req) => {
         ...d,
         delivered_net:   Math.round(d.delivered_net),
         theoretical_net: Math.round(d.theoretical_net),
+        // Sort orders: delivered first, then active, then returned
+        orders: d.orders.sort((a, b) => {
+          const rank = (s: string) => DELIVERED.has(s) ? 0 : RETURNED.has(s) ? 2 : 1;
+          return rank(a.status_slug) - rank(b.status_slug);
+        }),
       }))
       .sort((a, b) => b.date.localeCompare(a.date));
 

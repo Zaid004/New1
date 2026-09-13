@@ -4548,19 +4548,35 @@ function NotificationSettingsView({me}) {
 }
 
 // ── BOXY DAILY LOG ────────────────────────────────────────────────────────────
-function BoxyDailyLogView() {
-  const todayIQ = ()=>{ const d=new Date(); d.setHours(d.getHours()+3); return d.toISOString().slice(0,10); };
-  const sep1    = ()=>{ const y=new Date().getFullYear(); return `${y}-09-01`; };
+const BOXY_DELIVERED = new Set(['delivered','partially-delivered']);
+const BOXY_RETURNED  = new Set(['returned','partially-returned','returned-warehouse','returning-origin','returning','return-requested','cancelled','cancel']);
 
-  const [from,setFrom]=useState(sep1);
-  const [to,setTo]=useState(todayIQ);
+function BoxyDailyLogView() {
+  const curMonthStr = () => {
+    const d=new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  };
+  const [month,setMonth]=useState(curMonthStr);
   const [loading,setLoading]=useState(false);
   const [days,setDays]=useState(null);
   const [err,setErr]=useState('');
   const [openDay,setOpenDay]=useState(null);
 
+  const monthRange = m => {
+    const [y,mo]=m.split('-').map(Number);
+    const last=new Date(y,mo,0).getDate();
+    return {from:`${m}-01`,to:`${m}-${String(last).padStart(2,'0')}`};
+  };
+
+  const shiftMonth = delta => setMonth(prev=>{
+    const [y,mo]=prev.split('-').map(Number);
+    const d=new Date(y,mo-1+delta,1);
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  });
+
   const load = async () => {
     setLoading(true); setDays(null); setErr('');
+    const {from,to}=monthRange(month);
     try {
       const {data:{session}} = await sb.auth.getSession();
       const res = await fetch(`${SUPA_URL}/functions/v1/get-boxy-daily`,{
@@ -4576,46 +4592,45 @@ function BoxyDailyLogView() {
     finally{ setLoading(false); }
   };
 
-  useEffect(()=>{ load(); },[]);
+  useEffect(()=>{ load(); },[month]);
 
   const fmtDayLabel = iso => {
     const [y,m,d]=iso.split('-').map(Number);
-    return `${d} ${MONTHS[m-1]} ${y}`;
+    return `${d} ${MONTHS[m-1]}`;
   };
-
   const fmtAmt = n => n.toLocaleString('ar-IQ')+' د.ع';
+
+  const [my,mmo]=month.split('-').map(Number);
+  const monthLabel=`${MONTHS[mmo-1]} ${my}`;
+  const isCurrentMonth = month===curMonthStr();
+
+  const orderColor = slug => BOXY_DELIVERED.has(slug)?C.ok : BOXY_RETURNED.has(slug)?C.err : '#d97706';
+  const orderIcon  = slug => BOXY_DELIVERED.has(slug)?'✓' : BOXY_RETURNED.has(slug)?'✗' : '—';
 
   return (
     <div className="space-y-3">
-      {/* Date filter */}
-      <div className="flex gap-2 items-end">
-        <div className="flex-1">
-          <div className="text-xs mb-1" style={{color:C.txt,opacity:.5}}>من</div>
-          <input type="date" value={from} onChange={e=>setFrom(e.target.value)}
-            className="w-full rounded-xl px-3 py-2 text-sm border"
-            style={{background:C.card,color:C.txt,borderColor:C.border}}/>
-        </div>
-        <div className="flex-1">
-          <div className="text-xs mb-1" style={{color:C.txt,opacity:.5}}>إلى</div>
-          <input type="date" value={to} onChange={e=>setTo(e.target.value)}
-            className="w-full rounded-xl px-3 py-2 text-sm border"
-            style={{background:C.card,color:C.txt,borderColor:C.border}}/>
-        </div>
-        <button onClick={load} disabled={loading}
-          className="px-4 py-2 rounded-xl text-sm font-bold flex-shrink-0"
-          style={{background:C.primary,color:'#fff'}}>
-          {loading?'...':'بحث'}
+      {/* Month selector */}
+      <div className="flex items-center justify-between px-1">
+        <button onClick={()=>shiftMonth(-1)} className="p-2 rounded-xl"
+          style={{background:C.soft}}>
+          <Ic n="chR" s={18} c={C.txt}/>
+        </button>
+        <div className="font-bold text-base" style={{color:C.txt}}>{monthLabel}</div>
+        <button onClick={()=>shiftMonth(1)} disabled={isCurrentMonth}
+          className="p-2 rounded-xl"
+          style={{background:C.soft,opacity:isCurrentMonth?.35:1}}>
+          <Ic n="chL" s={18} c={C.txt}/>
         </button>
       </div>
 
       {err&&<div className="p-3 rounded-xl text-sm" style={{background:'var(--err-bg)',color:C.err}}>{err}</div>}
       {loading&&<div className="text-center py-8 text-sm" style={{color:C.txt,opacity:.4}}>جاري الجلب...</div>}
-      {days&&days.length===0&&<div className="text-center py-10 text-sm" style={{color:C.txt,opacity:.4}}>لا توجد طلبات في هذه الفترة</div>}
+      {days&&days.length===0&&<div className="text-center py-10 text-sm" style={{color:C.txt,opacity:.4}}>لا توجد طلبات في هذا الشهر</div>}
 
       <div className="space-y-2">
         {(days||[]).map(day=>{
           const isOpen = openDay===day.date;
-          const allDone = day.active_count===0 && day.returned_count===0;
+          const hasActive = day.active_count>0;
           return (
             <div key={day.date}>
               {/* Collapsed row */}
@@ -4645,53 +4660,56 @@ function BoxyDailyLogView() {
                     )}
                   </div>
                 </div>
-                <Ic n={isOpen?'chL':'chR'} s={18} c={C.primary}/>
+                <Ic n={isOpen?'chevron-up':'chevron-down'} s={16} c={C.primary}/>
               </button>
 
               {/* Expanded details */}
               {isOpen&&(
-                <div className="mt-2 rounded-2xl overflow-hidden shadow-sm" style={{background:C.card}}>
-                  {/* Status breakdown */}
-                  <div className="px-4 pt-3 pb-2 space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span style={{color:C.txt,opacity:.6}}>إجمالي الطلبات</span>
-                      <span className="font-bold" style={{color:C.txt}}>{day.total}</span>
+                <div className="mt-1 rounded-2xl overflow-hidden shadow-sm" style={{background:C.card}}>
+                  {/* Amounts summary */}
+                  <div className="px-4 pt-3 pb-2">
+                    <div className="rounded-xl overflow-hidden" style={{border:`1px solid ${C.border}`}}>
+                      <div className="flex justify-between items-center px-3 py-2.5" style={{background:C.soft}}>
+                        <span className="text-xs" style={{color:C.txt,opacity:.6}}>المبلغ الواصل</span>
+                        <span className="font-bold text-sm" style={{color:C.ok}}>{fmtAmt(day.delivered_net)}</span>
+                      </div>
+                      {hasActive&&(
+                        <>
+                          <div style={{height:1,background:C.border}}/>
+                          <div className="flex justify-between items-center px-3 py-2.5" style={{background:C.soft}}>
+                            <span className="text-xs" style={{color:C.txt,opacity:.6}}>الصافي لو وصلت كلهن</span>
+                            <span className="font-bold text-sm" style={{color:C.primary}}>{fmtAmt(day.theoretical_net)}</span>
+                          </div>
+                        </>
+                      )}
                     </div>
-                    {day.delivered_count>0&&(
-                      <div className="flex justify-between text-sm">
-                        <span style={{color:C.ok}}>واصلة</span>
-                        <span className="font-bold" style={{color:C.ok}}>{day.delivered_count}</span>
-                      </div>
-                    )}
-                    {day.active_count>0&&(
-                      <div className="flex justify-between text-sm">
-                        <span style={{color:'#d97706'}}>في الطريق</span>
-                        <span className="font-bold" style={{color:'#d97706'}}>{day.active_count}</span>
-                      </div>
-                    )}
-                    {day.returned_count>0&&(
-                      <div className="flex justify-between text-sm">
-                        <span style={{color:C.err}}>راجعة</span>
-                        <span className="font-bold" style={{color:C.err}}>{day.returned_count}</span>
-                      </div>
-                    )}
                   </div>
 
-                  {/* Amounts */}
-                  <div className="mx-4 mb-4 mt-2 rounded-xl overflow-hidden" style={{border:`1px solid ${C.border}`}}>
-                    <div className="flex justify-between items-center px-3 py-2.5" style={{background:C.soft}}>
-                      <span className="text-xs" style={{color:C.txt,opacity:.6}}>المبلغ الواصل لحد الان</span>
-                      <span className="font-bold text-sm" style={{color:C.ok}}>{fmtAmt(day.delivered_net)}</span>
+                  {/* Individual orders */}
+                  <div className="px-4 pb-3">
+                    <div className="text-xs font-semibold mb-2" style={{color:C.txt,opacity:.4}}>
+                      الطلبات ({day.total})
                     </div>
-                    {!allDone&&(
-                      <>
-                        <div style={{height:1,background:C.border}}/>
-                        <div className="flex justify-between items-center px-3 py-2.5" style={{background:C.soft}}>
-                          <span className="text-xs" style={{color:C.txt,opacity:.6}}>الصافي لو وصلت كلهن</span>
-                          <span className="font-bold text-sm" style={{color:C.primary}}>{fmtAmt(day.theoretical_net)}</span>
+                    <div className="space-y-1">
+                      {(day.orders||[]).map(o=>(
+                        <div key={o.uid} className="flex items-center justify-between py-2 border-b"
+                          style={{borderColor:C.border}}>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-xs font-bold w-4 text-center flex-shrink-0"
+                              style={{color:orderColor(o.status_slug)}}>
+                              {orderIcon(o.status_slug)}
+                            </span>
+                            <span className="text-xs font-mono truncate" style={{color:C.txt}}>
+                              {o.platform_code||o.uid.slice(0,8)}
+                            </span>
+                          </div>
+                          <span className="text-xs font-bold flex-shrink-0 mr-2"
+                            style={{color:orderColor(o.status_slug)}}>
+                            {o.net.toLocaleString('ar-IQ')} د.ع
+                          </span>
                         </div>
-                      </>
-                    )}
+                      ))}
+                    </div>
                   </div>
                 </div>
               )}
