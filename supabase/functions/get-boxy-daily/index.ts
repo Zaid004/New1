@@ -114,14 +114,16 @@ Deno.serve(async (req) => {
     'Accept':     'application/json',
   };
 
-  const MAX_PAGES = 50;
-  const perPage   = 100;
+  // Boxy orders API also returns max 5 per page regardless of perPage param
+  const perPage   = 5;
+  const SAFETY_CAP = 500; // 500 × 5 = 2500 orders max
+
+  // Use date filter to limit pages fetched (created_from/created_to on orders API)
+  const dateParams = `&created_from=${from}&created_to=${to}`;
+  const baseUrl = `https://api.tryboxy.com/api/v1/merchants/orders?perPage=${perPage}${dateParams}`;
 
   const fetchPage = async (p: number): Promise<BoxyOrder[]> => {
-    const res = await fetch(
-      `https://api.tryboxy.com/api/v1/merchants/orders?page=${p}&perPage=${perPage}`,
-      { headers: boxyHeaders }
-    );
+    const res = await fetch(`${baseUrl}&page=${p}`, { headers: boxyHeaders });
     if (!res.ok) return [];
     const raw = await res.json() as BoxyListResponse;
     return extractOrders(raw);
@@ -129,49 +131,56 @@ Deno.serve(async (req) => {
 
   let freshOrders: BoxyOrder[] = [];
   try {
-    const firstRes = await fetch(
-      `https://api.tryboxy.com/api/v1/merchants/orders?page=1&perPage=${perPage}`,
-      { headers: boxyHeaders }
-    );
+    const firstRes = await fetch(`${baseUrl}&page=1`, { headers: boxyHeaders });
     if (!firstRes.ok) {
       const errText = await firstRes.text().catch(() => '');
-      return json({ error: `Boxy API ${firstRes.status}: ${errText}` }, 502);
-    }
-    const firstRaw    = await firstRes.json() as BoxyListResponse;
-    const totalPages  = Math.min(extractPages(firstRaw), MAX_PAGES);
-    const firstBatch  = extractOrders(firstRaw);
+      // Fall back to cache if available
+      if (Object.keys(cachedByDate).length === 0) {
+        return json({ error: `Boxy API ${firstRes.status}: ${errText}` }, 502);
+      }
+    } else {
+      const firstRaw   = await firstRes.json() as BoxyListResponse;
+      const totalPages = Math.min(extractPages(firstRaw), SAFETY_CAP);
+      const firstBatch = extractOrders(firstRaw);
 
-    const remainingPages = Array.from({ length: totalPages - 1 }, (_, i) => i + 2);
-    const remaining = await Promise.all(remainingPages.map(fetchPage));
-    const allFromBoxy: BoxyOrder[] = [...firstBatch, ...remaining.flat()];
+      // Fetch remaining pages in batches of 100
+      const remainingNums = Array.from({ length: totalPages - 1 }, (_, i) => i + 2);
+      const allFromBoxy: BoxyOrder[] = [...firstBatch];
+      const BATCH = 100;
+      for (let i = 0; i < remainingNums.length; i += BATCH) {
+        const batch = remainingNums.slice(i, i + BATCH);
+        const results = await Promise.all(batch.map(fetchPage));
+        allFromBoxy.push(...results.flat());
+      }
 
-    // Keep orders in range that need fresh data
-    freshOrders = allFromBoxy.filter(o => {
-      const d = toIraqDate(o.created_at);
-      return d >= from && d <= to && needsBoxy(d);
-    });
-
-    // ── 3. Upsert fresh orders to cache ───────────────────────────────────────
-    if (freshOrders.length > 0) {
-      const rows = freshOrders.map(o => {
-        const d    = toIraqDate(o.created_at);
-        const slug = o.status?.slug ?? '';
-        const net  = Math.round((o.products_value ?? 0) - (o.fee ?? 0));
-        return {
-          uid:           o.uid,
-          platform_code: o.platform_code ?? '',
-          payment_type:  o.payment_type  ?? '',
-          products_value: Math.round(o.products_value ?? 0),
-          fee:           Math.round(o.fee ?? 0),
-          status_slug:   slug,
-          iraq_date:     d,
-          net,
-          // Final = terminal status AND day is fully past
-          is_final: IS_FINAL.has(slug) && d < yesterday,
-          synced_at: new Date().toISOString(),
-        };
+      // Keep only orders that need fresh data
+      freshOrders = allFromBoxy.filter(o => {
+        const d = toIraqDate(o.created_at);
+        return d >= from && d <= to && needsBoxy(d);
       });
-      await supabase.from('boxy_orders').upsert(rows, { onConflict: 'uid' });
+
+      // ── 3. Upsert fresh orders to cache ───────────────────────────────────────
+      if (freshOrders.length > 0) {
+        const rows = freshOrders.map(o => {
+          const d    = toIraqDate(o.created_at);
+          const slug = o.status?.slug ?? '';
+          const net  = Math.round((o.products_value ?? 0) - (o.fee ?? 0));
+          return {
+            uid:           o.uid,
+            platform_code: o.platform_code ?? '',
+            payment_type:  o.payment_type  ?? '',
+            products_value: Math.round(o.products_value ?? 0),
+            fee:           Math.round(o.fee ?? 0),
+            status_slug:   slug,
+            iraq_date:     d,
+            net,
+            // Final = terminal status AND day is fully past
+            is_final: IS_FINAL.has(slug) && d < yesterday,
+            synced_at: new Date().toISOString(),
+          };
+        });
+        await supabase.from('boxy_orders').upsert(rows, { onConflict: 'uid' });
+      }
     }
   } catch (e) {
     if (Object.keys(cachedByDate).length === 0) {

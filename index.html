@@ -4680,17 +4680,6 @@ function BoxyDailyLogView() {
                 <span className="font-bold text-sm" style={{color:'#d97706'}}>{fmtAmt(pendingBal)}</span>
               </div>
             )}
-            {paidBal!==null&&(
-              <div className="flex justify-between items-center">
-                <span className="text-sm" style={{color:C.txt,opacity:.7}}>تم تحويله للبنك</span>
-                <span className="font-bold text-sm" style={{color:C.txt,opacity:.6}}>{fmtAmt(paidBal)}</span>
-              </div>
-            )}
-            {hasBalance&&paidBal===null&&(
-              <div className="flex justify-between items-center pt-2 border-t" style={{borderColor:C.border}}>
-                <span className="text-xs" style={{color:C.txt,opacity:.5}}>المحوّل للبنك غير محسوب بعد</span>
-              </div>
-            )}
             {totalTheoreticalNet>totalDeliveredNet&&(
               <div className="flex justify-between items-center pt-1" style={{opacity:.55}}>
                 <span className="text-xs" style={{color:C.txt}}>لو وصلت كلهن</span>
