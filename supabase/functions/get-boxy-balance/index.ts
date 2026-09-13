@@ -127,10 +127,14 @@ Deno.serve(async (req) => {
     };
 
     const byOrder: Record<string, OrderEntry> = {};
+    const seenTxUids = new Set<string>();
 
     for (const tx of allItems) {
       const oid = tx.order_uid;
       if (!oid) continue;
+      // Deduplicate transactions — same tx can appear on multiple pages
+      if (tx.uid && seenTxUids.has(tx.uid)) continue;
+      if (tx.uid) seenTxUids.add(tx.uid);
       if (!byOrder[oid]) {
         byOrder[oid] = {
           uid: oid,
