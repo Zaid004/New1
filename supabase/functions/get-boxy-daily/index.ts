@@ -109,11 +109,15 @@ Deno.serve(async (req) => {
   // A date needs Boxy fetch if: recent, OR no cache, OR has non-final cached orders
   const needsBoxy = (date: string) => mustFetch(date) || !cachedByDate[date] || hasNonFinal[date];
 
-  // ── 2. Fetch from Boxy — only recent days (yesterday → tomorrow) for speed ────
-  // Older dates are served from cache; non-final old orders show stale status.
-  const tomorrow    = toIraqDate(new Date(Date.now() + 86400 * 1000).toISOString());
-  const boxyFrom    = yesterday;   // 2 days window: yesterday + today
-  const boxyTo      = tomorrow;    // use tomorrow so today's late orders are included
+  // ── 2. Fetch from Boxy ────────────────────────────────────────────────────────
+  // Always fetch yesterday + today (recent).
+  // Also extend back to the oldest old date that still has NON-FINAL orders,
+  // so active orders from any day get fresh status every load.
+  // Final orders (delivered/returned from old days) stay in cache forever.
+  const tomorrow = toIraqDate(new Date(Date.now() + 86400 * 1000).toISOString());
+  const oldNonFinalDates = Object.keys(hasNonFinal).filter(d => d < yesterday).sort();
+  const boxyFrom = oldNonFinalDates.length > 0 ? oldNonFinalDates[0] : yesterday;
+  const boxyTo   = tomorrow; // use tomorrow so today's late orders are included
 
   const boxyHeaders = {
     'api-key':    apiKey,
@@ -122,7 +126,7 @@ Deno.serve(async (req) => {
   };
 
   const perPage    = 5;
-  const SAFETY_CAP = 200; // 200 × 5 = 1000 orders for ~2 days is more than enough
+  const SAFETY_CAP = 500;
 
   const dateParams = `&created_from=${boxyFrom}&created_to=${boxyTo}`;
   const baseUrl = `https://api.tryboxy.com/api/v1/merchants/orders?perPage=${perPage}${dateParams}`;
