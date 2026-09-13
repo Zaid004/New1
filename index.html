@@ -4614,11 +4614,12 @@ function BoxyDailyLogView() {
 
   const totalDeliveredNet   = (days||[]).reduce((s,d)=>s+d.delivered_net,0);
   const totalTheoreticalNet = (days||[]).reduce((s,d)=>s+d.theoretical_net,0);
-  const pendingBal  = balance?.pending?.balance  ?? null;
-  const settledBal  = balance?.settled?.total    ?? null;
-  // Discrepancy: what we earned vs what Boxy holds (pending + settled)
-  const boxyTotal   = pendingBal!==null&&settledBal!==null ? pendingBal+settledBal : null;
-  const diff        = boxyTotal!==null ? totalDeliveredNet - boxyTotal : null;
+  const pendingBal   = balance?.pending?.balance   ?? null;
+  const availableBal = balance?.available?.balance ?? null;
+  // Discrepancy: what we earned vs what Boxy holds (available + pending)
+  const boxyTotal   = (availableBal??0) + (pendingBal??0);
+  const hasBalance  = pendingBal!==null || availableBal!==null;
+  const diff        = hasBalance ? totalDeliveredNet - boxyTotal : null;
 
   // Build order→transactions lookup from balance data
   const orderTxMap = React.useMemo(()=>{
@@ -4659,10 +4660,10 @@ function BoxyDailyLogView() {
               <span className="font-bold text-sm" style={{color:C.ok}}>{fmtAmt(totalDeliveredNet)}</span>
             </div>
             <div style={{height:1,background:C.border}}/>
-            {settledBal!==null&&(
+            {availableBal!==null&&(
               <div className="flex justify-between items-center">
                 <span className="text-sm" style={{color:C.txt,opacity:.7}}>الرصيد المتاح للسحب</span>
-                <span className="font-bold text-sm" style={{color:C.ok}}>{fmtAmt(settledBal)}</span>
+                <span className="font-bold text-sm" style={{color:C.ok}}>{fmtAmt(availableBal)}</span>
               </div>
             )}
             {pendingBal!==null&&(
@@ -4674,7 +4675,7 @@ function BoxyDailyLogView() {
             {diff!==null&&(
               <div className="flex justify-between items-center pt-2 border-t" style={{borderColor:C.border}}>
                 <span className="text-sm font-semibold" style={{color:Math.abs(diff)>100?C.err:C.ok}}>
-                  {Math.abs(diff)>100?'يوجد هلل':'مطابق ✓'}
+                  {Math.abs(diff)>100?'يوجد خلل':'مطابق ✓'}
                 </span>
                 <span className="font-bold text-sm" style={{color:Math.abs(diff)>100?C.err:C.ok}}>
                   {Math.abs(diff)>100?fmtAmt(Math.abs(diff)):''}

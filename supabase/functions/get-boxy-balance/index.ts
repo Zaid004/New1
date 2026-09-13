@@ -163,8 +163,12 @@ Deno.serve(async (req) => {
       net: Math.round(o.net),
     }));
 
-    const pending = allOrders.filter(o => o.status === 'pending');
-    const settled = allOrders.filter(o => o.status !== 'pending');
+    // Boxy transaction statuses: pending=قيد التدقيق, available=متوفرة للسحب, paid=مدفوعة
+    const sortDesc = (arr: typeof allOrders) => arr.sort((a, b) => b.created_at.localeCompare(a.created_at));
+    const pending   = allOrders.filter(o => o.status === 'pending');
+    const available = allOrders.filter(o => o.status === 'available');
+    const paid      = allOrders.filter(o => o.status === 'paid');
+    const other     = allOrders.filter(o => !['pending','available','paid'].includes(o.status));
 
     const realTotal = firstRaw.object?.total ?? allTxRaw.length;
     return json({
@@ -174,12 +178,23 @@ Deno.serve(async (req) => {
       pending: {
         count:   pending.length,
         balance: Math.round(pending.reduce((s, o) => s + o.net, 0)),
-        orders:  pending.sort((a, b) => b.created_at.localeCompare(a.created_at)),
+        orders:  sortDesc(pending),
       },
-      settled: {
-        count:  settled.length,
-        total:  Math.round(settled.reduce((s, o) => s + o.net, 0)),
-        orders: settled.sort((a, b) => b.created_at.localeCompare(a.created_at)),
+      available: {
+        count:   available.length,
+        balance: Math.round(available.reduce((s, o) => s + o.net, 0)),
+        orders:  sortDesc(available),
+      },
+      paid: {
+        count:  paid.length,
+        total:  Math.round(paid.reduce((s, o) => s + o.net, 0)),
+        orders: sortDesc(paid),
+      },
+      other: {
+        count:  other.length,
+        total:  Math.round(other.reduce((s, o) => s + o.net, 0)),
+        statuses: [...new Set(other.map(o => o.status))],
+        orders: sortDesc(other),
       },
     });
   } catch (e) {
