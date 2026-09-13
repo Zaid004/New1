@@ -3987,6 +3987,76 @@ function AdminSettingsView() {
           {saving?'جاري الحفظ...':'حفظ الإعدادات'}
         </button>
       </div>
+
+      {/* Diagnostic */}
+      <BoxyInspect/>
+    </div>
+  );
+}
+
+function BoxyInspect() {
+  const [loading,setLoading]=useState(false);
+  const [result,setResult]=useState(null);
+  const [err,setErr]=useState('');
+
+  const run = async () => {
+    setLoading(true); setResult(null); setErr('');
+    try {
+      const {data:{session}} = await sb.auth.getSession();
+      const res = await fetch(`${SUPA_URL}/functions/v1/boxy-inspect`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':`Bearer ${session.access_token}`},
+        body:'{}',
+      });
+      const d = await res.json();
+      if(d.error){ setErr(d.error); return; }
+      setResult(d);
+    } catch(e){ setErr('خطأ في الاتصال'); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <div className="rounded-2xl p-5 shadow-sm space-y-3" style={{background:C.card}}>
+      <div className="flex items-center gap-2">
+        <Ic n='info' s={15} c={C.primary}/>
+        <span className="font-bold text-sm" style={{color:C.txt}}>فحص بوكسي API</span>
+      </div>
+      <p className="text-xs" style={{color:C.txt,opacity:.5}}>
+        يجيب أول طلب متاح ويستكشف الـ endpoints المتاحة — للتشخيص فقط.
+      </p>
+      <button onClick={run} disabled={loading}
+        className="w-full py-2.5 rounded-xl font-bold text-sm"
+        style={{background:C.soft,color:C.primary,border:`1.5px solid ${C.border}`}}>
+        {loading?'جاري الفحص...':'🔍 تشغيل الفحص'}
+      </button>
+      {err&&<div className="p-3 rounded-xl text-sm" style={{background:'var(--err-bg)',color:C.err}}>{err}</div>}
+      {result&&(
+        <div className="space-y-3">
+          {/* Extra endpoints */}
+          <div className="text-xs font-bold mb-1" style={{color:C.txt,opacity:.5}}>الـ Endpoints المكتشفة</div>
+          <div className="rounded-xl overflow-hidden" style={{border:`1px solid ${C.border}`}}>
+            {Object.entries(result.extra_endpoints||{}).map(([ep,v],i,arr)=>(
+              <div key={ep}>
+                <div className="flex justify-between items-center px-3 py-2" style={{background:C.soft}}>
+                  <div className="font-mono text-xs" style={{color:C.txt,opacity:.7}}>/{ep}</div>
+                  <div className="text-xs font-bold px-2 py-0.5 rounded-lg"
+                    style={{background:v.status===200?'var(--ok-bg)':'var(--err-bg)',color:v.status===200?C.ok:C.err}}>
+                    {v.status}
+                  </div>
+                </div>
+                {i<arr.length-1&&<div style={{height:1,background:C.border}}/>}
+              </div>
+            ))}
+          </div>
+          {/* Raw first order */}
+          <div className="text-xs font-bold mb-1" style={{color:C.txt,opacity:.5}}>حقول أول طلب</div>
+          <div className="rounded-xl p-3 overflow-x-auto" style={{background:C.soft}}>
+            <pre className="text-xs font-mono" style={{color:C.txt,whiteSpace:'pre-wrap',wordBreak:'break-all'}}>
+              {JSON.stringify(result.first_order?.data?.[0] ?? result.first_order, null, 2)}
+            </pre>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
