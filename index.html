@@ -4571,6 +4571,8 @@ function BoxyDailyLogView() {
   const [err,setErr]=useState('');
   const [openDay,setOpenDay]=useState(null);
   const [openOrder,setOpenOrder]=useState(null);
+  const [showAvailOrders,setShowAvailOrders]=useState(false);
+  const [showPendOrders,setShowPendOrders]=useState(false);
 
   const monthRange = m => {
     const [y,mo]=m.split('-').map(Number);
@@ -4680,15 +4682,51 @@ function BoxyDailyLogView() {
             <div style={{height:1,background:C.border}}/>
             {/* Balance breakdown from transactions API */}
             {availableBal!==null&&(
-              <div className="flex justify-between items-center">
-                <span className="text-sm" style={{color:C.txt,opacity:.7}}>متاح للسحب ببوكسي</span>
-                <span className="font-bold text-sm" style={{color:C.ok}}>{fmtAmt(availableBal)}</span>
+              <div>
+                <button onClick={()=>setShowAvailOrders(v=>!v)}
+                  className="w-full flex justify-between items-center py-0.5 rounded-lg"
+                  style={{background:'transparent'}}>
+                  <span className="text-sm flex items-center gap-1" style={{color:C.txt,opacity:.7}}>
+                    متاح للسحب ببوكسي
+                    <span className="text-xs" style={{opacity:.5}}>{showAvailOrders?'▲':'▼'}</span>
+                  </span>
+                  <span className="font-bold text-sm" style={{color:C.ok}}>{fmtAmt(availableBal)}</span>
+                </button>
+                {showAvailOrders&&balance?.available?.orders?.length>0&&(
+                  <div className="mt-2 space-y-1 pr-1">
+                    {balance.available.orders.map(o=>(
+                      <div key={o.uid} className="flex justify-between items-center text-xs py-1 px-2 rounded-lg"
+                        style={{background:C.bg}}>
+                        <span style={{color:C.primary,fontFamily:'monospace'}}>{o.order_platform_code||o.uid}</span>
+                        <span className="font-bold" style={{color:C.ok}}>{fmtAmt(o.net)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
             {pendingBal!==null&&(
-              <div className="flex justify-between items-center">
-                <span className="text-sm" style={{color:C.txt,opacity:.7}}>قيد التدقيق ببوكسي</span>
-                <span className="font-bold text-sm" style={{color:'#d97706'}}>{fmtAmt(pendingBal)}</span>
+              <div>
+                <button onClick={()=>setShowPendOrders(v=>!v)}
+                  className="w-full flex justify-between items-center py-0.5 rounded-lg"
+                  style={{background:'transparent'}}>
+                  <span className="text-sm flex items-center gap-1" style={{color:C.txt,opacity:.7}}>
+                    قيد التدقيق ببوكسي
+                    <span className="text-xs" style={{opacity:.5}}>{showPendOrders?'▲':'▼'}</span>
+                  </span>
+                  <span className="font-bold text-sm" style={{color:'#d97706'}}>{fmtAmt(pendingBal)}</span>
+                </button>
+                {showPendOrders&&balance?.pending?.orders?.length>0&&(
+                  <div className="mt-2 space-y-1 pr-1">
+                    {balance.pending.orders.map(o=>(
+                      <div key={o.uid} className="flex justify-between items-center text-xs py-1 px-2 rounded-lg"
+                        style={{background:C.bg}}>
+                        <span style={{color:'#d97706',fontFamily:'monospace'}}>{o.order_platform_code||o.uid}</span>
+                        <span className="font-bold" style={{color:'#d97706'}}>{fmtAmt(o.net)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
             {totalTheoreticalNet>totalDeliveredNet&&(
