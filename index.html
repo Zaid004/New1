@@ -4557,7 +4557,7 @@ function NotificationSettingsView({me}) {
 
 // ── BOXY DAILY LOG ────────────────────────────────────────────────────────────
 const BOXY_DELIVERED = new Set(['delivered','partially-delivered']);
-const BOXY_RETURNED  = new Set(['returned','partially-returned','returned-warehouse','returning-origin','returning','return-requested','cancelled','cancel']);
+const BOXY_RETURNED  = new Set(['returned','partially-returned','returned-warehouse','returning-origin','returning','return-requested','cancelled','cancel','rto-delivered','rto-out-for-delivery','rto-scheduled','rto-warehouse']);
 
 function BoxyDailyLogView() {
   const curMonthStr = () => {

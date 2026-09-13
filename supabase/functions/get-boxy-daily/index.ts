@@ -10,6 +10,7 @@ const RETURNED  = new Set([
   'returned', 'partially-returned', 'returned-warehouse',
   'returning-origin', 'returning', 'return-requested',
   'cancelled', 'cancel',
+  'rto-delivered', 'rto-out-for-delivery', 'rto-scheduled', 'rto-warehouse',
 ]);
 const IS_FINAL  = new Set([...DELIVERED, ...RETURNED]);
 
