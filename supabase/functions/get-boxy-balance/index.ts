@@ -69,43 +69,41 @@ Deno.serve(async (req) => {
     'Accept':     'application/json',
   };
 
-  const perPage = 100;
-  const MAX_PAGES = 50;
+  // Boxy API ignores perPage > 5, always returns 5 items per page
+  const perPage = 5;
+  const SAFETY_CAP = 700; // 700 × 5 = 3500 transactions max
+
+  // Build URL with date filter (created_from/created_to confirmed working)
+  const dateParams = from && to ? `&created_from=${from}&created_to=${to}` : '';
+  const baseUrl = `https://api.tryboxy.com/api/v1/merchants/transactions?perPage=${perPage}${dateParams}`;
 
   const fetchPage = async (p: number): Promise<TxItem[]> => {
-    const res = await fetch(
-      `https://api.tryboxy.com/api/v1/merchants/transactions?page=${p}&perPage=${perPage}`,
-      { headers: boxyHeaders }
-    );
+    const res = await fetch(`${baseUrl}&page=${p}`, { headers: boxyHeaders });
     if (!res.ok) return [];
     const raw = await res.json() as TxPage;
     return raw.object?.items ?? [];
   };
 
   try {
-    const firstRes = await fetch(
-      `https://api.tryboxy.com/api/v1/merchants/transactions?page=1&perPage=${perPage}`,
-      { headers: boxyHeaders }
-    );
+    const firstRes = await fetch(`${baseUrl}&page=1`, { headers: boxyHeaders });
     if (!firstRes.ok) {
       const errText = await firstRes.text().catch(() => '');
       return json({ error: `Boxy API ${firstRes.status}: ${errText}` }, 502);
     }
     const firstRaw = await firstRes.json() as TxPage;
-    const totalPages = Math.min(firstRaw.object?.pages ?? 1, MAX_PAGES);
+    const totalPages = Math.min(firstRaw.object?.pages ?? 1, SAFETY_CAP);
+    const totalCount = firstRaw.object?.total ?? 0;
     const firstItems = firstRaw.object?.items ?? [];
 
-    const remainingPages = Array.from({ length: totalPages - 1 }, (_, i) => i + 2);
-    const remaining = await Promise.all(remainingPages.map(fetchPage));
-
-    const allTxRaw: TxItem[] = [...firstItems, ...remaining.flat()];
-    const allTx = (from || to)
-      ? allTxRaw.filter(tx => {
-          if (!tx.created_at) return true;
-          const d = tx.created_at.slice(0, 10);
-          return (!from || d >= from) && (!to || d <= to);
-        })
-      : allTxRaw;
+    // Fetch remaining pages in batches of 100 to avoid overwhelming the API
+    const remainingNums = Array.from({ length: totalPages - 1 }, (_, i) => i + 2);
+    const allItems: TxItem[] = [...firstItems];
+    const BATCH = 100;
+    for (let i = 0; i < remainingNums.length; i += BATCH) {
+      const batch = remainingNums.slice(i, i + BATCH);
+      const results = await Promise.all(batch.map(fetchPage));
+      allItems.push(...results.flat());
+    }
 
     type TxSummary = {
       uid: string;
@@ -130,7 +128,7 @@ Deno.serve(async (req) => {
 
     const byOrder: Record<string, OrderEntry> = {};
 
-    for (const tx of allTx) {
+    for (const tx of allItems) {
       const oid = tx.order_uid;
       if (!oid) continue;
       if (!byOrder[oid]) {
@@ -169,20 +167,21 @@ Deno.serve(async (req) => {
       net: Math.round(o.net),
     }));
 
-    // Boxy statuses: pending=قيد التدقيق, paid=مدفوعة, everything else=متوفرة للسحب
-    const sortDesc = (arr: typeof allOrders) => arr.sort((a, b) => b.created_at.localeCompare(a.created_at));
+    const sortDesc = (arr: typeof allOrders) =>
+      arr.sort((a, b) => b.created_at.localeCompare(a.created_at));
+
     const pending   = allOrders.filter(o => o.status === 'pending');
     const paid      = allOrders.filter(o => o.status === 'paid');
     const available = allOrders.filter(o => o.status !== 'pending' && o.status !== 'paid');
 
-    // Collect all unique slugs seen for debugging
     const allSlugs = [...new Set(allOrders.map(o => o.status))];
+    const truncated = (firstRaw.object?.pages ?? 1) > SAFETY_CAP;
 
-    const realTotal = firstRaw.object?.total ?? allTxRaw.length;
     return json({
-      total_transactions: allTx.length,
-      real_total: realTotal,
-      truncated: (firstRaw.object?.pages ?? 1) > MAX_PAGES,
+      total_transactions: allItems.length,
+      real_total: totalCount,
+      pages_fetched: totalPages,
+      truncated,
       all_status_slugs: allSlugs,
       pending: {
         count:   pending.length,
@@ -190,10 +189,10 @@ Deno.serve(async (req) => {
         orders:  sortDesc(pending),
       },
       available: {
-        count:   available.length,
-        balance: Math.round(available.reduce((s, o) => s + o.net, 0)),
+        count:    available.length,
+        balance:  Math.round(available.reduce((s, o) => s + o.net, 0)),
         statuses: [...new Set(available.map(o => o.status))],
-        orders:  sortDesc(available),
+        orders:   sortDesc(available),
       },
       paid: {
         count:  paid.length,
