@@ -4549,17 +4549,18 @@ function NotificationSettingsView({me}) {
 
 // ── BOXY DAILY LOG ────────────────────────────────────────────────────────────
 function BoxyDailyLogView() {
-  const todayIQ  = ()=>{ const d=new Date(); d.setHours(d.getHours()+3); return d.toISOString().slice(0,10); };
-  const monthAgo = ()=>{ const d=new Date(); d.setHours(d.getHours()+3); d.setDate(d.getDate()-30); return d.toISOString().slice(0,10); };
+  const todayIQ = ()=>{ const d=new Date(); d.setHours(d.getHours()+3); return d.toISOString().slice(0,10); };
+  const sep1    = ()=>{ const y=new Date().getFullYear(); return `${y}-09-01`; };
 
-  const [from,setFrom]=useState(monthAgo);
+  const [from,setFrom]=useState(sep1);
   const [to,setTo]=useState(todayIQ);
   const [loading,setLoading]=useState(false);
-  const [data,setData]=useState(null);
+  const [days,setDays]=useState(null);
   const [err,setErr]=useState('');
+  const [openDay,setOpenDay]=useState(null);
 
   const load = async () => {
-    setLoading(true); setData(null); setErr('');
+    setLoading(true); setDays(null); setErr('');
     try {
       const {data:{session}} = await sb.auth.getSession();
       const res = await fetch(`${SUPA_URL}/functions/v1/get-boxy-daily`,{
@@ -4569,25 +4570,23 @@ function BoxyDailyLogView() {
       });
       const d = await res.json();
       if(d.error){ setErr(d.error); return; }
-      setData(d);
+      setDays(d.days||[]);
+      if(d.days&&d.days.length>0) setOpenDay(d.days[0].date);
     } catch(e){ setErr('خطأ في الاتصال'); }
     finally{ setLoading(false); }
   };
 
   useEffect(()=>{ load(); },[]);
 
-  const DAYS_AR=['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
-
-  const fmtDate = iso => {
+  const fmtDayLabel = iso => {
     const [y,m,d]=iso.split('-').map(Number);
-    const date=new Date(Date.UTC(y,m-1,d));
-    return `${DAYS_AR[date.getUTCDay()]} ${d} ${MONTHS[m-1]} ${y}`;
+    return `${d} ${MONTHS[m-1]} ${y}`;
   };
 
-  const fmtAmt = n => (n>=0?'+':'')+n.toLocaleString('ar-IQ')+' د.ع';
+  const fmtAmt = n => n.toLocaleString('ar-IQ')+' د.ع';
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Date filter */}
       <div className="flex gap-2 items-end">
         <div className="flex-1">
@@ -4610,95 +4609,96 @@ function BoxyDailyLogView() {
       </div>
 
       {err&&<div className="p-3 rounded-xl text-sm" style={{background:'var(--err-bg)',color:C.err}}>{err}</div>}
-      {loading&&<div className="text-center py-10 text-sm" style={{color:C.txt,opacity:.4}}>جاري الجلب...</div>}
+      {loading&&<div className="text-center py-8 text-sm" style={{color:C.txt,opacity:.4}}>جاري الجلب...</div>}
+      {days&&days.length===0&&<div className="text-center py-10 text-sm" style={{color:C.txt,opacity:.4}}>لا توجد طلبات في هذه الفترة</div>}
 
-      {data&&data.days.length===0&&(
-        <div className="text-center py-10 text-sm" style={{color:C.txt,opacity:.4}}>لا توجد طلبات في هذه الفترة</div>
-      )}
-
-      {data&&data.days.map(day=>{
-        const allDone = day.active_count===0 && day.returned_count===0;
-        return (
-          <div key={day.date} className="rounded-2xl overflow-hidden shadow-sm" style={{background:C.card}}>
-            {/* Day header */}
-            <div className="px-4 pt-4 pb-3 flex items-center justify-between" style={{borderBottom:`1px solid ${C.border}`}}>
-              <div>
-                <div className="font-bold text-sm" style={{color:C.txt}}>{fmtDate(day.date)}</div>
-                <div className="text-xs mt-0.5" style={{color:C.txt,opacity:.4}}>{day.total} طلب</div>
-              </div>
-              {allDone&&(
-                <div className="text-xs font-bold px-2 py-1 rounded-lg" style={{background:'var(--ok-bg)',color:C.ok}}>
-                  اكتمل
-                </div>
-              )}
-            </div>
-
-            {/* Status rows */}
-            <div className="px-4 py-3 space-y-2">
-              {/* Delivered */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0"
-                    style={{background:'var(--ok-bg)',color:C.ok}}>
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={C.ok} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+      <div className="space-y-2">
+        {(days||[]).map(day=>{
+          const isOpen = openDay===day.date;
+          const allDone = day.active_count===0 && day.returned_count===0;
+          return (
+            <div key={day.date}>
+              {/* Collapsed row */}
+              <button onClick={()=>setOpenDay(isOpen?null:day.date)}
+                className="w-full flex items-center justify-between px-4 py-3 rounded-2xl shadow-sm"
+                style={{background:C.card}}>
+                <div className="flex items-center gap-3">
+                  <div className="font-bold text-sm" style={{color:C.txt}}>{fmtDayLabel(day.date)}</div>
+                  <div className="flex gap-1.5">
+                    {day.delivered_count>0&&(
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-lg"
+                        style={{background:'var(--ok-bg)',color:C.ok}}>
+                        {day.delivered_count} ✓
+                      </span>
+                    )}
+                    {day.active_count>0&&(
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-lg"
+                        style={{background:'#f59e0b22',color:'#d97706'}}>
+                        {day.active_count} —
+                      </span>
+                    )}
+                    {day.returned_count>0&&(
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-lg"
+                        style={{background:'var(--err-bg)',color:C.err}}>
+                        {day.returned_count} ✗
+                      </span>
+                    )}
                   </div>
-                  <span className="text-sm" style={{color:C.txt}}>واصلة</span>
                 </div>
-                <span className="font-bold text-sm" style={{color:C.ok}}>{day.delivered_count}</span>
-              </div>
+                <Ic n={isOpen?'chL':'chR'} s={18} c={C.primary}/>
+              </button>
 
-              {/* Active / in transit */}
-              {day.active_count>0&&(
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0"
-                      style={{background:'#f59e0b22'}}>
-                      <div style={{width:10,height:2,borderRadius:1,background:'#d97706'}}/>
+              {/* Expanded details */}
+              {isOpen&&(
+                <div className="mt-2 rounded-2xl overflow-hidden shadow-sm" style={{background:C.card}}>
+                  {/* Status breakdown */}
+                  <div className="px-4 pt-3 pb-2 space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span style={{color:C.txt,opacity:.6}}>إجمالي الطلبات</span>
+                      <span className="font-bold" style={{color:C.txt}}>{day.total}</span>
                     </div>
-                    <span className="text-sm" style={{color:C.txt}}>في الطريق</span>
+                    {day.delivered_count>0&&(
+                      <div className="flex justify-between text-sm">
+                        <span style={{color:C.ok}}>واصلة</span>
+                        <span className="font-bold" style={{color:C.ok}}>{day.delivered_count}</span>
+                      </div>
+                    )}
+                    {day.active_count>0&&(
+                      <div className="flex justify-between text-sm">
+                        <span style={{color:'#d97706'}}>في الطريق</span>
+                        <span className="font-bold" style={{color:'#d97706'}}>{day.active_count}</span>
+                      </div>
+                    )}
+                    {day.returned_count>0&&(
+                      <div className="flex justify-between text-sm">
+                        <span style={{color:C.err}}>راجعة</span>
+                        <span className="font-bold" style={{color:C.err}}>{day.returned_count}</span>
+                      </div>
+                    )}
                   </div>
-                  <span className="font-bold text-sm" style={{color:'#d97706'}}>{day.active_count}</span>
-                </div>
-              )}
 
-              {/* Returned */}
-              {day.returned_count>0&&(
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0"
-                      style={{background:'var(--err-bg)',color:C.err}}>
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={C.err} strokeWidth="3" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                  {/* Amounts */}
+                  <div className="mx-4 mb-4 mt-2 rounded-xl overflow-hidden" style={{border:`1px solid ${C.border}`}}>
+                    <div className="flex justify-between items-center px-3 py-2.5" style={{background:C.soft}}>
+                      <span className="text-xs" style={{color:C.txt,opacity:.6}}>المبلغ الواصل لحد الان</span>
+                      <span className="font-bold text-sm" style={{color:C.ok}}>{fmtAmt(day.delivered_net)}</span>
                     </div>
-                    <span className="text-sm" style={{color:C.txt}}>راجعة</span>
+                    {!allDone&&(
+                      <>
+                        <div style={{height:1,background:C.border}}/>
+                        <div className="flex justify-between items-center px-3 py-2.5" style={{background:C.soft}}>
+                          <span className="text-xs" style={{color:C.txt,opacity:.6}}>الصافي لو وصلت كلهن</span>
+                          <span className="font-bold text-sm" style={{color:C.primary}}>{fmtAmt(day.theoretical_net)}</span>
+                        </div>
+                      </>
+                    )}
                   </div>
-                  <span className="font-bold text-sm" style={{color:C.err}}>{day.returned_count}</span>
                 </div>
               )}
             </div>
-
-            {/* Amounts */}
-            <div className="mx-4 mb-4 rounded-xl overflow-hidden" style={{border:`1px solid ${C.border}`}}>
-              <div className="flex justify-between items-center px-3 py-2.5" style={{background:C.soft}}>
-                <span className="text-xs" style={{color:C.txt,opacity:.6}}>المبلغ الواصل</span>
-                <span className="font-bold text-sm" style={{color:day.delivered_net>=0?C.ok:C.err}}>
-                  {fmtAmt(day.delivered_net)}
-                </span>
-              </div>
-              {!allDone&&(
-                <>
-                  <div style={{height:1,background:C.border}}/>
-                  <div className="flex justify-between items-center px-3 py-2.5" style={{background:C.soft}}>
-                    <span className="text-xs" style={{color:C.txt,opacity:.6}}>الصافي لو وصلت كلهن</span>
-                    <span className="font-bold text-sm" style={{color:C.primary}}>
-                      {fmtAmt(day.theoretical_net)}
-                    </span>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }
