@@ -196,6 +196,7 @@ Deno.serve(async (req) => {
     platform_code: string;
     status_slug: string;
     net: number;
+    fee: number;
     payment_type: string;
   };
 
@@ -225,7 +226,7 @@ Deno.serve(async (req) => {
       byDay[date] = { date, total: 0, delivered_count: 0, active_count: 0, returned_count: 0, delivered_net: 0, active_net: 0, theoretical_net: 0, orders: [] };
     }
     byDay[date].total++;
-    byDay[date].orders.push({ uid, platform_code, status_slug, net, payment_type });
+    byDay[date].orders.push({ uid, platform_code, status_slug, net, fee, payment_type });
 
     if (DELIVERED.has(status_slug)) {
       byDay[date].delivered_count++;

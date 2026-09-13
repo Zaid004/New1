@@ -4842,6 +4842,9 @@ function BoxyDailyLogView() {
                       {(day.orders||[]).map(o=>{
                         const isOrderOpen = openOrder===o.uid;
                         const txList = orderTxMap[o.uid]||[];
+                        const isActiveOrder = !BOXY_DELIVERED.has(o.status_slug) && !isReturned(o.status_slug);
+                        const isPrepaidActive = isActiveOrder && (o.payment_type||'').toLowerCase()!=='cod';
+                        const displayAmt = isPrepaidActive ? -(o.fee||0) : o.net;
                         return (
                           <div key={o.uid}>
                             <button onClick={()=>setOpenOrder(isOrderOpen?null:o.uid)}
@@ -4875,8 +4878,8 @@ function BoxyDailyLogView() {
                                     style={{background:'#f59e0b22',color:'#d97706'}}>تدقيق</span>
                                 )}
                                 <span className="text-xs font-bold"
-                                  style={{color:o.net<0?C.err:orderColor(o.status_slug)}}>
-                                  {o.net.toLocaleString('ar-IQ')} د.ع
+                                  style={{color:displayAmt<0?C.err:orderColor(o.status_slug)}}>
+                                  {displayAmt.toLocaleString('ar-IQ')} د.ع
                                 </span>
                                 {txList.length>0&&(
                                   <Ic n={isOrderOpen?'chevron-up':'chevron-down'} s={12} c={C.primary}/>
