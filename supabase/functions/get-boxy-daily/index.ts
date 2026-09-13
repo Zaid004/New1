@@ -237,8 +237,7 @@ Deno.serve(async (req) => {
     } else {
       byDay[date].active_count++;
       byDay[date].theoretical_net += net;
-      const isCod = payment_type.toLowerCase() === 'cod';
-      byDay[date].active_net += isCod ? net : -fee;
+      byDay[date].active_net += net;
     }
   };
 
