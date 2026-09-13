@@ -4623,10 +4623,11 @@ function BoxyDailyLogView() {
   const totalTheoreticalNet = (days||[]).reduce((s,d)=>s+d.theoretical_net,0);
   const pendingBal   = balance?.pending?.balance   ?? null;
   const availableBal = balance?.available?.balance ?? null;
-  // Discrepancy: what we earned vs what Boxy holds (available + pending)
-  const boxyTotal   = (availableBal??0) + (pendingBal??0);
+  const paidBal      = balance?.paid?.total        ?? null;
+  // True reconciliation: earned = available + pending + already-paid-to-bank + any real discrepancy
   const hasBalance  = pendingBal!==null || availableBal!==null;
-  const diff        = hasBalance ? totalDeliveredNet - boxyTotal : null;
+  const boxyTotal   = (availableBal??0) + (pendingBal??0) + (paidBal??0);
+  const diff        = hasBalance && paidBal!==null ? totalDeliveredNet - boxyTotal : null;
 
   // Build order→transactions lookup from balance data
   const orderTxMap = React.useMemo(()=>{
@@ -4662,31 +4663,45 @@ function BoxyDailyLogView() {
         <div className="rounded-2xl p-4 shadow-sm" style={{background:C.card}}>
           <div className="text-xs font-semibold mb-3" style={{color:C.txt,opacity:.4}}>ملخص {monthLabel}</div>
           <div className="space-y-2.5">
+            {/* Delivered earnings from orders API */}
             <div className="flex justify-between items-center">
               <span className="text-sm" style={{color:C.txt,opacity:.7}}>المبلغ المكتسب (مسلّمة)</span>
               <span className="font-bold text-sm" style={{color:C.ok}}>{fmtAmt(totalDeliveredNet)}</span>
             </div>
             <div style={{height:1,background:C.border}}/>
+            {/* Balance breakdown from transactions API */}
             {availableBal!==null&&(
               <div className="flex justify-between items-center">
-                <span className="text-sm" style={{color:C.txt,opacity:.7}}>الرصيد المتاح للسحب</span>
+                <span className="text-sm" style={{color:C.txt,opacity:.7}}>متاح للسحب ببوكسي</span>
                 <span className="font-bold text-sm" style={{color:C.ok}}>{fmtAmt(availableBal)}</span>
               </div>
             )}
             {pendingBal!==null&&(
               <div className="flex justify-between items-center">
-                <span className="text-sm" style={{color:C.txt,opacity:.7}}>قيد التدقيق</span>
+                <span className="text-sm" style={{color:C.txt,opacity:.7}}>قيد التدقيق ببوكسي</span>
                 <span className="font-bold text-sm" style={{color:'#d97706'}}>{fmtAmt(pendingBal)}</span>
               </div>
             )}
+            {paidBal!==null&&(
+              <div className="flex justify-between items-center">
+                <span className="text-sm" style={{color:C.txt,opacity:.7}}>تم تحويله للبنك</span>
+                <span className="font-bold text-sm" style={{color:C.txt,opacity:.6}}>{fmtAmt(paidBal)}</span>
+              </div>
+            )}
+            {/* True reconciliation: earned = available + pending + paid + discrepancy */}
             {diff!==null&&(
               <div className="flex justify-between items-center pt-2 border-t" style={{borderColor:C.border}}>
-                <span className="text-sm font-semibold" style={{color:Math.abs(diff)>100?C.err:C.ok}}>
-                  {Math.abs(diff)>100?'يوجد خلل':'مطابق ✓'}
+                <span className="text-sm font-semibold" style={{color:Math.abs(diff)>500?C.err:C.ok}}>
+                  {Math.abs(diff)>500?'يوجد خلل حقيقي':'مطابق ✓'}
                 </span>
-                <span className="font-bold text-sm" style={{color:Math.abs(diff)>100?C.err:C.ok}}>
-                  {Math.abs(diff)>100?fmtAmt(Math.abs(diff)):''}
+                <span className="font-bold text-sm" style={{color:Math.abs(diff)>500?C.err:C.ok}}>
+                  {Math.abs(diff)>500?fmtAmt(Math.abs(diff)):'الحسابات صحيحة'}
                 </span>
+              </div>
+            )}
+            {hasBalance&&paidBal===null&&(
+              <div className="flex justify-between items-center pt-2 border-t" style={{borderColor:C.border}}>
+                <span className="text-xs" style={{color:C.txt,opacity:.5}}>المحوّل للبنك غير محسوب بعد</span>
               </div>
             )}
             {totalTheoreticalNet>totalDeliveredNet&&(
@@ -4697,7 +4712,7 @@ function BoxyDailyLogView() {
             )}
             {balance?.truncated&&(
               <div className="text-xs pt-1" style={{color:'#d97706'}}>
-                تحذير: بيانات مقطوعة، الأرقام تقريبية
+                ⚠️ معاملات أكثر من 5000 — ضيّق نطاق التاريخ لدقة أعلى
               </div>
             )}
           </div>
