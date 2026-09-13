@@ -4634,6 +4634,15 @@ function BoxyDailyLogView() {
   const paidBal      = balance?.paid?.total        ?? null;
   const hasBalance  = pendingBal!==null || availableBal!==null;
 
+  // Sum net of THIS month's orders (from orders API) that have been paid to bank
+  const totalMonthPaid = React.useMemo(()=>{
+    if(!balance) return null;
+    const paidUids = new Set((balance.paid?.orders||[]).map(o=>o.uid));
+    let sum=0;
+    for(const day of (days||[])) for(const o of (day.orders||[])) if(paidUids.has(o.uid)) sum+=o.net;
+    return sum;
+  },[balance,days]);
+
   // Build order→transactions lookup from balance data
   const orderTxMap = React.useMemo(()=>{
     const map={};
@@ -4689,10 +4698,12 @@ function BoxyDailyLogView() {
               </div>
             </div>
             <div style={{height:1,background:C.border}}/>
-            {/* Delivered earnings from orders API */}
+            {/* Paid earnings: this month's orders already transferred to bank */}
             <div className="flex justify-between items-center">
-              <span className="text-sm" style={{color:C.txt,opacity:.7}}>المبلغ المكتسب (مسلّمة)</span>
-              <span className="font-bold text-sm" style={{color:C.ok}}>{fmtAmt(totalDeliveredNet)}</span>
+              <span className="text-sm" style={{color:C.txt,opacity:.7}}>تم تحويله للبنك (هذا الشهر)</span>
+              <span className="font-bold text-sm" style={{color:C.ok}}>
+                {totalMonthPaid!==null ? fmtAmt(totalMonthPaid) : fmtAmt(totalDeliveredNet)}
+              </span>
             </div>
             <div style={{height:1,background:C.border}}/>
             {/* Balance breakdown from transactions API */}
