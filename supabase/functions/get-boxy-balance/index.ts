@@ -96,7 +96,6 @@ Deno.serve(async (req) => {
     const remainingPages = Array.from({ length: totalPages - 1 }, (_, i) => i + 2);
     const remaining = await Promise.all(remainingPages.map(fetchPage));
 
-    // Filter by date client-side (transactions API may not support date_from/date_to)
     const allTxRaw: TxItem[] = [...firstItems, ...remaining.flat()];
     const allTx = (from || to)
       ? allTxRaw.filter(tx => {
@@ -106,14 +105,23 @@ Deno.serve(async (req) => {
         })
       : allTxRaw;
 
-    // Group transactions by order_uid
+    type TxSummary = {
+      uid: string;
+      amount: number;
+      type: string;
+      subject: string;
+      created_at: string;
+    };
+
     type OrderEntry = {
+      uid: string;
       order_platform_code: string;
       payment_type: string;
       net: number;
       status: string;
       created_at: string;
       tx_count: number;
+      transactions: TxSummary[];
     };
 
     const byOrder: Record<string, OrderEntry> = {};
@@ -123,16 +131,25 @@ Deno.serve(async (req) => {
       if (!oid) continue;
       if (!byOrder[oid]) {
         byOrder[oid] = {
+          uid: oid,
           order_platform_code: tx.order_platform_code ?? '',
           payment_type: tx.item?.payment_type ?? 'unknown',
           net: 0,
           status: 'pending',
           created_at: tx.created_at,
           tx_count: 0,
+          transactions: [],
         };
       }
       byOrder[oid].net += tx.amount;
       byOrder[oid].tx_count++;
+      byOrder[oid].transactions.push({
+        uid:        tx.uid,
+        amount:     tx.amount,
+        type:       tx.type    ?? '',
+        subject:    tx.subject ?? '',
+        created_at: tx.created_at,
+      });
       if (tx.status?.slug && tx.status.slug !== 'pending') {
         byOrder[oid].status = tx.status.slug;
       }

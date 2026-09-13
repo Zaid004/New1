@@ -4562,6 +4562,7 @@ function BoxyDailyLogView() {
   const [balance,setBalance]=useState(null);
   const [err,setErr]=useState('');
   const [openDay,setOpenDay]=useState(null);
+  const [openOrder,setOpenOrder]=useState(null);
 
   const monthRange = m => {
     const [y,mo]=m.split('-').map(Number);
@@ -4576,7 +4577,7 @@ function BoxyDailyLogView() {
   });
 
   const load = async () => {
-    setLoading(true); setDays(null); setBalance(null); setErr('');
+    setLoading(true); setDays(null); setBalance(null); setErr(''); setOpenOrder(null);
     const {from,to}=monthRange(month);
     try {
       const {data:{session}} = await sb.auth.getSession();
@@ -4602,6 +4603,7 @@ function BoxyDailyLogView() {
     return `${d} ${MONTHS[m-1]}`;
   };
   const fmtAmt = n => n.toLocaleString('ar-IQ')+' د.ع';
+  const fmtAmtSigned = n => (n>=0?'+':'')+n.toLocaleString('ar-IQ')+' د.ع';
 
   const [my,mmo]=month.split('-').map(Number);
   const monthLabel=`${MONTHS[mmo-1]} ${my}`;
@@ -4612,8 +4614,21 @@ function BoxyDailyLogView() {
 
   const totalDeliveredNet   = (days||[]).reduce((s,d)=>s+d.delivered_net,0);
   const totalTheoreticalNet = (days||[]).reduce((s,d)=>s+d.theoretical_net,0);
-  const pendingBal = balance?.pending?.balance ?? null;
-  const diff = pendingBal!==null ? totalDeliveredNet - pendingBal : null;
+  const pendingBal  = balance?.pending?.balance  ?? null;
+  const settledBal  = balance?.settled?.total    ?? null;
+  // Discrepancy: what we earned vs what Boxy holds (pending + settled)
+  const boxyTotal   = pendingBal!==null&&settledBal!==null ? pendingBal+settledBal : null;
+  const diff        = boxyTotal!==null ? totalDeliveredNet - boxyTotal : null;
+
+  // Build order→transactions lookup from balance data
+  const orderTxMap = React.useMemo(()=>{
+    const map={};
+    if(!balance) return map;
+    for(const o of [...(balance.pending?.orders||[]),...(balance.settled?.orders||[])]) {
+      map[o.uid]=o.transactions||[];
+    }
+    return map;
+  },[balance]);
 
   return (
     <div className="space-y-3">
@@ -4643,19 +4658,26 @@ function BoxyDailyLogView() {
               <span className="text-sm" style={{color:C.txt,opacity:.7}}>المبلغ المكتسب (مسلّمة)</span>
               <span className="font-bold text-sm" style={{color:C.ok}}>{fmtAmt(totalDeliveredNet)}</span>
             </div>
+            <div style={{height:1,background:C.border}}/>
+            {settledBal!==null&&(
+              <div className="flex justify-between items-center">
+                <span className="text-sm" style={{color:C.txt,opacity:.7}}>الرصيد المتاح للسحب</span>
+                <span className="font-bold text-sm" style={{color:C.ok}}>{fmtAmt(settledBal)}</span>
+              </div>
+            )}
             {pendingBal!==null&&(
               <div className="flex justify-between items-center">
-                <span className="text-sm" style={{color:C.txt,opacity:.7}}>رصيد Boxy الجاهز</span>
-                <span className="font-bold text-sm" style={{color:C.primary}}>{fmtAmt(pendingBal)}</span>
+                <span className="text-sm" style={{color:C.txt,opacity:.7}}>قيد التدقيق</span>
+                <span className="font-bold text-sm" style={{color:'#d97706'}}>{fmtAmt(pendingBal)}</span>
               </div>
             )}
             {diff!==null&&(
               <div className="flex justify-between items-center pt-2 border-t" style={{borderColor:C.border}}>
-                <span className="text-sm font-semibold" style={{color:diff>100?C.err:C.ok}}>
-                  {diff>100?'يوجد فرق':'مطابق'}
+                <span className="text-sm font-semibold" style={{color:Math.abs(diff)>100?C.err:C.ok}}>
+                  {Math.abs(diff)>100?'يوجد هلل':'مطابق ✓'}
                 </span>
-                <span className="font-bold text-sm" style={{color:diff>100?C.err:C.ok}}>
-                  {diff>100?fmtAmt(diff):''}
+                <span className="font-bold text-sm" style={{color:Math.abs(diff)>100?C.err:C.ok}}>
+                  {Math.abs(diff)>100?fmtAmt(Math.abs(diff)):''}
                 </span>
               </div>
             )}
@@ -4667,7 +4689,7 @@ function BoxyDailyLogView() {
             )}
             {balance?.truncated&&(
               <div className="text-xs pt-1" style={{color:'#d97706'}}>
-                تحذير: أكثر من 1000 معاملة، الرصيد تقريبي
+                تحذير: بيانات مقطوعة، الأرقام تقريبية
               </div>
             )}
           </div>
@@ -4740,24 +4762,55 @@ function BoxyDailyLogView() {
                       الطلبات ({day.total})
                     </div>
                     <div className="space-y-1">
-                      {(day.orders||[]).map(o=>(
-                        <div key={o.uid} className="flex items-center justify-between py-2 border-b"
-                          style={{borderColor:C.border}}>
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="text-xs font-bold w-4 text-center flex-shrink-0"
-                              style={{color:orderColor(o.status_slug)}}>
-                              {orderIcon(o.status_slug)}
-                            </span>
-                            <span className="text-xs font-mono truncate" style={{color:C.txt}}>
-                              {o.platform_code||o.uid.slice(0,8)}
-                            </span>
+                      {(day.orders||[]).map(o=>{
+                        const isOrderOpen = openOrder===o.uid;
+                        const txList = orderTxMap[o.uid]||[];
+                        return (
+                          <div key={o.uid}>
+                            <button onClick={()=>setOpenOrder(isOrderOpen?null:o.uid)}
+                              className="w-full flex items-center justify-between py-2 border-b"
+                              style={{borderColor:C.border}}>
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="text-xs font-bold w-4 text-center flex-shrink-0"
+                                  style={{color:orderColor(o.status_slug)}}>
+                                  {orderIcon(o.status_slug)}
+                                </span>
+                                <span className="text-xs font-mono truncate" style={{color:C.txt}}>
+                                  {o.platform_code||o.uid.slice(0,8)}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                <span className="text-xs font-bold"
+                                  style={{color:o.net<0?C.err:orderColor(o.status_slug)}}>
+                                  {o.net.toLocaleString('ar-IQ')} د.ع
+                                </span>
+                                {txList.length>0&&(
+                                  <Ic n={isOrderOpen?'chevron-up':'chevron-down'} s={12} c={C.primary}/>
+                                )}
+                              </div>
+                            </button>
+                            {/* Order transactions */}
+                            {isOrderOpen&&txList.length>0&&(
+                              <div className="mb-1 rounded-xl overflow-hidden"
+                                style={{background:C.soft,border:`1px solid ${C.border}`}}>
+                                {txList.map((tx,i)=>(
+                                  <div key={tx.uid||i}
+                                    className="flex items-center justify-between px-3 py-1.5 border-b"
+                                    style={{borderColor:C.border}}>
+                                    <span className="text-xs" style={{color:C.txt,opacity:.75}}>
+                                      {tx.subject||tx.type||'معاملة'}
+                                    </span>
+                                    <span className="text-xs font-bold"
+                                      style={{color:tx.amount>=0?C.ok:C.err}}>
+                                      {fmtAmtSigned(tx.amount)}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
-                          <span className="text-xs font-bold flex-shrink-0 mr-2"
-                            style={{color:orderColor(o.status_slug)}}>
-                            {o.net.toLocaleString('ar-IQ')} د.ع
-                          </span>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 </div>

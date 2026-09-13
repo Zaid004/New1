@@ -11,7 +11,6 @@ const RETURNED  = new Set([
   'returning-origin', 'returning', 'return-requested',
   'cancelled', 'cancel',
 ]);
-// Orders whose status is final and won't change
 const IS_FINAL  = new Set([...DELIVERED, ...RETURNED]);
 
 type BoxyOrder = {
@@ -85,28 +84,30 @@ Deno.serve(async (req) => {
   const today     = iraqToday();
   const yesterday = toIraqDate(new Date(Date.now() - 86400 * 1000).toISOString());
 
-  // Days that MUST be re-fetched from Boxy (today + yesterday + any day with active orders)
+  // Recent days always re-fetched from Boxy
   const mustFetch = (date: string) => date >= yesterday;
 
-  // ── 1. Load cached (final) orders for "old" days ─────────────────────────
+  // ── 1. Load ALL cached orders (final + non-final) ────────────────────────────
   const { data: cachedRows } = await supabase
     .from('boxy_orders')
-    .select('uid,platform_code,payment_type,products_value,fee,status_slug,iraq_date,net')
+    .select('uid,platform_code,payment_type,products_value,fee,status_slug,iraq_date,net,is_final')
     .gte('iraq_date', from)
-    .lte('iraq_date', to)
-    .eq('is_final', true);
+    .lte('iraq_date', to);
 
-  // Build set of days fully served from cache (old days that have cached data)
+  // Build per-date map and track dates with any non-final orders
   const cachedByDate: Record<string, typeof cachedRows> = {};
+  const hasNonFinal: Record<string, boolean> = {};
   for (const r of cachedRows ?? []) {
     const d = (r.iraq_date as string).slice(0, 10);
     if (!cachedByDate[d]) cachedByDate[d] = [];
     cachedByDate[d].push(r);
+    if (!r.is_final) hasNonFinal[d] = true;
   }
 
-  // ── 2. Determine which days still need Boxy fetch ─────────────────────────
-  // Fetch from Boxy if: day is recent (today/yesterday) OR no cache for that day
-  // We'll fetch all Boxy pages and filter to only uncached/recent days
+  // A date needs Boxy fetch if: recent, OR no cache, OR has non-final cached orders
+  const needsBoxy = (date: string) => mustFetch(date) || !cachedByDate[date] || hasNonFinal[date];
+
+  // ── 2. Fetch from Boxy for uncached/recent/non-final days ───────────────────
   const boxyHeaders = {
     'api-key':    apiKey,
     'api-secret': apiSecret,
@@ -144,13 +145,13 @@ Deno.serve(async (req) => {
     const remaining = await Promise.all(remainingPages.map(fetchPage));
     const allFromBoxy: BoxyOrder[] = [...firstBatch, ...remaining.flat()];
 
-    // Only keep orders in the requested range that need fresh data
+    // Keep orders in range that need fresh data
     freshOrders = allFromBoxy.filter(o => {
       const d = toIraqDate(o.created_at);
-      return d >= from && d <= to && (mustFetch(d) || !cachedByDate[d]);
+      return d >= from && d <= to && needsBoxy(d);
     });
 
-    // ── 3. Upsert fresh orders to cache ─────────────────────────────────────
+    // ── 3. Upsert fresh orders to cache ───────────────────────────────────────
     if (freshOrders.length > 0) {
       const rows = freshOrders.map(o => {
         const d    = toIraqDate(o.created_at);
@@ -165,7 +166,7 @@ Deno.serve(async (req) => {
           status_slug:   slug,
           iraq_date:     d,
           net,
-          // Mark as final if the status is terminal AND the day is fully past
+          // Final = terminal status AND day is fully past
           is_final: IS_FINAL.has(slug) && d < yesterday,
           synced_at: new Date().toISOString(),
         };
@@ -173,13 +174,12 @@ Deno.serve(async (req) => {
       await supabase.from('boxy_orders').upsert(rows, { onConflict: 'uid' });
     }
   } catch (e) {
-    // If Boxy fetch fails but we have cache, continue with cached data only
     if (Object.keys(cachedByDate).length === 0) {
       return json({ error: (e as Error).message }, 500);
     }
   }
 
-  // ── 4. Merge cached + fresh orders into day buckets ──────────────────────
+  // ── 4. Merge cached + fresh orders into day buckets ──────────────────────────
   type OrderSummary = {
     uid: string;
     platform_code: string;
@@ -200,11 +200,15 @@ Deno.serve(async (req) => {
   };
 
   const byDay: Record<string, DayEntry> = {};
+  const seenUids = new Set<string>();
 
   const processOrder = (
     uid: string, platform_code: string, payment_type: string,
     status_slug: string, net: number, date: string
   ) => {
+    if (seenUids.has(uid)) return;
+    seenUids.add(uid);
+
     if (!byDay[date]) {
       byDay[date] = { date, total: 0, delivered_count: 0, active_count: 0, returned_count: 0, delivered_net: 0, theoretical_net: 0, orders: [] };
     }
@@ -223,20 +227,20 @@ Deno.serve(async (req) => {
     }
   };
 
-  // Cached old days
-  for (const [date, rows] of Object.entries(cachedByDate)) {
-    if (mustFetch(date)) continue; // will be covered by fresh data
-    for (const r of rows ?? []) {
-      processOrder(r.uid, r.platform_code, r.payment_type, r.status_slug, r.net, date);
-    }
-  }
-
-  // Fresh orders from Boxy
+  // Fresh orders first (most up-to-date)
   for (const o of freshOrders) {
     const date = toIraqDate(o.created_at);
     const slug = o.status?.slug ?? '';
     const net  = Math.round((o.products_value ?? 0) - (o.fee ?? 0));
     processOrder(o.uid, o.platform_code ?? '', o.payment_type ?? '', slug, net, date);
+  }
+
+  // Cached orders for days that didn't need Boxy fetch
+  for (const [date, rows] of Object.entries(cachedByDate)) {
+    if (needsBoxy(date)) continue;
+    for (const r of rows ?? []) {
+      processOrder(r.uid, r.platform_code, r.payment_type, r.status_slug, r.net, date);
+    }
   }
 
   const days = Object.values(byDay)
@@ -254,7 +258,7 @@ Deno.serve(async (req) => {
   return json({
     days,
     total_orders: days.reduce((s, d) => s + d.total, 0),
-    from_cache: Object.keys(cachedByDate).filter(d => !mustFetch(d)).length,
+    from_cache: Object.keys(cachedByDate).filter(d => !needsBoxy(d)).length,
     today,
   });
 });
