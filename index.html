@@ -716,6 +716,7 @@ function CalendarView({me,employees,isAdmin,settings}) {
   const [tasks,setTasks]=useState([]);
   const [completions,setCompletions]=useState([]);
   const [salesData,setSalesData]=useState({});
+  const [monthTotal,setMonthTotal]=useState(null);
   const [showTaskAdd,setShowTaskAdd]=useState(false);
   const [taskBusy,setTaskBusy]=useState(false);
   const initTaskForm=()=>({title:'',recurrence:'daily',day_of_week:0,day_of_month:1,specific_date:todayStr(),assigned_to:''});
@@ -798,10 +799,25 @@ function CalendarView({me,employees,isAdmin,settings}) {
     }catch(e){}
   };
 
-  useEffect(()=>{load(vy,vm);loadCompletions(vy,vm);loadSales(vy,vm);},[vy,vm]);
+  const loadMonthTotal = async (y,m) => {
+    setMonthTotal(null);
+    try{
+      const {data:{session}}=await sb.auth.getSession();
+      const monthStr=`${y}-${String(m+1).padStart(2,'0')}`;
+      const res=await fetch(`${SUPA_URL}/functions/v1/get-loyverse-sales`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':`Bearer ${session.access_token}`},
+        body:JSON.stringify({month:monthStr}),
+      });
+      const data=await res.json();
+      if(data.total!=null) setMonthTotal(data.total);
+    }catch(e){}
+  };
+
+  useEffect(()=>{load(vy,vm);loadCompletions(vy,vm);loadSales(vy,vm);loadMonthTotal(vy,vm);},[vy,vm]);
   // Auto-refresh today's sales every 5 min so refunds and late entries appear promptly
   useEffect(()=>{
-    const tick=()=>{const n=iraqNow();loadSales(n.getUTCFullYear(),n.getUTCMonth());};
+    const tick=()=>{const n=iraqNow();loadSales(n.getUTCFullYear(),n.getUTCMonth());loadMonthTotal(n.getUTCFullYear(),n.getUTCMonth());};
     const id=setInterval(tick,5*60*1000);
     return()=>clearInterval(id);
   },[]);
@@ -1029,9 +1045,14 @@ function CalendarView({me,employees,isAdmin,settings}) {
       {/* Monthly Sales Summary */}
       {(()=>{
         const TARGET=15_000_000;
-        const totalSales=Math.round(Object.values(salesData).reduce((s,v)=>s+(v||0),0));
-        if(totalSales===0) return null;
-        const ratio=Math.min(totalSales/TARGET,1);
+        if(monthTotal===null) return (
+          <div className="mt-4 rounded-2xl p-4 shadow-sm flex items-center justify-center gap-2" style={{background:C.card,minHeight:80}}>
+            <div className="w-4 h-4 rounded-full border-2 border-t-transparent animate-spin" style={{borderColor:C.primary,borderTopColor:'transparent'}}/>
+            <span className="text-sm" style={{color:C.txt,opacity:.5}}>جاري السحب من Loyverse...</span>
+          </div>
+        );
+        if(monthTotal===0) return null;
+        const ratio=Math.min(monthTotal/TARGET,1);
         const hue=Math.round(ratio*120);
         const clr=`hsl(${hue},65%,45%)`;
         const fmtM=v=>v>=1000000?`${(v/1000000).toFixed(2)}م`:`${(v/1000).toFixed(0)}ك`;
@@ -1045,7 +1066,7 @@ function CalendarView({me,employees,isAdmin,settings}) {
               <span className="text-xs" style={{color:C.txt,opacity:.45}}>هدف ١٥م د.ع</span>
             </div>
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xl font-bold tabular-nums" style={{color:clr}}>{fmtM(totalSales)} د.ع</span>
+              <span className="text-xl font-bold tabular-nums" style={{color:clr}}>{fmtM(monthTotal)} د.ع</span>
               <span className="text-sm font-semibold" style={{color:C.txt,opacity:.5}}>من ١٥م</span>
             </div>
             <div className="relative h-3 rounded-full overflow-hidden" style={{background:C.soft}}>
