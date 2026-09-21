@@ -800,17 +800,23 @@ function CalendarView({me,employees,isAdmin,settings}) {
   };
 
   const loadMonthTotal = async (y,m) => {
-    setMonthTotal(null);
+    const monthStr=`${y}-${String(m+1).padStart(2,'0')}`;
+    const cacheKey=`monthTotal_${monthStr}`;
+    // Show last saved value immediately
+    try{ const saved=localStorage.getItem(cacheKey); if(saved!=null) setMonthTotal(Number(saved)); }catch(e){}
+    // Fetch fresh in background
     try{
       const {data:{session}}=await sb.auth.getSession();
-      const monthStr=`${y}-${String(m+1).padStart(2,'0')}`;
       const res=await fetch(`${SUPA_URL}/functions/v1/get-loyverse-sales`,{
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':`Bearer ${session.access_token}`},
         body:JSON.stringify({month:monthStr}),
       });
       const data=await res.json();
-      if(data.total!=null) setMonthTotal(data.total);
+      if(data.total!=null){
+        setMonthTotal(data.total);
+        try{ localStorage.setItem(cacheKey,String(data.total)); }catch(e){}
+      }
     }catch(e){}
   };
 
@@ -1045,13 +1051,7 @@ function CalendarView({me,employees,isAdmin,settings}) {
       {/* Monthly Sales Summary */}
       {(()=>{
         const TARGET=15_000_000;
-        if(monthTotal===null) return (
-          <div className="mt-4 rounded-2xl p-4 shadow-sm flex items-center justify-center gap-2" style={{background:C.card,minHeight:80}}>
-            <div className="w-4 h-4 rounded-full border-2 border-t-transparent animate-spin" style={{borderColor:C.primary,borderTopColor:'transparent'}}/>
-            <span className="text-sm" style={{color:C.txt,opacity:.5}}>جاري السحب من Loyverse...</span>
-          </div>
-        );
-        if(monthTotal===0) return null;
+        if(monthTotal===null||monthTotal===0) return null;
         const ratio=Math.min(monthTotal/TARGET,1);
         const hue=Math.round(ratio*120);
         const clr=`hsl(${hue},65%,45%)`;
