@@ -1029,33 +1029,12 @@ function CalendarView({me,employees,isAdmin,settings}) {
       {/* Monthly Sales Summary */}
       {(()=>{
         const TARGET=15_000_000;
-        // Total store sales this month
         const totalSales=Math.round(Object.values(salesData).reduce((s,v)=>s+(v||0),0));
         if(totalSales===0) return null;
-
-        // Per-employee attribution based on days worked
-        const empSales={};
-        empOnly.forEach(e=>{empSales[e.id]=0;});
-        const daysInM=new Date(vy,vm+1,0).getDate();
-        for(let day=1;day<=daysInM;day++){
-          const ds=`${vy}-${String(vm+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-          const dayAmt=salesData[ds];
-          if(dayAmt==null) continue;
-          const dr=recs.filter(r=>r.date===ds);
-          if(!dr.length) continue;
-          const perEmp=dayAmt/dr.length;
-          for(const r of dr){if(empSales[r.employee_id]!==undefined) empSales[r.employee_id]+=perEmp;}
-        }
-
+        const ratio=Math.min(totalSales/TARGET,1);
+        const hue=Math.round(ratio*120);
+        const clr=`hsl(${hue},65%,45%)`;
         const fmtM=v=>v>=1000000?`${(v/1000000).toFixed(2)}م`:`${(v/1000).toFixed(0)}ك`;
-        const bar=(ratio,clr)=>(
-          <div className="relative h-2 rounded-full overflow-hidden" style={{background:C.soft}}>
-            <div style={{position:'absolute',inset:'0 auto 0 0',width:`${Math.round(ratio*100)}%`,background:clr,borderRadius:'9999px',transition:'width .5s ease'}}/>
-          </div>
-        );
-        const totalRatio=Math.min(totalSales/TARGET,1);
-        const totalHue=Math.round(totalRatio*120);
-        const totalClr=`hsl(${totalHue},65%,45%)`;
         return (
           <div className="mt-4 rounded-2xl p-4 shadow-sm" style={{background:C.card}}>
             <div className="flex items-center justify-between mb-3">
@@ -1065,46 +1044,15 @@ function CalendarView({me,employees,isAdmin,settings}) {
               </div>
               <span className="text-xs" style={{color:C.txt,opacity:.45}}>هدف ١٥م د.ع</span>
             </div>
-
-            {/* Grand total */}
-            <div className="mb-4 p-3 rounded-xl" style={{background:C.soft}}>
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-sm font-bold" style={{color:C.txt}}>المجموع</span>
-                <span className="text-sm font-bold tabular-nums" style={{color:totalClr}}>
-                  {fmtM(totalSales)} / ١٥م د.ع
-                </span>
-              </div>
-              {bar(totalRatio,totalClr)}
-              <div className="flex justify-end mt-0.5">
-                <span className="text-xs" style={{color:C.txt,opacity:.4}}>{Math.round(totalRatio*100)}%</span>
-              </div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xl font-bold tabular-nums" style={{color:clr}}>{fmtM(totalSales)} د.ع</span>
+              <span className="text-sm font-semibold" style={{color:C.txt,opacity:.5}}>من ١٥م</span>
             </div>
-
-            {/* Per-employee */}
-            <div className="space-y-3">
-              {empOnly.map(e=>{
-                const sales=Math.round(empSales[e.id]||0);
-                const ratio=Math.min(sales/TARGET,1);
-                const hue=Math.round(ratio*120);
-                const clr=`hsl(${hue},65%,45%)`;
-                return (
-                  <div key={e.id}>
-                    <div className="flex items-center justify-between mb-1">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{background:e.color_hex}}/>
-                        <span className="text-sm font-semibold" style={{color:C.txt}}>{e.name}</span>
-                      </div>
-                      <span className="text-sm font-bold tabular-nums" style={{color:clr}}>
-                        {fmtM(sales)} د.ع
-                      </span>
-                    </div>
-                    {bar(ratio,clr)}
-                    <div className="flex justify-end mt-0.5">
-                      <span className="text-xs" style={{color:C.txt,opacity:.4}}>{Math.round(ratio*100)}%</span>
-                    </div>
-                  </div>
-                );
-              })}
+            <div className="relative h-3 rounded-full overflow-hidden" style={{background:C.soft}}>
+              <div style={{position:'absolute',inset:'0 auto 0 0',width:`${Math.round(ratio*100)}%`,background:clr,borderRadius:'9999px',transition:'width .5s ease'}}/>
+            </div>
+            <div className="flex justify-end mt-1">
+              <span className="text-xs font-semibold" style={{color:clr}}>{Math.round(ratio*100)}%</span>
             </div>
           </div>
         );
