@@ -1026,6 +1026,63 @@ function CalendarView({me,employees,isAdmin,settings}) {
         </div>
       </div>
 
+      {/* Monthly Sales Summary */}
+      {(()=>{
+        const TARGET=15_000_000;
+        const empSales={};
+        empOnly.forEach(e=>{empSales[e.id]=0;});
+        const daysInM=new Date(vy,vm+1,0).getDate();
+        for(let day=1;day<=daysInM;day++){
+          const ds=`${vy}-${String(vm+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+          const dayAmt=salesData[ds];
+          if(dayAmt==null) continue;
+          const dr=recs.filter(r=>r.date===ds);
+          if(!dr.length) continue;
+          const perEmp=dayAmt/dr.length;
+          for(const r of dr){if(empSales[r.employee_id]!==undefined) empSales[r.employee_id]+=perEmp;}
+        }
+        if(!empOnly.some(e=>empSales[e.id]>0)) return null;
+        return (
+          <div className="mt-4 rounded-2xl p-4 shadow-sm" style={{background:C.card}}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Ic n="chart" s={14} c={C.primary}/>
+                <span className="text-xs font-bold uppercase tracking-widest" style={{color:C.primary}}>مبيعات الشهر</span>
+              </div>
+              <span className="text-xs" style={{color:C.txt,opacity:.45}}>{MONTHS[vm]} · هدف ١٥م</span>
+            </div>
+            <div className="space-y-3">
+              {empOnly.map(e=>{
+                const sales=Math.round(empSales[e.id]||0);
+                const ratio=Math.min(sales/TARGET,1);
+                const hue=Math.round(ratio*120);
+                const clr=`hsl(${hue},65%,45%)`;
+                const pct=Math.round(ratio*100);
+                return (
+                  <div key={e.id}>
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{background:e.color_hex}}/>
+                        <span className="text-sm font-semibold" style={{color:C.txt}}>{e.name}</span>
+                      </div>
+                      <span className="text-sm font-bold tabular-nums" style={{color:clr}}>
+                        {sales>=1000000?`${(sales/1000000).toFixed(2)}م`:(sales/1000).toFixed(0)+'ك'} د.ع
+                      </span>
+                    </div>
+                    <div className="relative h-2 rounded-full overflow-hidden" style={{background:C.soft}}>
+                      <div style={{position:'absolute',inset:'0 auto 0 0',width:`${pct}%`,background:clr,borderRadius:'9999px',transition:'width .5s ease'}}/>
+                    </div>
+                    <div className="flex justify-end mt-0.5">
+                      <span className="text-xs" style={{color:C.txt,opacity:.4}}>{pct}%</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Employee: today's tasks */}
       {!isAdmin && (()=>{
         const today=todayStr();
