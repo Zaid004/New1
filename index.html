@@ -1363,6 +1363,13 @@ function EmpDashboard({me,employees,settings,onRefresh}) {
     setSales(''); setExtra('');
   },[calcYear,calcMonth]);
 
+  // Auto-fetch from Loyverse when calculator opens or month changes
+  useEffect(()=>{
+    if(!showCalc) return;
+    fetchLoyverse();
+    fetchCalcDelivery();
+  },[showCalc,calcYear,calcMonth]);
+
   const pool   = settings?.monthly_pool_amount||525000;
   const pct    = settings?.monthly_percentage||3.2;
   const empOnlyIds = new Set(employees.filter(e=>e.role!=='admin').map(e=>e.id));
@@ -1502,17 +1509,13 @@ function EmpDashboard({me,employees,settings,onRefresh}) {
             </div>
           </div>
           <div>
-            <label className="text-xs font-semibold block mb-1" style={{color:C.txt}}>حجم المبيعات (د.ع)</label>
-            <div className="flex gap-1.5">
-              <input type="text" inputMode="numeric" value={fmtNum(sales)} onChange={e=>setSales(parseNum(e.target.value))}
-                className="flex-1 p-3 rounded-xl border text-sm outline-none"
-                style={{borderColor:C.border}} placeholder="0"/>
-              <button onClick={fetchLoyverse} disabled={loyBusy} title="جلب من Loyverse"
-                className="px-3 rounded-xl text-xs font-black text-white flex-shrink-0"
-                style={{background:loyBusy?'#999':C.ok}}>
-                {loyBusy?'..':'L'}
-              </button>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-semibold" style={{color:C.txt}}>حجم المبيعات (د.ع)</label>
+              {loyBusy&&<span className="text-xs" style={{color:C.txt,opacity:.4}}>جاري الجلب...</span>}
             </div>
+            <input type="text" inputMode="numeric" value={fmtNum(sales)} onChange={e=>setSales(parseNum(e.target.value))}
+              className="w-full p-3 rounded-xl border text-sm outline-none"
+              style={{borderColor:C.border}} placeholder="0"/>
             {loyMsg&&<div className="mt-1.5 text-xs font-semibold text-center py-1.5 rounded-lg"
               style={{background:loyMsg.startsWith('خطأ')?'var(--err-bg)':'var(--ok-bg)',
                       color:loyMsg.startsWith('خطأ')?C.err:C.ok}}>{loyMsg}</div>}
@@ -1550,11 +1553,7 @@ function EmpDashboard({me,employees,settings,onRefresh}) {
             <input type="text" inputMode="numeric" value={fmtNum(extra)} onChange={e=>setExtra(parseNum(e.target.value))}
               className="w-full p-3 rounded-xl border text-sm outline-none"
               style={{borderColor:C.border}} placeholder="0"/>
-            <button onClick={fetchCalcDelivery} disabled={delCalcBusy}
-              className="mt-2 w-full py-2 rounded-xl text-xs font-bold"
-              style={{background:C.soft,color:delCalcBusy?'#999':C.primary}}>
-              {delCalcBusy?'جاري الجلب...':'مكافأة التوصيل (هذا الشهر)'}
-            </button>
+            {delCalcBusy&&<div className="mt-1.5 text-xs text-center py-1" style={{color:C.txt,opacity:.4}}>جاري جلب مكافأة التوصيل...</div>}
             {delCalcMsg&&<div className="mt-1.5 text-xs font-semibold text-center py-1.5 rounded-lg"
               style={{background:delCalcMsg.startsWith('خطأ')||delCalcMsg.startsWith('لا')?C.soft:'var(--ok-bg)',
                       color:delCalcMsg.startsWith('خطأ')||delCalcMsg.startsWith('لا')?C.txt:C.ok}}>{delCalcMsg}</div>}
