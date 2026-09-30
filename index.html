@@ -2849,17 +2849,25 @@ function PayslipsView({employees,settings}) {
   useEffect(()=>{
     if(view!=='annual'||!empId) return;
     const from=`${annualYear}-01-01`, to=`${annualYear}-12-31`;
-    sb.from('attendance_records').select('*').gte('date',from).lte('date',to).then(({data:r})=>{
+    Promise.all([
+      sb.from('attendance_records').select('*').gte('date',from).lte('date',to),
+      sb.from('payslips').select('*').eq('employee_id',empId).gte('month',from).lte('month',to),
+    ]).then(([{data:r},{data:slips}])=>{
       const all=r||[];
+      const slipMap={};
+      (slips||[]).forEach(s=>{slipMap[s.month]=s;});
       const months=Array.from({length:12},(_,i)=>{
         const mo=String(i+1).padStart(2,'0');
+        const monthKey=`${annualYear}-${mo}-01`;
         const mRecs=all.filter(rec=>rec.date.startsWith(`${annualYear}-${mo}`));
         const allP=mRecs.filter(rec=>empOnlyIds.has(rec.employee_id)).reduce((s,rec)=>s+pts(rec),0);
         const empRecs=mRecs.filter(rec=>rec.employee_id===empId);
         const empP=empRecs.reduce((s,rec)=>s+pts(rec),0);
         const empD=empRecs.reduce((s,rec)=>s+days(rec),0);
-        const salary=allP>0?(empP/allP)*(settings?.monthly_pool_amount||525000):0;
-        return {month:i,days:empD,pts:empP,salary};
+        const estimated=allP>0?(empP/allP)*(settings?.monthly_pool_amount||525000):0;
+        const slip=slipMap[monthKey]||null;
+        const actual=slip?((slip.fixed_amount||0)+(slip.percentage_amount||0)+(slip.bonus||0)+(slip.extra_amount||0)+calcMilestoneBonus(slip.sales_amount||0)-(slip.deduction||0)):null;
+        return {month:i,days:empD,pts:empP,estimated,salary:actual!==null?actual:estimated,hasSlip:!!slip,slip};
       });
       setAnnualData(months);
     });
@@ -3194,7 +3202,8 @@ function PayslipsView({employees,settings}) {
       {view==='annual' && (()=>{
         const totalD=annualData.reduce((s,m)=>s+m.days,0);
         const totalP=annualData.reduce((s,m)=>s+m.pts,0);
-        const totalS=annualData.reduce((s,m)=>s+m.salary,0);
+        const totalPaid=annualData.filter(m=>m.hasSlip).reduce((s,m)=>s+m.salary,0);
+        const paidMonths=annualData.filter(m=>m.hasSlip).length;
         return (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
@@ -3205,25 +3214,61 @@ function PayslipsView({employees,settings}) {
               </div>
             </div>
             <div className="grid grid-cols-3 gap-2">
-              {[['إجمالي الأيام',totalD,C.primary],['إجمالي النقاط',totalP,C.e2],['الراتب التقديري',fmt(totalS)+' د.ع',C.ok]].map(([l,v,col])=>(
+              {[['إجمالي الأيام',totalD,C.primary],['إجمالي النقاط',totalP,C.e2]].map(([l,v,col])=>(
                 <div key={l} className="rounded-2xl p-3 text-center shadow-sm" style={{background:C.card}}>
                   <div className="font-black text-lg leading-tight" style={{color:col}}>{v}</div>
                   <div className="text-xs mt-0.5" style={{color:C.txt,opacity:.5}}>{l}</div>
                 </div>
               ))}
+              <div className="rounded-2xl p-3 text-center shadow-sm" style={{background:C.card}}>
+                <div className="font-black text-base leading-tight" style={{color:C.ok}}>{fmt(totalPaid)}</div>
+                <div className="text-xs mt-0.5" style={{color:C.txt,opacity:.5}}>مستلم ({paidMonths} شهر)</div>
+              </div>
             </div>
             <div className="rounded-2xl overflow-hidden shadow-sm" style={{background:C.card}}>
-              <div className="grid grid-cols-4 px-4 py-2 text-xs font-bold" style={{background:C.soft,color:C.txt,opacity:.7}}>
-                <span>الشهر</span><span className="text-center">أيام</span><span className="text-center">نقاط</span><span className="text-left">راتب</span>
+              <div className="grid grid-cols-3 px-4 py-2 text-xs font-bold" style={{background:C.soft,color:C.txt,opacity:.7}}>
+                <span>الشهر</span><span className="text-center">أيام</span><span className="text-left">راتب</span>
               </div>
-              {annualData.map((row,i)=>(
-                <div key={i} className="grid grid-cols-4 px-4 py-2.5 text-sm border-b" style={{borderColor:C.border,opacity:row.days===0?.4:1}}>
-                  <span className="font-semibold" style={{color:C.txt}}>{MONTHS[row.month]}</span>
-                  <span className="text-center font-bold" style={{color:C.primary}}>{row.days||'—'}</span>
-                  <span className="text-center font-bold" style={{color:C.e2}}>{row.pts||'—'}</span>
-                  <span className="text-left font-bold text-xs" style={{color:C.ok}}>{row.salary>0?fmt(row.salary):'—'}</span>
-                </div>
-              ))}
+              {annualData.map((row,i)=>{
+                const openSlipHtml=async()=>{
+                  const {data}=await sb.storage.from('salary-proofs').createSignedUrl(row.slip.payslip_html_url,3600);
+                  if(data?.signedUrl) window.open(data.signedUrl,'_blank');
+                };
+                const openProof=async()=>{
+                  const {data}=await sb.storage.from('salary-proofs').createSignedUrl(row.slip.payment_proof_url,3600);
+                  if(data?.signedUrl) window.open(data.signedUrl,'_blank');
+                };
+                return (
+                  <div key={i} className="px-4 py-2.5 border-b" style={{borderColor:C.border,opacity:row.days===0&&!row.hasSlip?.4:1}}>
+                    <div className="grid grid-cols-3 text-sm items-center">
+                      <span className="font-semibold" style={{color:C.txt}}>{MONTHS[row.month]}</span>
+                      <span className="text-center font-bold" style={{color:C.primary}}>{row.days||'—'}</span>
+                      <span className="text-left font-bold text-xs" style={{color:row.hasSlip?C.ok:C.txt,opacity:row.hasSlip?1:.4}}>
+                        {row.salary>0?fmt(row.salary):'—'}
+                        {!row.hasSlip&&row.salary>0&&<span className="mr-1 text-xs" style={{opacity:.5}}>تقديري</span>}
+                      </span>
+                    </div>
+                    {row.hasSlip&&(row.slip?.payslip_html_url||row.slip?.payment_proof_url)&&(
+                      <div className="flex gap-2 mt-1.5">
+                        {row.slip?.payslip_html_url&&(
+                          <button onClick={openSlipHtml}
+                            className="flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-lg"
+                            style={{background:C.e2+'18',color:C.e2}}>
+                            <Ic n="file" s={11} c={C.e2}/>كشف الراتب
+                          </button>
+                        )}
+                        {row.slip?.payment_proof_url&&(
+                          <button onClick={openProof}
+                            className="flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-lg"
+                            style={{background:C.ok+'18',color:C.ok}}>
+                            <Ic n="img" s={11} c={C.ok}/>إثبات التسليم
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         );
