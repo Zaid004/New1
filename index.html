@@ -1824,12 +1824,26 @@ function PayslipArchive({empId}) {
           {!loading && slips.length===0 && <div className="p-6 text-center text-sm" style={{color:C.txt,opacity:.4}}>لا توجد كشوفات بعد</div>}
           {slips.map(s=>{
             const d=new Date(s.month+'T00:00:00');
+            const openProof=async()=>{
+              const {data}=await sb.storage.from('salary-proofs').createSignedUrl(s.payment_proof_url,3600);
+              if(data?.signedUrl) window.open(data.signedUrl,'_blank');
+            };
             return (
-              <div key={s.id} className="flex items-center justify-between px-4 py-3 border-b" style={{borderColor:C.border}}>
-                <div className="font-semibold text-sm" style={{color:C.txt}}>
-                  {MONTHS[d.getMonth()]} {d.getFullYear()}
+              <div key={s.id} className="px-4 py-3 border-b" style={{borderColor:C.border}}>
+                <div className="flex items-center justify-between">
+                  <div className="font-semibold text-sm" style={{color:C.txt}}>
+                    {MONTHS[d.getMonth()]} {d.getFullYear()}
+                  </div>
+                  <div className="font-black text-sm" style={{color:C.ok}}>{fmt(total(s))} <span className="font-normal text-xs">د.ع</span></div>
                 </div>
-                <div className="font-black text-sm" style={{color:C.ok}}>{fmt(total(s))} <span className="font-normal text-xs">د.ع</span></div>
+                {s.payment_proof_url&&(
+                  <button onClick={openProof}
+                    className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg"
+                    style={{background:C.ok+'18',color:C.ok}}>
+                    <Ic n="img" s={12} c={C.ok}/>
+                    إثبات التسليم
+                  </button>
+                )}
               </div>
             );
           })}
@@ -2808,6 +2822,9 @@ function PayslipsView({employees,settings}) {
   const [delBusy,setDelBusy]=useState(false);
   const [delMsg,setDelMsg]=useState('');
   const [delPicker,setDelPicker]=useState(null);
+  const [savedSlipId,setSavedSlipId]=useState(null);
+  const [proofPath,setProofPath]=useState(null);
+  const [proofBusy,setProofBusy]=useState(false);
 
   // Annual report state
   const [annualYear,setAnnualYear]=useState(iraqNow().getUTCFullYear());
@@ -2854,7 +2871,11 @@ function PayslipsView({employees,settings}) {
       if(slip){
         setF({fixed:slip.fixed_amount||'',pct:slip.percentage_amount||'',sales:slip.sales_amount||'',
               bonus:slip.bonus||'',extra:slip.extra_amount||'',notes:slip.notes||''});
+        setSavedSlipId(slip.id);
+        setProofPath(slip.payment_proof_url||null);
       } else {
+        setSavedSlipId(null);
+        setProofPath(null);
         const allP=r.filter(x=>empOnlyIds.has(x.employee_id)).reduce((s,x)=>s+pts(x),0);
         const empP=r.filter(x=>x.employee_id===empId).reduce((s,x)=>s+pts(x),0);
         const fs=allP>0?(empP/allP)*pool:0;
@@ -2974,9 +2995,36 @@ function PayslipsView({employees,settings}) {
       percentage_amount:parseFloat(f.pct)||0,sales_amount:parseFloat(f.sales)||0,
       bonus:parseFloat(f.bonus)||0,extra_amount:parseFloat(f.extra)||0,notes:f.notes};
     const {data:ex}=await sb.from('payslips').select('id').eq('employee_id',empId).eq('month',monthDate).maybeSingle();
-    if(ex) await sb.from('payslips').update(payload).eq('id',ex.id);
-    else await sb.from('payslips').insert(payload);
+    let slipId=savedSlipId;
+    if(ex){ await sb.from('payslips').update(payload).eq('id',ex.id); slipId=ex.id; }
+    else { const {data:ins}=await sb.from('payslips').insert(payload).select('id').single(); slipId=ins?.id; }
+    setSavedSlipId(slipId);
     setBusy(false); setSaved(true); setTimeout(()=>setSaved(false),2500);
+    return slipId;
+  };
+
+  const uploadProof = async (file) => {
+    if(!file) return;
+    let slipId=savedSlipId;
+    if(!slipId) slipId=await save();
+    if(!slipId) return;
+    setProofBusy(true);
+    const ext=file.name.split('.').pop()||'jpg';
+    const path=`${empId}/${monthDate}.${ext}`;
+    await sb.storage.from('salary-proofs').upload(path,file,{upsert:true,contentType:file.type});
+    await sb.from('payslips').update({payment_proof_url:path,paid_at:new Date().toISOString()}).eq('id',slipId);
+    setProofPath(path);
+    setProofBusy(false);
+  };
+
+  const viewProof = async (path) => {
+    const {data}=await sb.storage.from('salary-proofs').createSignedUrl(path,3600);
+    if(data?.signedUrl) window.open(data.signedUrl,'_blank');
+  };
+
+  const saveAndExportPdf = async () => {
+    if(!savedSlipId) await save();
+    exportPdf();
   };
 
   const exportPdf = () => {
@@ -3262,12 +3310,39 @@ function PayslipsView({employees,settings}) {
             style={{background:saved?C.ok:busy?'#999':C.primary}}>
             {saved?'تم الحفظ':busy?'جاري...':'حفظ'}
           </button>
-          <button onClick={exportPdf}
+          <button onClick={saveAndExportPdf}
             className="flex-1 py-3 rounded-xl font-bold text-white text-sm flex items-center justify-center gap-2"
             style={{background:C.e2}}>
             <Ic n="dl" s={16} c="#fff"/>
             تصدير PDF
           </button>
+        </div>
+
+        {/* Proof of payment upload */}
+        <div className="rounded-2xl overflow-hidden" style={{border:`1.5px dashed ${proofPath?C.ok:C.border}`}}>
+          <div className="flex items-center justify-between px-3 py-2.5" style={{background:proofPath?C.ok+'15':C.soft}}>
+            <div className="flex items-center gap-2">
+              <Ic n="img" s={15} c={proofPath?C.ok:C.txt}/>
+              <span className="text-xs font-bold" style={{color:proofPath?C.ok:C.txt,opacity:proofPath?1:.6}}>
+                {proofPath?'تم رفع إثبات التحويل':'إثبات تحويل الراتب'}
+              </span>
+            </div>
+            <div className="flex gap-2 items-center">
+              {proofPath&&(
+                <button onClick={()=>viewProof(proofPath)}
+                  className="text-xs font-bold px-2.5 py-1 rounded-lg"
+                  style={{background:C.ok+'22',color:C.ok}}>
+                  عرض
+                </button>
+              )}
+              <label className="text-xs font-bold px-2.5 py-1 rounded-lg cursor-pointer"
+                style={{background:C.primary+'22',color:C.primary}}>
+                {proofBusy?'جاري الرفع...':(proofPath?'تغيير':'رفع صورة')}
+                <input type="file" accept="image/*" className="hidden"
+                  onChange={e=>{const f=e.target.files?.[0];if(f&&!proofBusy)uploadProof(f);e.target.value='';}}/>
+              </label>
+            </div>
+          </div>
         </div>
       </div>
       </>}
