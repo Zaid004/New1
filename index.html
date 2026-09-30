@@ -3316,6 +3316,18 @@ function PayslipsView({employees,settings}) {
             <Ic n="dl" s={16} c="#fff"/>
             تصدير PDF
           </button>
+          {savedSlipId&&(
+            <button onClick={async()=>{
+              if(!window.confirm('حذف كشف الراتب هذا نهائياً؟')) return;
+              await sb.from('payslips').delete().eq('id',savedSlipId);
+              setSavedSlipId(null); setProofPath(null);
+              setF({fixed:'',pct:'',sales:'',bonus:'',extra:'',notes:''});
+            }}
+              className="p-3 rounded-xl flex items-center justify-center"
+              style={{background:'#ef444422',color:'#ef4444'}}>
+              <Ic n="trash" s={18} c="#ef4444"/>
+            </button>
+          )}
         </div>
 
         {/* Proof of payment upload */}
