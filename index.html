@@ -1060,36 +1060,43 @@ function CalendarView({me,employees,isAdmin,settings}) {
         const clr=`hsl(${hue},65%,45%)`;
         const fmtM=v=>v>=1000000?`${(v/1000000).toFixed(2)}م`:`${(v/1000).toFixed(0)}ك`;
 
-        // Deadline countdown — only for current month
+        // Deadline countdown — only on the last day of the current month
         const nowObj=iraqNow();
         const isCurrentMonth=vy===nowObj.getUTCFullYear()&&vm===nowObj.getUTCMonth();
         let deadlineEl=null;
         if(isCurrentMonth&&ratio<1){
           const lastDay=new Date(vy,vm+1,0).getDate();
-          const deadline=new Date(`${vy}-${String(vm+1).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}T23:59:59.000+03:00`);
-          const diff=deadline.getTime()-tickNow;
-          if(diff>0){
-            const dd=Math.floor(diff/86400000);
-            const hh=Math.floor((diff%86400000)/3600000);
-            const mm=Math.floor((diff%3600000)/60000);
-            const ss=Math.floor((diff%60000)/1000);
-            const urgent=diff<3*3600000; // less than 3 hours
-            const timeStr=dd>0
-              ? `${dd} يوم ${hh} ساعة ${mm} دقيقة`
-              : hh>0
-                ? `${hh}:${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`
-                : `${mm}:${String(ss).padStart(2,'0')}`;
-            const msg=dd>0?'باقي على نهاية الشهر':hh>0?'باقي على إغلاق الشهر ⚡':'الدقائق الأخيرة 🔥';
-            const urgentClr=diff<3600000?'#ef4444':diff<3*3600000?'#f97316':'#f59e0b';
-            deadlineEl=(
-              <div className="mt-3 flex items-center justify-between px-3 py-2 rounded-xl"
-                style={{background:urgent?urgentClr+'18':C.soft}}>
-                <span className="text-xs font-semibold" style={{color:urgent?urgentClr:C.txt,opacity:urgent?1:.6}}>{msg}</span>
-                <span className="text-sm font-black tabular-nums" style={{color:urgent?urgentClr:C.txt,fontVariantNumeric:'tabular-nums',letterSpacing:.5}}>
-                  {timeStr}
-                </span>
-              </div>
-            );
+          const todayIraq=nowObj.getUTCDate(); // iraqNow() is already shifted +3h
+          const isLastDay=todayIraq===lastDay;
+          if(isLastDay){
+            const deadline=new Date(`${vy}-${String(vm+1).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}T23:59:59.000+03:00`);
+            const diff=deadline.getTime()-tickNow;
+            if(diff>0){
+              const hh=Math.floor(diff/3600000);
+              const mm=Math.floor((diff%3600000)/60000);
+              const ss=Math.floor((diff%60000)/1000);
+              const timeStr=`${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
+              const urgentClr=diff<3600000?'#ef4444':diff<3*3600000?'#f97316':'#f59e0b';
+              const msg=diff<3600000
+                ? 'الوقت ينفد — لا تتوقف الآن'
+                : diff<3*3600000
+                  ? 'آخر فرصة لتحقيق الهدف'
+                  : 'اليوم آخر يوم في الشهر';
+              deadlineEl=(
+                <div className="mt-3 rounded-xl overflow-hidden" style={{border:`1.5px solid ${urgentClr}33`}}>
+                  <div className="flex items-center justify-between px-3 py-2"
+                    style={{background:urgentClr+'15'}}>
+                    <span className="text-xs font-bold" style={{color:urgentClr}}>{msg}</span>
+                    <span className="text-base font-black tabular-nums" style={{color:urgentClr,letterSpacing:1}}>
+                      {timeStr}
+                    </span>
+                  </div>
+                  <div className="px-3 py-1.5 text-center text-xs font-semibold" style={{color:C.txt,opacity:.5}}>
+                    {`باقي ${fmt(Math.max(0,Math.round(TARGET-monthTotal)))} د.ع للهدف`}
+                  </div>
+                </div>
+              );
+            }
           }
         }
 
