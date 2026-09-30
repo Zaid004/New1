@@ -1836,13 +1836,28 @@ function PayslipArchive({empId}) {
                   </div>
                   <div className="font-black text-sm" style={{color:C.ok}}>{fmt(total(s))} <span className="font-normal text-xs">د.ع</span></div>
                 </div>
-                {s.payment_proof_url&&(
-                  <button onClick={openProof}
-                    className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg"
-                    style={{background:C.ok+'18',color:C.ok}}>
-                    <Ic n="img" s={12} c={C.ok}/>
-                    إثبات التسليم
-                  </button>
+                {(s.payslip_html_url||s.payment_proof_url)&&(
+                  <div className="mt-1.5 flex gap-2 flex-wrap">
+                    {s.payslip_html_url&&(
+                      <button onClick={async()=>{
+                        const {data}=await sb.storage.from('salary-proofs').createSignedUrl(s.payslip_html_url,3600);
+                        if(data?.signedUrl) window.open(data.signedUrl,'_blank');
+                      }}
+                        className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg"
+                        style={{background:C.e2+'18',color:C.e2}}>
+                        <Ic n="file" s={12} c={C.e2}/>
+                        كشف الراتب
+                      </button>
+                    )}
+                    {s.payment_proof_url&&(
+                      <button onClick={openProof}
+                        className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg"
+                        style={{background:C.ok+'18',color:C.ok}}>
+                        <Ic n="img" s={12} c={C.ok}/>
+                        إثبات التسليم
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
             );
@@ -2825,6 +2840,7 @@ function PayslipsView({employees,settings}) {
   const [savedSlipId,setSavedSlipId]=useState(null);
   const [proofPath,setProofPath]=useState(null);
   const [proofBusy,setProofBusy]=useState(false);
+  const [slipHtmlPath,setSlipHtmlPath]=useState(null);
 
   // Annual report state
   const [annualYear,setAnnualYear]=useState(iraqNow().getUTCFullYear());
@@ -2873,9 +2889,11 @@ function PayslipsView({employees,settings}) {
               bonus:slip.bonus||'',extra:slip.extra_amount||'',deduction:slip.deduction||'',notes:slip.notes||''});
         setSavedSlipId(slip.id);
         setProofPath(slip.payment_proof_url||null);
+        setSlipHtmlPath(slip.payslip_html_url||null);
       } else {
         setSavedSlipId(null);
         setProofPath(null);
+        setSlipHtmlPath(null);
         const allP=r.filter(x=>empOnlyIds.has(x.employee_id)).reduce((s,x)=>s+pts(x),0);
         const empP=r.filter(x=>x.employee_id===empId).reduce((s,x)=>s+pts(x),0);
         const fs=allP>0?(empP/allP)*pool:0;
@@ -3022,6 +3040,12 @@ function PayslipsView({employees,settings}) {
     if(data?.signedUrl) window.open(data.signedUrl,'_blank');
   };
 
+  const viewSlipHtml = async () => {
+    if(!slipHtmlPath) return;
+    const {data}=await sb.storage.from('salary-proofs').createSignedUrl(slipHtmlPath,3600);
+    if(data?.signedUrl) window.open(data.signedUrl,'_blank');
+  };
+
   const saveAndExportPdf = async () => {
     if(!savedSlipId) await save();
     exportPdf();
@@ -3118,6 +3142,17 @@ function PayslipsView({employees,settings}) {
       document.body.removeChild(a);
     }
     setTimeout(()=>URL.revokeObjectURL(blobUrl),15000);
+
+    // Upload HTML for employee viewing (strip auto-print script)
+    const htmlForStorage=html.replace('<script>setTimeout(function(){window.print();},600)<\/script>','');
+    const htmlBlob=new Blob([htmlForStorage],{type:'text/html;charset=utf-8'});
+    const htmlPath=`${empId}/slip-${monthDate}.html`;
+    sb.storage.from('salary-proofs').upload(htmlPath,htmlBlob,{upsert:true,contentType:'text/html'})
+      .then(()=>{
+        const currentId=savedSlipId;
+        if(currentId) sb.from('payslips').update({payslip_html_url:htmlPath}).eq('id',currentId);
+        setSlipHtmlPath(htmlPath);
+      });
   };
 
   const emp=employees.find(e=>e.id===empId);
@@ -3334,6 +3369,16 @@ function PayslipsView({employees,settings}) {
             </button>
           )}
         </div>
+
+        {/* Saved payslip HTML */}
+        {slipHtmlPath&&(
+          <button onClick={viewSlipHtml}
+            className="w-full flex items-center gap-2 py-2.5 px-3 rounded-xl"
+            style={{background:C.e2+'18',border:`1px solid ${C.e2}44`}}>
+            <Ic n="file" s={15} c={C.e2}/>
+            <span className="text-sm font-bold" style={{color:C.e2}}>عرض كشف الراتب المحفوظ</span>
+          </button>
+        )}
 
         {/* Proof of payment upload */}
         <div className="rounded-2xl overflow-hidden" style={{border:`1.5px dashed ${proofPath?C.ok:C.border}`}}>
