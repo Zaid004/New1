@@ -37,6 +37,7 @@ body{background:var(--bg);margin:0;color:var(--txt)}
 input[type=month]::-webkit-calendar-picker-indicator{opacity:0.5;cursor:pointer}
 select,input,textarea{-webkit-appearance:none}
 @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+@keyframes goldShimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
 .img-shell{background:var(--soft);background-image:linear-gradient(90deg,var(--soft) 25%,var(--border) 50%,var(--soft) 75%);background-size:200% 100%;animation:shimmer 1.2s infinite linear}
 .img-shell.loaded{background-image:none;animation:none}
 </style>
@@ -1056,8 +1057,11 @@ function CalendarView({me,employees,isAdmin,settings}) {
         const TARGET=15_000_000;
         if(monthTotal===null||monthTotal===0) return null;
         const ratio=Math.min(monthTotal/TARGET,1);
+        const exceeded=monthTotal>=TARGET;
+        const GOLD='#C9A84C';
+        const GOLD_LIGHT='#F5D87A';
         const hue=Math.round(ratio*120);
-        const clr=`hsl(${hue},65%,45%)`;
+        const clr=exceeded?GOLD:`hsl(${hue},65%,45%)`;
         const fmtM=v=>v>=1000000?`${(v/1000000).toFixed(2)}م`:`${(v/1000).toFixed(0)}ك`;
 
         // Deadline countdown — only on the last day of the current month
@@ -1100,26 +1104,49 @@ function CalendarView({me,employees,isAdmin,settings}) {
           }
         }
 
+        const goldBg=exceeded?`linear-gradient(135deg,#2a2200 0%,#1a1800 100%)`:undefined;
         return (
-          <div className="mt-4 rounded-2xl p-4 shadow-sm" style={{background:C.card}}>
+          <div className="mt-4 rounded-2xl p-4 shadow-sm"
+            style={{background:exceeded?'transparent':C.card,
+                    backgroundImage:exceeded?goldBg:undefined,
+                    border:exceeded?`1.5px solid ${GOLD}55`:'none',
+                    boxShadow:exceeded?`0 0 18px ${GOLD}22`:undefined}}>
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
-                <Ic n="chart" s={14} c={C.primary}/>
-                <span className="text-xs font-bold uppercase tracking-widest" style={{color:C.primary}}>مبيعات {MONTHS[vm]}</span>
+                <Ic n="chart" s={14} c={exceeded?GOLD:C.primary}/>
+                <span className="text-xs font-bold uppercase tracking-widest"
+                  style={{color:exceeded?GOLD:C.primary}}>
+                  مبيعات {MONTHS[vm]}
+                </span>
               </div>
-              <span className="text-xs" style={{color:C.txt,opacity:.45}}>هدف ١٥م د.ع</span>
+              {exceeded
+                ? <span className="text-xs font-bold" style={{color:GOLD}}>تجاوزنا الهدف</span>
+                : <span className="text-xs" style={{color:C.txt,opacity:.45}}>هدف ١٥م د.ع</span>}
             </div>
             {deadlineEl}
             <div className={`flex items-center justify-between mb-2${deadlineEl?' mt-3':''}`}>
               <span className="text-xl font-bold tabular-nums" style={{color:clr}}>{fmtM(monthTotal)} د.ع</span>
-              <span className="text-sm font-semibold" style={{color:C.txt,opacity:.5}}>من ١٥م</span>
+              <span className="text-sm font-semibold" style={{color:exceeded?GOLD:C.txt,opacity:exceeded?1:.5}}>
+                {exceeded?`+${fmtM(monthTotal-TARGET)}`:'من ١٥م'}
+              </span>
             </div>
             <div>
-              <div className="relative h-3 rounded-full overflow-hidden" style={{background:C.soft}}>
-                <div style={{position:'absolute',inset:'0 auto 0 0',width:`${Math.round(ratio*100)}%`,background:clr,borderRadius:'9999px',transition:'width .5s ease'}}/>
+              <div className="relative h-3 rounded-full overflow-hidden"
+                style={{background:exceeded?GOLD+'33':C.soft}}>
+                <div style={{
+                  position:'absolute',inset:'0 auto 0 0',
+                  width:'100%',
+                  background:exceeded?`linear-gradient(90deg,${GOLD},${GOLD_LIGHT},${GOLD})`:'',
+                  backgroundSize:exceeded?'200% 100%':'',
+                  borderRadius:'9999px',
+                  transition:'width .5s ease',
+                  animation:exceeded?'goldShimmer 2s linear infinite':undefined,
+                }}/>
+                {!exceeded&&<div style={{position:'absolute',inset:'0 auto 0 0',width:`${Math.round(ratio*100)}%`,background:clr,borderRadius:'9999px',transition:'width .5s ease'}}/>}
               </div>
-              <div className="flex justify-end mt-1">
-                <span className="text-xs font-semibold" style={{color:clr}}>{Math.round(ratio*100)}%</span>
+              <div className="flex justify-between mt-1">
+                {exceeded&&<span className="text-xs font-bold" style={{color:GOLD}}>الهدف محقق</span>}
+                <span className="text-xs font-semibold" style={{color:clr,marginRight:'auto'}}>{Math.round(ratio*100)}%</span>
               </div>
             </div>
           </div>
