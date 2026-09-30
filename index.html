@@ -717,6 +717,7 @@ function CalendarView({me,employees,isAdmin,settings}) {
   const [completions,setCompletions]=useState([]);
   const [salesData,setSalesData]=useState({});
   const [monthTotal,setMonthTotal]=useState(null);
+  const [tickNow,setTickNow]=useState(Date.now());
   const [showTaskAdd,setShowTaskAdd]=useState(false);
   const [taskBusy,setTaskBusy]=useState(false);
   const initTaskForm=()=>({title:'',recurrence:'daily',day_of_week:0,day_of_month:1,specific_date:todayStr(),assigned_to:''});
@@ -830,6 +831,8 @@ function CalendarView({me,employees,isAdmin,settings}) {
   useEffect(()=>{
     sb.from('tasks').select('*').order('created_at',{ascending:false}).then(({data})=>setTasks(data||[]));
   },[]);
+  // Tick every second for deadline countdown
+  useEffect(()=>{ const id=setInterval(()=>setTickNow(Date.now()),1000); return()=>clearInterval(id); },[]);
 
   const empOnly=employees.filter(e=>e.role!=='admin');
 
@@ -1056,6 +1059,40 @@ function CalendarView({me,employees,isAdmin,settings}) {
         const hue=Math.round(ratio*120);
         const clr=`hsl(${hue},65%,45%)`;
         const fmtM=v=>v>=1000000?`${(v/1000000).toFixed(2)}م`:`${(v/1000).toFixed(0)}ك`;
+
+        // Deadline countdown — only for current month
+        const nowObj=iraqNow();
+        const isCurrentMonth=vy===nowObj.getUTCFullYear()&&vm===nowObj.getUTCMonth();
+        let deadlineEl=null;
+        if(isCurrentMonth&&ratio<1){
+          const lastDay=new Date(vy,vm+1,0).getDate();
+          const deadline=new Date(`${vy}-${String(vm+1).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}T23:59:59.000+03:00`);
+          const diff=deadline.getTime()-tickNow;
+          if(diff>0){
+            const dd=Math.floor(diff/86400000);
+            const hh=Math.floor((diff%86400000)/3600000);
+            const mm=Math.floor((diff%3600000)/60000);
+            const ss=Math.floor((diff%60000)/1000);
+            const urgent=diff<3*3600000; // less than 3 hours
+            const timeStr=dd>0
+              ? `${dd} يوم ${hh} ساعة ${mm} دقيقة`
+              : hh>0
+                ? `${hh}:${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`
+                : `${mm}:${String(ss).padStart(2,'0')}`;
+            const msg=dd>0?'باقي على نهاية الشهر':hh>0?'باقي على إغلاق الشهر ⚡':'الدقائق الأخيرة 🔥';
+            const urgentClr=diff<3600000?'#ef4444':diff<3*3600000?'#f97316':'#f59e0b';
+            deadlineEl=(
+              <div className="mt-3 flex items-center justify-between px-3 py-2 rounded-xl"
+                style={{background:urgent?urgentClr+'18':C.soft}}>
+                <span className="text-xs font-semibold" style={{color:urgent?urgentClr:C.txt,opacity:urgent?1:.6}}>{msg}</span>
+                <span className="text-sm font-black tabular-nums" style={{color:urgent?urgentClr:C.txt,fontVariantNumeric:'tabular-nums',letterSpacing:.5}}>
+                  {timeStr}
+                </span>
+              </div>
+            );
+          }
+        }
+
         return (
           <div className="mt-4 rounded-2xl p-4 shadow-sm" style={{background:C.card}}>
             <div className="flex items-center justify-between mb-3">
@@ -1075,6 +1112,7 @@ function CalendarView({me,employees,isAdmin,settings}) {
             <div className="flex justify-end mt-1">
               <span className="text-xs font-semibold" style={{color:clr}}>{Math.round(ratio*100)}%</span>
             </div>
+            {deadlineEl}
           </div>
         );
       })()}
