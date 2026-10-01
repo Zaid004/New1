@@ -3017,16 +3017,30 @@ function PayslipsView({employees,settings}) {
 
   const save = async () => {
     setBusy(true);
-    const payload={employee_id:empId,month:monthDate,fixed_amount:parseFloat(f.fixed)||0,
-      percentage_amount:parseFloat(f.pct)||0,sales_amount:parseFloat(f.sales)||0,
-      bonus:parseFloat(f.bonus)||0,extra_amount:parseFloat(f.extra)||0,deduction:parseFloat(f.deduction)||0,notes:f.notes};
-    const {data:ex}=await sb.from('payslips').select('id').eq('employee_id',empId).eq('month',monthDate).maybeSingle();
-    let slipId=savedSlipId;
-    if(ex){ await sb.from('payslips').update(payload).eq('id',ex.id); slipId=ex.id; }
-    else { const {data:ins}=await sb.from('payslips').insert(payload).select('id').single(); slipId=ins?.id; }
-    setSavedSlipId(slipId);
-    setBusy(false); setSaved(true); setTimeout(()=>setSaved(false),2500);
-    return slipId;
+    try {
+      const payload={employee_id:empId,month:monthDate,fixed_amount:parseFloat(f.fixed)||0,
+        percentage_amount:parseFloat(f.pct)||0,sales_amount:parseFloat(f.sales)||0,
+        bonus:parseFloat(f.bonus)||0,extra_amount:parseFloat(f.extra)||0,deduction:parseFloat(f.deduction)||0,notes:f.notes};
+      const {data:ex,error:selErr}=await sb.from('payslips').select('id').eq('employee_id',empId).eq('month',monthDate).maybeSingle();
+      if(selErr) throw selErr;
+      let slipId=savedSlipId;
+      if(ex){
+        const {error:upErr}=await sb.from('payslips').update(payload).eq('id',ex.id);
+        if(upErr) throw upErr;
+        slipId=ex.id;
+      } else {
+        const {data:ins,error:insErr}=await sb.from('payslips').insert(payload).select('id').single();
+        if(insErr) throw insErr;
+        slipId=ins?.id;
+      }
+      setSavedSlipId(slipId);
+      setBusy(false); setSaved(true); setTimeout(()=>setSaved(false),2500);
+      return slipId;
+    } catch(e) {
+      setBusy(false);
+      alert('خطأ في الحفظ: ' + (e?.message||'حاول مرة ثانية'));
+      return null;
+    }
   };
 
   const uploadProof = async (file) => {
@@ -3055,11 +3069,12 @@ function PayslipsView({employees,settings}) {
   };
 
   const saveAndExportPdf = async () => {
-    if(!savedSlipId) await save();
-    exportPdf();
+    const slipId = savedSlipId || await save();
+    exportPdf(slipId);
   };
 
-  const exportPdf = () => {
+  const exportPdf = (overrideSlipId) => {
+    const resolvedSlipId = overrideSlipId ?? savedSlipId;
     const emp=employees.find(e=>e.id===empId);
     const mn=MONTHS[parseInt(m)-1];
     const milestoneAmt = milestoneBonusAdmin;
@@ -3157,8 +3172,7 @@ function PayslipsView({employees,settings}) {
     const htmlPath=`${empId}/slip-${monthDate}.html`;
     sb.storage.from('salary-proofs').upload(htmlPath,htmlBlob,{upsert:true,contentType:'text/html'})
       .then(()=>{
-        const currentId=savedSlipId;
-        if(currentId) sb.from('payslips').update({payslip_html_url:htmlPath}).eq('id',currentId);
+        if(resolvedSlipId) sb.from('payslips').update({payslip_html_url:htmlPath}).eq('id',resolvedSlipId);
         setSlipHtmlPath(htmlPath);
       });
   };
