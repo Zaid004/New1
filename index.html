@@ -231,6 +231,8 @@ const PATHS = {
   x:'M18 6 6 18M6 6l12 12',
   chL:'M15 18l-6-6 6-6',
   chR:'M9 18l6-6-6-6',
+  chD:'M6 9l6 6 6-6',
+  chU:'M18 15l-6-6-6 6',
   check:'M20 6 9 17l-5-5',
   calc:'M4 2h16a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zM8 6h8M8 10h2M12 10h2M16 10h.01M8 14h2M12 14h2M16 14h2M8 18h2M12 18h2M16 18h2',
   clock:'M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zM12 6v6l4 2',
@@ -1796,6 +1798,7 @@ function PayslipArchive({empId}) {
   const [show,setShow]=useState(false);
   const [slips,setSlips]=useState([]);
   const [loading,setLoading]=useState(false);
+  const [openSlipId,setOpenSlipId]=useState(null);
 
   useEffect(()=>{
     if(!show) return;
@@ -1835,59 +1838,94 @@ function PayslipArchive({empId}) {
               if(error){alert('خطأ: '+error.message);return;}
               setSlips(prev=>prev.map(x=>x.id===s.id?{...x,status:'confirmed',confirmed_at:now}:x));
             };
+            const isOpen=openSlipId===s.id;
+            const milestone=calcMilestoneBonus(s.sales_amount||0);
+            const rows=[
+              {label:'المبلغ الثابت',val:s.fixed_amount||0},
+              {label:'حصة النسبة',val:s.percentage_amount||0},
+              {label:'بونص التوصيل',val:s.bonus||0},
+              {label:'بونص المبيعات',val:milestone},
+              {label:'مبلغ إضافي',val:s.extra_amount||0},
+              {label:'خصم',val:-(s.deduction||0),neg:true},
+            ].filter(r=>r.val!==0);
             return (
-              <div key={s.id} className="px-4 py-3 border-b" style={{borderColor:C.border}}>
-                <div className="flex items-center justify-between">
-                  <div className="font-semibold text-sm" style={{color:C.txt}}>
-                    {MONTHS[d.getMonth()]} {d.getFullYear()}
+              <div key={s.id} className="border-b" style={{borderColor:C.border}}>
+                <div className="px-4 py-3 cursor-pointer" onClick={()=>setOpenSlipId(isOpen?null:s.id)}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Ic n={isOpen?'chD':'chR'} s={13} c={C.primary}/>
+                      <div className="font-semibold text-sm" style={{color:C.txt}}>
+                        {MONTHS[d.getMonth()]} {d.getFullYear()}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {s.status==='confirmed'&&(
+                        <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{background:C.ok+'22',color:C.ok}}>تم الاستلام ✓</span>
+                      )}
+                      {s.status==='approved'&&(
+                        <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{background:C.e2+'22',color:C.e2}}>معتمد</span>
+                      )}
+                      <div className="font-black text-sm" style={{color:C.ok}}>{fmt(total(s))} <span className="font-normal text-xs">د.ع</span></div>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {s.status==='confirmed'&&(
-                      <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{background:C.ok+'22',color:C.ok}}>تم الاستلام ✓</span>
-                    )}
-                    {s.status==='approved'&&(
-                      <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{background:C.e2+'22',color:C.e2}}>معتمد</span>
-                    )}
-                    <div className="font-black text-sm" style={{color:C.ok}}>{fmt(total(s))} <span className="font-normal text-xs">د.ع</span></div>
-                  </div>
+                  {s.status==='confirmed'&&s.confirmed_at&&(
+                    <div className="text-xs mt-1 mr-5" style={{color:C.txt,opacity:.5}}>
+                      استُلم في {new Date(s.confirmed_at).toLocaleDateString('ar-IQ',{year:'numeric',month:'short',day:'numeric'})}
+                    </div>
+                  )}
                 </div>
-                {s.status==='confirmed'&&s.confirmed_at&&(
-                  <div className="text-xs mt-1" style={{color:C.txt,opacity:.5}}>
-                    استُلم في {new Date(s.confirmed_at).toLocaleDateString('ar-IQ',{year:'numeric',month:'short',day:'numeric'})}
-                  </div>
-                )}
-                {(s.payslip_html_url||s.payment_proof_url||s.status==='approved')&&(
-                  <div className="mt-1.5 flex gap-2 flex-wrap items-center">
-                    {s.payslip_html_url&&(
-                      <button onClick={async()=>{
-                        const {data}=await sb.storage.from('salary-proofs').createSignedUrl(s.payslip_html_url,3600);
-                        if(!data?.signedUrl) return;
-                        const res=await fetch(data.signedUrl);
-                        const html=await res.text();
-                        const blob=new Blob([html],{type:'text/html;charset=utf-8'});
-                        window.open(URL.createObjectURL(blob),'_blank');
-                      }}
-                        className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg"
-                        style={{background:C.e2+'18',color:C.e2}}>
-                        <Ic n="file" s={12} c={C.e2}/>
-                        كشف الراتب
-                      </button>
-                    )}
-                    {s.payment_proof_url&&(
-                      <button onClick={openProof}
-                        className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg"
-                        style={{background:C.ok+'18',color:C.ok}}>
-                        <Ic n="img" s={12} c={C.ok}/>
-                        إثبات التسليم
-                      </button>
-                    )}
-                    {s.status==='approved'&&(
-                      <button onClick={confirmReceipt}
-                        className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg"
-                        style={{background:C.primary,color:'#fff'}}>
-                        <Ic n="check" s={12} c="#fff"/>
-                        استلمت راتبي
-                      </button>
+                {isOpen&&(
+                  <div className="px-4 pb-3">
+                    <div className="rounded-xl p-3 mb-2" style={{background:C.bg}}>
+                      {rows.map((r,i)=>(
+                        <div key={i} className="flex items-center justify-between py-1.5 text-sm" style={{borderBottom:i<rows.length-1?`1px solid ${C.border}`:'none'}}>
+                          <span style={{color:C.txt,opacity:.7}}>{r.label}</span>
+                          <span className="font-semibold" style={{color:r.neg?C.err:C.txt}}>{r.neg?'-':''}{fmt(Math.abs(r.val))} د.ع</span>
+                        </div>
+                      ))}
+                      <div className="flex items-center justify-between pt-2 mt-1" style={{borderTop:`2px solid ${C.border}`}}>
+                        <span className="font-bold text-sm" style={{color:C.txt}}>الإجمالي</span>
+                        <span className="font-black text-sm" style={{color:C.ok}}>{fmt(total(s))} د.ع</span>
+                      </div>
+                      {s.notes&&(
+                        <div className="mt-2 text-xs p-2 rounded-lg" style={{background:C.card,color:C.txt,opacity:.7,direction:'rtl'}}>{s.notes}</div>
+                      )}
+                    </div>
+                    {(s.payslip_html_url||s.payment_proof_url||s.status==='approved')&&(
+                      <div className="flex gap-2 flex-wrap items-center">
+                        {s.payslip_html_url&&(
+                          <button onClick={async(e)=>{
+                            e.stopPropagation();
+                            const {data}=await sb.storage.from('salary-proofs').createSignedUrl(s.payslip_html_url,3600);
+                            if(!data?.signedUrl) return;
+                            const res=await fetch(data.signedUrl);
+                            const html=await res.text();
+                            const blob=new Blob([html],{type:'text/html;charset=utf-8'});
+                            window.open(URL.createObjectURL(blob),'_blank');
+                          }}
+                            className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg"
+                            style={{background:C.e2+'18',color:C.e2}}>
+                            <Ic n="file" s={12} c={C.e2}/>
+                            كشف الراتب
+                          </button>
+                        )}
+                        {s.payment_proof_url&&(
+                          <button onClick={e=>{e.stopPropagation();openProof();}}
+                            className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg"
+                            style={{background:C.ok+'18',color:C.ok}}>
+                            <Ic n="img" s={12} c={C.ok}/>
+                            إثبات التسليم
+                          </button>
+                        )}
+                        {s.status==='approved'&&(
+                          <button onClick={e=>{e.stopPropagation();confirmReceipt();}}
+                            className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg"
+                            style={{background:C.primary,color:'#fff'}}>
+                            <Ic n="check" s={12} c="#fff"/>
+                            استلمت راتبي
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
                 )}
