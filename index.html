@@ -3100,6 +3100,7 @@ function PayslipsView({employees,settings}) {
     const {error}=await sb.from('payslips').update({status:'approved',approved_at:new Date().toISOString()}).eq('id',savedSlipId);
     if(error){alert('خطأ: '+error.message);return;}
     setSlipStatus('approved');
+    exportPdf(savedSlipId, true);
   };
 
   const unlockSlip = async () => {
@@ -3176,7 +3177,7 @@ function PayslipsView({employees,settings}) {
     exportPdf(slipId);
   };
 
-  const exportPdf = (overrideSlipId) => {
+  const exportPdf = (overrideSlipId, uploadOnly=false) => {
     const resolvedSlipId = overrideSlipId ?? savedSlipId;
     const emp=employees.find(e=>e.id===empId);
     const mn=MONTHS[parseInt(m)-1];
@@ -3259,6 +3260,18 @@ function PayslipsView({employees,settings}) {
       </div>
       <script>setTimeout(function(){window.print();},600)<\/script>
     </body></html>`;
+    // Upload HTML for employee viewing (strip auto-print script)
+    const htmlForStorage=html.replace('<script>setTimeout(function(){window.print();},600)<\/script>','');
+    const htmlBlob=new Blob([htmlForStorage],{type:'text/html;charset=utf-8'});
+    const htmlPath=`${empId}/slip-${monthDate}.html`;
+    sb.storage.from('salary-proofs').upload(htmlPath,htmlBlob,{upsert:true,contentType:'text/html'})
+      .then(({error:upErr})=>{
+        if(upErr){console.error('slip upload error',upErr);return;}
+        if(resolvedSlipId) sb.from('payslips').update({payslip_html_url:htmlPath}).eq('id',resolvedSlipId);
+        setSlipHtmlPath(htmlPath);
+      });
+
+    if(uploadOnly) return;
     const blob=new Blob([html],{type:'text/html;charset=utf-8'});
     const blobUrl=URL.createObjectURL(blob);
     const w=window.open(blobUrl,'_blank');
@@ -3271,16 +3284,6 @@ function PayslipsView({employees,settings}) {
       document.body.removeChild(a);
     }
     setTimeout(()=>URL.revokeObjectURL(blobUrl),15000);
-
-    // Upload HTML for employee viewing (strip auto-print script)
-    const htmlForStorage=html.replace('<script>setTimeout(function(){window.print();},600)<\/script>','');
-    const htmlBlob=new Blob([htmlForStorage],{type:'text/html;charset=utf-8'});
-    const htmlPath=`${empId}/slip-${monthDate}.html`;
-    sb.storage.from('salary-proofs').upload(htmlPath,htmlBlob,{upsert:true,contentType:'text/html'})
-      .then(()=>{
-        if(resolvedSlipId) sb.from('payslips').update({payslip_html_url:htmlPath}).eq('id',resolvedSlipId);
-        setSlipHtmlPath(htmlPath);
-      });
   };
 
   const emp=employees.find(e=>e.id===empId);
