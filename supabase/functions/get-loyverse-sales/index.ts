@@ -467,6 +467,8 @@ Deno.serve(async (req) => {
   // discount, whether stored as an explicit discount or a price override).
   let salesTotal  = 0;
   let refundTotal = 0;
+  let salesCount  = 0;
+  let refundCount = 0;
   let cursor: string | null = null;
 
   try {
@@ -496,13 +498,13 @@ Deno.serve(async (req) => {
       };
 
       for (const r of data.receipts ?? []) {
-        if (r.receipt_type === 'SALE')        salesTotal  += r.total_money ?? 0;
-        else if (r.receipt_type === 'REFUND') refundTotal += Math.abs(r.total_money ?? 0);
+        if (r.receipt_type === 'SALE')        { salesTotal  += r.total_money ?? 0; salesCount++; }
+        else if (r.receipt_type === 'REFUND') { refundTotal += Math.abs(r.total_money ?? 0); refundCount++; }
       }
       cursor = data.cursor ?? null;
     } while (cursor);
 
-    return json({ total: Math.round(salesTotal - refundTotal) });
+    return json({ total: Math.round(salesTotal - refundTotal), orders: Math.max(0, salesCount - refundCount) });
   } catch (e) {
     return json({ error: (e as Error).message }, 500);
   }
