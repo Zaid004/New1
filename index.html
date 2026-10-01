@@ -1828,16 +1828,36 @@ function PayslipArchive({empId}) {
               const {data}=await sb.storage.from('salary-proofs').createSignedUrl(s.payment_proof_url,3600);
               if(data?.signedUrl) window.open(data.signedUrl,'_blank');
             };
+            const confirmReceipt=async()=>{
+              if(!window.confirm('تأكيد استلام راتب '+MONTHS[d.getMonth()]+' '+d.getFullYear()+'؟')) return;
+              const now=new Date().toISOString();
+              const {error}=await sb.from('payslips').update({status:'confirmed',confirmed_at:now}).eq('id',s.id);
+              if(error){alert('خطأ: '+error.message);return;}
+              setSlips(prev=>prev.map(x=>x.id===s.id?{...x,status:'confirmed',confirmed_at:now}:x));
+            };
             return (
               <div key={s.id} className="px-4 py-3 border-b" style={{borderColor:C.border}}>
                 <div className="flex items-center justify-between">
                   <div className="font-semibold text-sm" style={{color:C.txt}}>
                     {MONTHS[d.getMonth()]} {d.getFullYear()}
                   </div>
-                  <div className="font-black text-sm" style={{color:C.ok}}>{fmt(total(s))} <span className="font-normal text-xs">د.ع</span></div>
+                  <div className="flex items-center gap-2">
+                    {s.status==='confirmed'&&(
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{background:C.ok+'22',color:C.ok}}>تم الاستلام ✓</span>
+                    )}
+                    {s.status==='approved'&&(
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{background:C.e2+'22',color:C.e2}}>معتمد 🔒</span>
+                    )}
+                    <div className="font-black text-sm" style={{color:C.ok}}>{fmt(total(s))} <span className="font-normal text-xs">د.ع</span></div>
+                  </div>
                 </div>
-                {(s.payslip_html_url||s.payment_proof_url)&&(
-                  <div className="mt-1.5 flex gap-2 flex-wrap">
+                {s.status==='confirmed'&&s.confirmed_at&&(
+                  <div className="text-xs mt-1" style={{color:C.txt,opacity:.5}}>
+                    استُلم في {new Date(s.confirmed_at).toLocaleDateString('ar-IQ',{year:'numeric',month:'short',day:'numeric'})}
+                  </div>
+                )}
+                {(s.payslip_html_url||s.payment_proof_url||s.status==='approved')&&(
+                  <div className="mt-1.5 flex gap-2 flex-wrap items-center">
                     {s.payslip_html_url&&(
                       <button onClick={async()=>{
                         const {data}=await sb.storage.from('salary-proofs').createSignedUrl(s.payslip_html_url,3600);
@@ -1855,6 +1875,14 @@ function PayslipArchive({empId}) {
                         style={{background:C.ok+'18',color:C.ok}}>
                         <Ic n="img" s={12} c={C.ok}/>
                         إثبات التسليم
+                      </button>
+                    )}
+                    {s.status==='approved'&&(
+                      <button onClick={confirmReceipt}
+                        className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg"
+                        style={{background:C.primary,color:'#fff'}}>
+                        <Ic n="check" s={12} c="#fff"/>
+                        استلمت راتبي
                       </button>
                     )}
                   </div>
@@ -2838,6 +2866,7 @@ function PayslipsView({employees,settings}) {
   const [delMsg,setDelMsg]=useState('');
   const [delPicker,setDelPicker]=useState(null);
   const [savedSlipId,setSavedSlipId]=useState(null);
+  const [slipStatus,setSlipStatus]=useState('draft'); // draft | approved | confirmed
   const [proofPath,setProofPath]=useState(null);
   const [proofBusy,setProofBusy]=useState(false);
   const [slipHtmlPath,setSlipHtmlPath]=useState(null);
@@ -2896,10 +2925,12 @@ function PayslipsView({employees,settings}) {
         setF({fixed:slip.fixed_amount||'',pct:slip.percentage_amount||'',sales:slip.sales_amount||'',
               bonus:slip.bonus||'',extra:slip.extra_amount||'',deduction:slip.deduction||'',notes:slip.notes||''});
         setSavedSlipId(slip.id);
+        setSlipStatus(slip.status||'draft');
         setProofPath(slip.payment_proof_url||null);
         setSlipHtmlPath(slip.payslip_html_url||null);
       } else {
         setSavedSlipId(null);
+        setSlipStatus('draft');
         setProofPath(null);
         setSlipHtmlPath(null);
         const allP=r.filter(x=>empOnlyIds.has(x.employee_id)).reduce((s,x)=>s+pts(x),0);
@@ -3015,7 +3046,24 @@ function PayslipsView({employees,settings}) {
     autoFetchDelivery(employees.find(e=>e.id===empId));
   },[empId,month,view]);
 
+  const locked = slipStatus==='approved'||slipStatus==='confirmed';
+
+  const approveSlip = async () => {
+    if(!savedSlipId) { alert('احفظ الكشف أولاً'); return; }
+    if(!window.confirm('اعتماد الراتب وقفله؟ لن يُعدَّل إلا بفك القفل.')) return;
+    const {error}=await sb.from('payslips').update({status:'approved',approved_at:new Date().toISOString()}).eq('id',savedSlipId);
+    if(error){alert('خطأ: '+error.message);return;}
+    setSlipStatus('approved');
+  };
+
+  const unlockSlip = async () => {
+    if(!window.confirm('فك قفل الكشف والسماح بالتعديل؟')) return;
+    await sb.from('payslips').update({status:'draft',approved_at:null}).eq('id',savedSlipId);
+    setSlipStatus('draft');
+  };
+
   const save = async () => {
+    if(locked) return null;
     setBusy(true);
     try {
       const payload={employee_id:empId,month:monthDate,fixed_amount:parseFloat(f.fixed)||0,
@@ -3309,31 +3357,45 @@ function PayslipsView({employees,settings}) {
       </div>
 
       <div className="rounded-2xl p-5 shadow-sm space-y-3" style={{background:C.card}}>
-        <h3 className="font-bold" style={{color:C.txt}}>بيانات الكشف</h3>
+        <div className="flex items-center justify-between">
+          <h3 className="font-bold" style={{color:C.txt}}>بيانات الكشف</h3>
+          {savedSlipId&&(
+            <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{
+              background:slipStatus==='confirmed'?C.ok+'22':slipStatus==='approved'?C.e2+'22':'#f59e0b22',
+              color:slipStatus==='confirmed'?C.ok:slipStatus==='approved'?C.e2:'#f59e0b'
+            }}>
+              {slipStatus==='confirmed'?'تم الاستلام ✓':slipStatus==='approved'?'معتمد 🔒':'مسودة'}
+            </span>
+          )}
+        </div>
         <div className="grid grid-cols-2 gap-3">
           {fields.map(([label,key])=>(
             <div key={key}>
               <label className="text-xs font-semibold block mb-1" style={{color:key==='deduction'?'#ef4444':C.txt,opacity:key==='deduction'?1:.7}}>{label}</label>
               {key==='sales' ? (
                 <div>
-                  <input type="text" inputMode="numeric" value={fmtNum(f[key])} onChange={e=>setF(p=>({...p,[key]:parseNum(e.target.value)}))}
+                  <input type="text" inputMode="numeric" value={fmtNum(f[key])} onChange={e=>!locked&&setF(p=>({...p,[key]:parseNum(e.target.value)}))}
+                    disabled={locked}
                     className="w-full p-2.5 rounded-xl border text-sm outline-none"
-                    style={{borderColor:C.border,background:'var(--input-bg)'}} placeholder={loyBusy?'جاري الجلب...':'0'}/>
+                    style={{borderColor:C.border,background:locked?C.soft:'var(--input-bg)',opacity:locked?.7:1}} placeholder={loyBusy?'جاري الجلب...':'0'}/>
                 </div>
               ) : key==='bonus' ? (
                 <div>
-                  <input type="text" inputMode="numeric" value={fmtNum(f[key])} onChange={e=>setF(p=>({...p,[key]:parseNum(e.target.value)}))}
+                  <input type="text" inputMode="numeric" value={fmtNum(f[key])} onChange={e=>!locked&&setF(p=>({...p,[key]:parseNum(e.target.value)}))}
+                    disabled={locked}
                     className="w-full p-2.5 rounded-xl border text-sm outline-none"
-                    style={{borderColor:C.border,background:'var(--input-bg)'}} placeholder={delBusy?'جاري الجلب...':'0'}/>
+                    style={{borderColor:C.border,background:locked?C.soft:'var(--input-bg)',opacity:locked?.7:1}} placeholder={delBusy?'جاري الجلب...':'0'}/>
                 </div>
               ) : key==='deduction' ? (
-                <input type="text" inputMode="numeric" value={fmtNum(f[key])} onChange={e=>setF(p=>({...p,[key]:parseNum(e.target.value)}))}
+                <input type="text" inputMode="numeric" value={fmtNum(f[key])} onChange={e=>!locked&&setF(p=>({...p,[key]:parseNum(e.target.value)}))}
+                  disabled={locked}
                   className="w-full p-2.5 rounded-xl border text-sm outline-none font-bold"
-                  style={{borderColor:'#ef444466',background:'#ef444408',color:'#ef4444'}} placeholder="0"/>
+                  style={{borderColor:'#ef444466',background:locked?C.soft:'#ef444408',color:'#ef4444',opacity:locked?.7:1}} placeholder="0"/>
               ) : (
-                <input type="text" inputMode="numeric" value={fmtNum(f[key])} onChange={e=>setF(p=>({...p,[key]:parseNum(e.target.value)}))}
+                <input type="text" inputMode="numeric" value={fmtNum(f[key])} onChange={e=>!locked&&setF(p=>({...p,[key]:parseNum(e.target.value)}))}
+                  disabled={locked}
                   className="w-full p-2.5 rounded-xl border text-sm outline-none"
-                  style={{borderColor:C.border,background:'var(--input-bg)'}} placeholder="0"/>
+                  style={{borderColor:C.border,background:locked?C.soft:'var(--input-bg)',opacity:locked?.7:1}} placeholder="0"/>
               )}
             </div>
           ))}
@@ -3403,31 +3465,57 @@ function PayslipsView({employees,settings}) {
           <div className="text-xs" style={{color:C.txt,opacity:.5}}>الإجمالي</div>
           <div className="text-2xl font-black" style={{color:C.primary}}>{fmt(total)} <span className="text-base">د.ع</span></div>
         </div>
-        <div className="flex gap-2">
-          <button onClick={save} disabled={busy}
-            className="flex-1 py-3 rounded-xl font-bold text-white text-sm"
-            style={{background:saved?C.ok:busy?'#999':C.primary}}>
-            {saved?'تم الحفظ':busy?'جاري...':'حفظ'}
-          </button>
-          <button onClick={saveAndExportPdf}
-            className="flex-1 py-3 rounded-xl font-bold text-white text-sm flex items-center justify-center gap-2"
-            style={{background:C.e2}}>
-            <Ic n="dl" s={16} c="#fff"/>
-            تصدير PDF
-          </button>
-          {savedSlipId&&(
-            <button onClick={async()=>{
-              if(!window.confirm('حذف كشف الراتب هذا نهائياً؟')) return;
-              await sb.from('payslips').delete().eq('id',savedSlipId);
-              setSavedSlipId(null); setProofPath(null);
-              setF({fixed:'',pct:'',sales:'',bonus:'',extra:'',deduction:'',notes:''});
-            }}
-              className="p-3 rounded-xl flex items-center justify-center"
-              style={{background:'#ef444422',color:'#ef4444'}}>
-              <Ic n="trash" s={18} c="#ef4444"/>
+        {!locked ? (
+          <div className="flex gap-2">
+            <button onClick={save} disabled={busy}
+              className="flex-1 py-3 rounded-xl font-bold text-white text-sm"
+              style={{background:saved?C.ok:busy?'#999':C.primary}}>
+              {saved?'تم الحفظ':busy?'جاري...':'حفظ'}
             </button>
-          )}
-        </div>
+            <button onClick={saveAndExportPdf}
+              className="flex-1 py-3 rounded-xl font-bold text-white text-sm flex items-center justify-center gap-2"
+              style={{background:C.e2}}>
+              <Ic n="dl" s={16} c="#fff"/>
+              تصدير PDF
+            </button>
+            {savedSlipId&&(
+              <button onClick={async()=>{
+                if(!window.confirm('حذف كشف الراتب هذا نهائياً؟')) return;
+                await sb.from('payslips').delete().eq('id',savedSlipId);
+                setSavedSlipId(null); setProofPath(null); setSlipStatus('draft');
+                setF({fixed:'',pct:'',sales:'',bonus:'',extra:'',deduction:'',notes:''});
+              }}
+                className="p-3 rounded-xl flex items-center justify-center"
+                style={{background:'#ef444422',color:'#ef4444'}}>
+                <Ic n="trash" s={18} c="#ef4444"/>
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="flex gap-2">
+            <button onClick={saveAndExportPdf}
+              className="flex-1 py-3 rounded-xl font-bold text-white text-sm flex items-center justify-center gap-2"
+              style={{background:C.e2}}>
+              <Ic n="dl" s={16} c="#fff"/>
+              تصدير PDF
+            </button>
+            {slipStatus==='approved'&&(
+              <button onClick={unlockSlip}
+                className="flex-1 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2"
+                style={{background:'#f59e0b22',color:'#f59e0b'}}>
+                فك القفل
+              </button>
+            )}
+          </div>
+        )}
+        {!locked&&savedSlipId&&(
+          <button onClick={approveSlip}
+            className="w-full py-3 rounded-xl font-bold text-white text-sm flex items-center justify-center gap-2"
+            style={{background:C.ok}}>
+            <Ic n="check" s={16} c="#fff"/>
+            اعتماد الراتب وقفله
+          </button>
+        )}
 
         {/* Saved payslip HTML */}
         {slipHtmlPath&&(
