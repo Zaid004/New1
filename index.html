@@ -1799,6 +1799,8 @@ function PayslipArchive({empId}) {
   const [slips,setSlips]=useState([]);
   const [loading,setLoading]=useState(false);
   const [openSlipId,setOpenSlipId]=useState(null);
+  const [proofModal,setProofModal]=useState(null);   // signed URL of proof image
+  const [slipModal,setSlipModal]=useState(null);     // HTML string of payslip
 
   useEffect(()=>{
     if(!show) return;
@@ -1829,7 +1831,7 @@ function PayslipArchive({empId}) {
             const d=new Date(s.month+'T00:00:00');
             const openProof=async()=>{
               const {data}=await sb.storage.from('salary-proofs').createSignedUrl(s.payment_proof_url,3600);
-              if(data?.signedUrl) window.open(data.signedUrl,'_blank');
+              if(data?.signedUrl) setProofModal(data.signedUrl);
             };
             const confirmReceipt=async()=>{
               if(!window.confirm('تأكيد استلام راتب '+MONTHS[d.getMonth()]+' '+d.getFullYear()+'؟')) return;
@@ -1900,8 +1902,7 @@ function PayslipArchive({empId}) {
                             if(!data?.signedUrl) return;
                             const res=await fetch(data.signedUrl);
                             const html=await res.text();
-                            const blob=new Blob([html],{type:'text/html;charset=utf-8'});
-                            window.open(URL.createObjectURL(blob),'_blank');
+                            setSlipModal(html);
                           }}
                             className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg"
                             style={{background:C.e2+'18',color:C.e2}}>
@@ -1932,6 +1933,32 @@ function PayslipArchive({empId}) {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Proof image modal */}
+      {proofModal&&(
+        <div className="fixed inset-0 z-50 flex flex-col" style={{background:'rgba(0,0,0,0.92)'}}>
+          <div className="flex items-center justify-between px-4 py-3" style={{background:'rgba(0,0,0,0.6)'}}>
+            <span className="text-white font-bold text-sm">إثبات التسليم</span>
+            <button onClick={()=>setProofModal(null)} className="text-white p-1"><Ic n="x" s={20} c="#fff"/></button>
+          </div>
+          <div className="flex-1 overflow-auto flex items-center justify-center p-2">
+            <img src={proofModal} alt="إثبات التسليم" style={{maxWidth:'100%',maxHeight:'100%',borderRadius:8,objectFit:'contain'}}/>
+          </div>
+        </div>
+      )}
+
+      {/* Payslip HTML modal */}
+      {slipModal&&(
+        <div className="fixed inset-0 z-50 flex flex-col" style={{background:'#fff'}}>
+          <div className="flex items-center justify-between px-4 py-3 flex-shrink-0" style={{background:C.primary}}>
+            <span className="text-white font-bold text-sm">كشف الراتب</span>
+            <button onClick={()=>setSlipModal(null)} className="text-white p-1"><Ic n="x" s={20} c="#fff"/></button>
+          </div>
+          <div className="flex-1 overflow-auto">
+            <iframe srcDoc={slipModal} style={{width:'100%',height:'100%',border:'none'}} title="كشف الراتب"/>
+          </div>
         </div>
       )}
     </div>
