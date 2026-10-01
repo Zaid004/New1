@@ -1861,7 +1861,11 @@ function PayslipArchive({empId}) {
                     {s.payslip_html_url&&(
                       <button onClick={async()=>{
                         const {data}=await sb.storage.from('salary-proofs').createSignedUrl(s.payslip_html_url,3600);
-                        if(data?.signedUrl) window.open(data.signedUrl,'_blank');
+                        if(!data?.signedUrl) return;
+                        const res=await fetch(data.signedUrl);
+                        const html=await res.text();
+                        const blob=new Blob([html],{type:'text/html;charset=utf-8'});
+                        window.open(URL.createObjectURL(blob),'_blank');
                       }}
                         className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg"
                         style={{background:C.e2+'18',color:C.e2}}>
@@ -3110,10 +3114,19 @@ function PayslipsView({employees,settings}) {
     if(data?.signedUrl) window.open(data.signedUrl,'_blank');
   };
 
+  const openHtmlSlip = async (path) => {
+    const {data}=await sb.storage.from('salary-proofs').createSignedUrl(path,3600);
+    if(!data?.signedUrl) return;
+    const res=await fetch(data.signedUrl);
+    const html=await res.text();
+    const blob=new Blob([html],{type:'text/html;charset=utf-8'});
+    const url=URL.createObjectURL(blob);
+    window.open(url,'_blank');
+  };
+
   const viewSlipHtml = async () => {
     if(!slipHtmlPath) return;
-    const {data}=await sb.storage.from('salary-proofs').createSignedUrl(slipHtmlPath,3600);
-    if(data?.signedUrl) window.open(data.signedUrl,'_blank');
+    openHtmlSlip(slipHtmlPath);
   };
 
   const saveAndExportPdf = async () => {
@@ -3294,7 +3307,11 @@ function PayslipsView({employees,settings}) {
               {annualData.map((row,i)=>{
                 const openSlipHtml=async()=>{
                   const {data}=await sb.storage.from('salary-proofs').createSignedUrl(row.slip.payslip_html_url,3600);
-                  if(data?.signedUrl) window.open(data.signedUrl,'_blank');
+                  if(!data?.signedUrl) return;
+                  const res=await fetch(data.signedUrl);
+                  const html=await res.text();
+                  const blob=new Blob([html],{type:'text/html;charset=utf-8'});
+                  window.open(URL.createObjectURL(blob),'_blank');
                 };
                 const openProof=async()=>{
                   const {data}=await sb.storage.from('salary-proofs').createSignedUrl(row.slip.payment_proof_url,3600);
