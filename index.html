@@ -1846,7 +1846,7 @@ function PayslipArchive({empId}) {
                       <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{background:C.ok+'22',color:C.ok}}>تم الاستلام ✓</span>
                     )}
                     {s.status==='approved'&&(
-                      <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{background:C.e2+'22',color:C.e2}}>معتمد 🔒</span>
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{background:C.e2+'22',color:C.e2}}>معتمد</span>
                     )}
                     <div className="font-black text-sm" style={{color:C.ok}}>{fmt(total(s))} <span className="font-normal text-xs">د.ع</span></div>
                   </div>
@@ -3364,7 +3364,7 @@ function PayslipsView({employees,settings}) {
               background:slipStatus==='confirmed'?C.ok+'22':slipStatus==='approved'?C.e2+'22':'#f59e0b22',
               color:slipStatus==='confirmed'?C.ok:slipStatus==='approved'?C.e2:'#f59e0b'
             }}>
-              {slipStatus==='confirmed'?'تم الاستلام ✓':slipStatus==='approved'?'معتمد 🔒':'مسودة'}
+              {slipStatus==='confirmed'?'تم الاستلام ✓':slipStatus==='approved'?'معتمد':'مسودة'}
             </span>
           )}
         </div>
