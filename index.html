@@ -172,54 +172,31 @@ const calcMilestoneBonus = sales =>
   SALES_MILESTONES.reduce((sum,m) => sales >= m.target ? sum + m.bonus : sum, 0);
 
 const MilestonesBar = ({sales}) => {
-  const maxT = SALES_MILESTONES[SALES_MILESTONES.length-1].target;
-  const pct  = Math.min(sales / maxT * 100, 100);
-  const hitIdx = SALES_MILESTONES.reduce((a,m,i) => sales >= m.target ? i : a, -1);
-  // Color zones: red → orange → amber → light green → green → deep green
-  const barCol = hitIdx===2 ? C.ok :
-                 hitIdx===1 ? '#5C9E50' :
-                 hitIdx===0 ? '#86B86A' :
-                 sales >= SALES_MILESTONES[0].target * 0.8 ? '#C8A030' :
-                 sales >= SALES_MILESTONES[0].target * 0.5 ? C.e2 : C.err;
   const bonus = calcMilestoneBonus(sales);
   return (
-    <div className="space-y-1">
-      {/* Bar */}
-      <div className="relative rounded-xl" style={{height:28,background:C.soft,overflow:'hidden'}}>
-        {sales>0&&(
-          <div style={{position:'absolute',left:0,top:0,bottom:0,
-            width:`${pct}%`,background:barCol,
-            transition:'width 0.6s ease, background 0.4s ease',
-            minWidth:6,borderRadius:10}}/>
-        )}
-        {/* Milestone tick marks */}
-        {SALES_MILESTONES.map((m,i)=>(
-          <div key={i} style={{position:'absolute',left:`${m.target/maxT*100}%`,
-            top:0,bottom:0,width:2,
-            background:sales>=m.target?'rgba(255,255,255,0.7)':'rgba(255,255,255,0.3)',
-            transform:'translateX(-50%)',zIndex:2}}/>
-        ))}
-        {/* Current % label inside bar */}
-        {sales>0&&pct>8&&(
-          <div style={{position:'absolute',left:`calc(${pct}% - 6px)`,top:0,bottom:0,
-            display:'flex',alignItems:'center',paddingRight:8,zIndex:3,transform:'translateX(-100%)'}}>
-            <span style={{fontSize:10,fontWeight:900,color:'rgba(255,255,255,0.9)',whiteSpace:'nowrap'}}>
-              {Math.round(pct)}%
-            </span>
-          </div>
-        )}
-      </div>
-      {/* Milestone labels */}
-      <div className="relative" style={{height:18}}>
-        <span style={{position:'absolute',left:0,fontSize:9,color:C.txt,opacity:.35,fontWeight:600}}>٠</span>
+    <div className="space-y-2">
+      <div className="grid grid-cols-3 gap-2">
         {SALES_MILESTONES.map((m,i)=>{
-          const pos=m.target/maxT*100;
-          const achieved=sales>=m.target;
+          const prog=Math.min(sales/m.target,1);
+          const hit=prog>=1;
+          const R=18, circ=2*Math.PI*R, offset=circ*(1-prog);
+          const col=hit?C.ok:C.primary;
           return (
-            <div key={i} style={{position:'absolute',left:`${pos}%`,transform:'translateX(-50%)',
-              fontSize:9,fontWeight:700,color:achieved?barCol:C.txt,
-              opacity:achieved?1:.4,whiteSpace:'nowrap',textAlign:'center'}}>
-              {m.label}{achieved?' ✓':''}
+            <div key={i} className="rounded-xl p-2.5 text-center"
+              style={{background:hit?C.ok+'22':C.soft,border:`1.5px solid ${hit?C.ok:C.border}`}}>
+              <div className="flex justify-center mb-1" style={{position:'relative',width:44,height:44,margin:'0 auto'}}>
+                <svg width={44} height={44} style={{transform:'rotate(-90deg)'}}>
+                  <circle cx={22} cy={22} r={R} fill="none" stroke={hit?C.ok+'44':C.border} strokeWidth={3.5}/>
+                  <circle cx={22} cy={22} r={R} fill="none" stroke={col} strokeWidth={3.5}
+                    strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round"
+                    style={{transition:'stroke-dashoffset .4s ease'}}/>
+                </svg>
+                <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                  <span style={{fontSize:hit?15:9,fontWeight:900,color:col}}>{hit?'✓':Math.round(prog*100)+'%'}</span>
+                </div>
+              </div>
+              <div className="text-xs font-bold leading-tight" style={{color:hit?C.ok:C.txt}}>{m.label}</div>
+              <div className="text-xs" style={{color:hit?C.ok:C.txt,opacity:hit?1:.5}}>+{fmt(m.bonus)}</div>
             </div>
           );
         })}
