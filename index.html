@@ -1239,6 +1239,36 @@ function CalendarView({me,employees,isAdmin,settings}) {
                 </div>
               </div>
             </div>
+            {/* Pace indicator — current month only, before hitting target */}
+            {isCurrentMonth&&!exceeded&&(()=>{
+              const totalDays=new Date(vy,vm+1,0).getDate();
+              const daysElapsed=Math.max(1,nowObj.getUTCDate());
+              const expectedByNow=TARGET*(daysElapsed/totalDays);
+              const paceRatio=expectedByNow>0?monthTotal/expectedByNow:0;
+              const projection=Math.round((monthTotal/daysElapsed)*totalDays);
+              const paceClr=paceRatio>=1.1?C.ok:
+                            paceRatio>=0.9?'#5C9E50':
+                            paceRatio>=0.7?'#C8A030':C.err;
+              const paceLabel=paceRatio>=1.1?'متقدمون على الهدف':
+                              paceRatio>=0.9?'على المسار':
+                              paceRatio>=0.7?'متأخرون قليلاً':'متأخرون عن الهدف';
+              const gap=projection-TARGET;
+              const gapTxt=gap>=0
+                ?`متوقع تجاوز الهدف بـ +${fmtM(gap)} بنهاية الشهر`
+                :`التوقع بنهاية الشهر ${fmtM(projection)} — نقص ${fmtM(TARGET-projection)}`;
+              return (
+                <div className="mt-3 rounded-xl px-3 py-2.5"
+                  style={{background:paceClr+'18',border:`1px solid ${paceClr}33`}}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold" style={{color:paceClr}}>{paceLabel}</span>
+                    <span className="text-xs font-black tabular-nums" style={{color:paceClr,direction:'ltr'}}>
+                      {Math.round(paceRatio*100)}%
+                    </span>
+                  </div>
+                  <div className="mt-1 text-xs" style={{color:C.txt,opacity:.5,lineHeight:1.5}}>{gapTxt}</div>
+                </div>
+              );
+            })()}
           </div>
         );
       })()}
