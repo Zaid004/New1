@@ -1100,13 +1100,20 @@ function CalendarView({me,employees,isAdmin,settings}) {
         const exceeded=monthTotal>=TARGET;
         const GOLD='#C9A84C';
         const GOLD_LIGHT='#F5D87A';
-        const hue=Math.round(ratio*120);
-        const clr=exceeded?GOLD:`hsl(${hue},65%,45%)`;
         const fmtM=v=>v>=1000000?`${(v/1000000).toFixed(2)}م`:`${(v/1000).toFixed(0)}ك`;
 
         // Deadline countdown — only on the last day of the current month
         const nowObj=iraqNow();
         const isCurrentMonth=vy===nowObj.getUTCFullYear()&&vm===nowObj.getUTCMonth();
+        // Projection index: precise elapsed fraction (hours included, not just whole days)
+        const monthStart=new Date(vy,vm,1).getTime();
+        const monthEnd=new Date(vy,vm+1,1).getTime();
+        const elapsedFrac=isCurrentMonth?Math.max(0.01,(nowObj.getTime()-monthStart)/(monthEnd-monthStart)):1;
+        const projAmount=isCurrentMonth?Math.round(monthTotal/elapsedFrac):monthTotal;
+        const indexRatio=Math.min(projAmount/TARGET,1);
+        const hue=Math.round(indexRatio*120);
+        const clr=exceeded?GOLD:`hsl(${hue},65%,45%)`;
+        const clrLight=exceeded?GOLD_LIGHT:`hsl(${hue},65%,62%)`;
         let deadlineEl=null;
         if(isCurrentMonth&&ratio<1){
           const lastDay=new Date(vy,vm+1,0).getDate();
@@ -1181,11 +1188,29 @@ function CalendarView({me,employees,isAdmin,settings}) {
                         background:`linear-gradient(90deg,${GOLD},${GOLD_LIGHT},${GOLD})`,
                         backgroundSize:'200% 100%',animation:'goldShimmer 2s linear infinite'}}/>
                     : <div style={{position:'absolute',inset:'0 auto 0 0',width:`${Math.round(ratio*100)}%`,
-                        background:clr,borderRadius:'9999px',transition:'width .5s ease'}}/>
+                        background:`linear-gradient(90deg,${clr},${clrLight})`,borderRadius:'9999px',transition:'width .5s ease'}}/>
                   }
                 </div>
               </div>
             </div>
+            {/* مؤشر الشهر */}
+            {isCurrentMonth&&!exceeded&&(
+              <div className="mt-3 rounded-xl px-3 py-2.5"
+                style={{background:clr+'18',border:`1px solid ${clr}33`}}>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-semibold" style={{color:C.txt,opacity:.45}}>مؤشر الشهر</span>
+                  <span className="text-xs font-bold" style={{color:clr}}>
+                    {projAmount>=TARGET*1.1?'مسار ممتاز':
+                     projAmount>=TARGET?'على مسار جيد':
+                     projAmount>=TARGET*.85?'قريب من الهدف':
+                     projAmount>=TARGET*.70?'يحتاج تسريع':'بعيد عن الهدف'}
+                  </span>
+                </div>
+                <div className="text-xs" style={{color:C.txt,opacity:.5,lineHeight:1.6}}>
+                  لو استمر البيع هكذا لنهاية الشهر ممكن نحقق {fmtM(projAmount)} د.ع
+                </div>
+              </div>
+            )}
           </div>
         );
       })()}
