@@ -789,12 +789,15 @@ function CalendarView({me,employees,isAdmin,settings}) {
     if(!isCurrent) return;
     const today=todayStr();
 
-    // Missing past days (already closed, need one-time back-fill)
+    // Past days: re-fetch if missing OR fetched before the day ended (catches late-night sales)
     const daysInM=new Date(y,m+1,0).getDate();
-    const missing=[];
+    const toRefetch=[];
     for(let d=1;d<=daysInM;d++){
       const ds=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-      if(ds<today&&!map[ds]) missing.push(ds);
+      if(ds>=today) continue;
+      const dayEndMs=new Date(`${ds}T23:59:59.999+03:00`).getTime();
+      const fetchedMs=fetchedAtMap[ds]?new Date(fetchedAtMap[ds]).getTime():0;
+      if(fetchedMs<dayEndMs) toRefetch.push(ds);
     }
 
     // Today: fetch if missing or stale (>5 min since last fetch)
@@ -802,12 +805,13 @@ function CalendarView({me,employees,isAdmin,settings}) {
       !fetchedAtMap[today] ||
       Date.now()-new Date(fetchedAtMap[today]).getTime() > 5*60*1000;
 
-    if(!missing.length && !todayStale) return;
+    if(!toRefetch.length && !todayStale) return;
 
     try{
       const {data:{session}}=await sb.auth.getSession();
+      const nowIso=new Date().toISOString();
 
-      if(missing.length){
+      if(toRefetch.length){
         const res=await fetch(`${SUPA_URL}/functions/v1/get-loyverse-sales`,{
           method:'POST',
           headers:{'Content-Type':'application/json','Authorization':`Bearer ${session.access_token}`},
@@ -815,7 +819,8 @@ function CalendarView({me,employees,isAdmin,settings}) {
         });
         const data=await res.json();
         if(data.days){
-          const rows=missing.filter(ds=>data.days[ds]!=null).map(ds=>({date:ds,total_amount:data.days[ds]}));
+          // Store fetched_at=now so next time fetchedMs > dayEndMs → won't re-fetch
+          const rows=toRefetch.filter(ds=>data.days[ds]!=null).map(ds=>({date:ds,total_amount:data.days[ds],fetched_at:nowIso}));
           if(rows.length){
             await sb.from('daily_sales').upsert(rows,{onConflict:'date'});
             setSalesData(prev=>{const n={...prev};for(const r of rows)n[r.date]=r.total_amount;return n;});
