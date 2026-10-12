@@ -788,17 +788,13 @@ function CalendarView({me,employees,isAdmin,settings}) {
     setSalesData(map);
     if(!isCurrent) return;
     const today=todayStr();
-    const yesterday=(()=>{
-      const d=iraqNow(); d.setUTCDate(d.getUTCDate()-1);
-      return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
-    })();
 
     // Missing past days (already closed, need one-time back-fill)
     const daysInM=new Date(y,m+1,0).getDate();
     const missing=[];
     for(let d=1;d<=daysInM;d++){
       const ds=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-      if(ds<today&&ds!==yesterday&&!map[ds]) missing.push(ds);
+      if(ds<today&&!map[ds]) missing.push(ds);
     }
 
     // Today: fetch if missing or stale (>5 min since last fetch)
@@ -806,14 +802,7 @@ function CalendarView({me,employees,isAdmin,settings}) {
       !fetchedAtMap[today] ||
       Date.now()-new Date(fetchedAtMap[today]).getTime() > 5*60*1000;
 
-    // Yesterday: always re-fetch on app open if last fetch was before today (catches late-night sales)
-    const todayMidnightMs=new Date(`${today}T00:00:00.000+03:00`).getTime();
-    const yesterdayStale = yesterday>=from && (
-      !map[yesterday] || !fetchedAtMap[yesterday] ||
-      new Date(fetchedAtMap[yesterday]).getTime()<todayMidnightMs
-    );
-
-    if(!missing.length && !todayStale && !yesterdayStale) return;
+    if(!missing.length && !todayStale) return;
 
     try{
       const {data:{session}}=await sb.auth.getSession();
@@ -849,32 +838,14 @@ function CalendarView({me,employees,isAdmin,settings}) {
           setSalesData(prev=>({...prev,[today]:data.total}));
         }
       }
-      if(yesterdayStale){
-        const res=await fetch(`${SUPA_URL}/functions/v1/get-loyverse-sales`,{
-          method:'POST',
-          headers:{'Content-Type':'application/json','Authorization':`Bearer ${session.access_token}`},
-          body:JSON.stringify({mode:'daily_total',date:yesterday}),
-        });
-        const data=await res.json();
-        if(!data.error && data.total!=null){
-          await sb.from('daily_sales').upsert(
-            {date:yesterday, total_amount:data.total, fetched_at:new Date().toISOString()},
-            {onConflict:'date'}
-          );
-          setSalesData(prev=>({...prev,[yesterday]:data.total}));
-        }
-      }
     }catch(e){}
   };
 
   const loadMonthTotal = async (y,m) => {
     const monthStr=`${y}-${String(m+1).padStart(2,'0')}`;
     const cacheKey=`monthTotal_${monthStr}`;
-    const nowC=iraqNow();
-    const isCurM=y===nowC.getUTCFullYear()&&m===nowC.getUTCMonth();
-    // For current month: skip cache (always fetch fresh to catch late entries)
-    // For past months: show cached value immediately
-    if(!isCurM){ try{ const saved=localStorage.getItem(cacheKey); if(saved!=null) setMonthTotal(Number(saved)); }catch(e){} }
+    // Show last saved value immediately
+    try{ const saved=localStorage.getItem(cacheKey); if(saved!=null) setMonthTotal(Number(saved)); }catch(e){}
     // Fetch fresh in background
     try{
       const {data:{session}}=await sb.auth.getSession();
