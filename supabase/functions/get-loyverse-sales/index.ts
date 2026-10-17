@@ -258,6 +258,7 @@ Deno.serve(async (req) => {
       line_items: LineItem[];
       total_money?: number;
       created_at?: string;
+      payments?: { name: string; money_amount: number }[];
     };
 
     const allReceipts: RawReceipt[] = [];
@@ -290,6 +291,7 @@ Deno.serve(async (req) => {
 
       const itemMap: Record<string, { name: string; qty: number; revenue: number }> = {};
       const catMap2: Record<string, { name: string; qty: number; revenue: number }> = {};
+      const payMap: Record<string, number> = {};
       let totalRevenue = 0;
       let receiptCount = 0;
       const daily: Record<string, number> = {};
@@ -302,6 +304,9 @@ Deno.serve(async (req) => {
             const iraqTs = new Date(new Date(r.created_at).getTime() + 3 * 3600000);
             const ds = iraqTs.toISOString().slice(0, 10);
             daily[ds] = (daily[ds] ?? 0) + (r.total_money ?? 0);
+          }
+          for (const p of r.payments ?? []) {
+            payMap[p.name] = (payMap[p.name] ?? 0) + (p.money_amount ?? 0);
           }
           for (const li of r.line_items ?? []) {
             const id = li.item_id ?? li.item_name;
@@ -323,8 +328,16 @@ Deno.serve(async (req) => {
             const ds = iraqTs.toISOString().slice(0, 10);
             daily[ds] = (daily[ds] ?? 0) - Math.abs(r.total_money ?? 0);
           }
+          for (const p of r.payments ?? []) {
+            payMap[p.name] = (payMap[p.name] ?? 0) - Math.abs(p.money_amount ?? 0);
+          }
         }
       }
+
+      const payment_methods = Object.entries(payMap)
+        .map(([name, total]) => ({ name, total: Math.round(total) }))
+        .filter(p => p.total > 0)
+        .sort((a, b) => b.total - a.total);
 
       for (const d in daily) daily[d] = Math.round(daily[d]);
 
@@ -371,6 +384,7 @@ Deno.serve(async (req) => {
       return json({
         top_items,
         top_categories,
+        payment_methods,
         total_revenue: Math.round(totalRevenue),
         receipt_count: receiptCount,
         avg_order: receiptCount > 0 ? Math.round(totalRevenue / receiptCount) : 0,

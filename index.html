@@ -6016,6 +6016,31 @@ function StatsView() {
       {!loading&&data&&(
         <div className="space-y-6">
 
+          {/* Payment methods */}
+          {(data.payment_methods||[]).length>0&&(
+            <div>
+              <div className="font-black text-sm mb-3" style={{color:C.txt}}>طرق الدفع</div>
+              <div className="rounded-2xl overflow-hidden" style={{border:`1px solid ${C.border}`}}>
+                {(data.payment_methods||[]).map((p,i)=>{
+                  const maxP=data.payment_methods[0].total||1;
+                  const pct=Math.round(p.total/maxP*100);
+                  return (
+                    <div key={p.name} className="px-4 py-3" style={{background:C.card,borderTop:i>0?`1px solid ${C.border}`:'none'}}>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs font-bold" style={{color:C.txt}}>{p.name}</span>
+                        <span className="text-xs font-black" style={{color:C.primary}}>{fmt(p.total)} د.ع</span>
+                      </div>
+                      <div className="h-1.5 rounded-full overflow-hidden" style={{background:C.soft}}>
+                        <div className="h-full rounded-full" style={{width:`${pct}%`,background:C.primary,transition:'width .4s ease'}}/>
+                      </div>
+                      <div className="text-xs mt-1" style={{color:C.txt,opacity:.4}}>{Math.round(p.total/totalRev*100)}% من الإجمالي</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* KPI summary cards */}
           <div className="flex gap-3 overflow-x-auto pb-1" style={{scrollbarWidth:'none'}}>
             {[
