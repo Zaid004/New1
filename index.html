@@ -447,8 +447,12 @@ function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone,allowedNetwo
 
   const handleEmp = async shiftType => {
     setNetErr(''); setBusy(true);
-    const err=await verifyLocation();
-    if(err){setBusy(false);setNetErr(err);return;}
+    if(me.role!=='admin'){
+      const dailyFull=recs.filter(r=>r.employee_id!==me.id).length>=2;
+      if(dailyFull){setBusy(false);setNetErr('وصل الحد اليومي للتسجيل (٢ موظفين)');return;}
+      const err=await verifyLocation();
+      if(err){setBusy(false);setNetErr(err);return;}
+    }
     const {error}=await upsert(me.id,shiftType,false);
     if(error) console.error('upsert error:',error);
     else {
@@ -557,7 +561,7 @@ function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone,allowedNetwo
 
         {isAdmin ? (
           <div className="space-y-3">
-            {employees.filter(e=>e.role!=='admin').map(emp=>{
+            {employees.filter(e=>e.can_attend).map(emp=>{
               const rec=getRec(emp.id);
               const pending=rec?.checkout_status==='pending';
               return (
@@ -722,7 +726,7 @@ function DayModal({dateStr,recs,employees,me,isAdmin,onClose,onDone,allowedNetwo
                 {myRec.note&&<div className="text-xs mt-1.5 pr-4" style={{color:C.txt,opacity:.55}}>{myRec.note}</div>}
               </div>
             )}
-            {employees.filter(e=>e.id!==me.id&&e.role!=='admin').map(emp=>{
+            {employees.filter(e=>e.id!==me.id&&e.can_attend).map(emp=>{
               const rec=getRec(emp.id);
               if(!rec) return null;
               return (
@@ -1513,7 +1517,7 @@ function EmpDashboard({me,employees,settings,onRefresh}) {
 
   const pool   = settings?.monthly_pool_amount||525000;
   const pct    = settings?.monthly_percentage||3.2;
-  const empOnlyIds = new Set(employees.filter(e=>e.role!=='admin').map(e=>e.id));
+  const empOnlyIds = new Set(employees.filter(e=>e.can_attend).map(e=>e.id));
   const myRecs = recs.filter(r=>r.employee_id===me.id);
   const allPts = recs.filter(r=>empOnlyIds.has(r.employee_id)).reduce((s,r)=>s+pts(r),0);
   const myPts  = myRecs.reduce((s,r)=>s+pts(r),0);
@@ -2172,9 +2176,9 @@ function BoxkiMatcher() {
       });
       if(logErr) setLoyErr('خطأ في تسجيل البوكسي: ' + logErr.message);
 
-      // Telegram notification — only for employees, not admins, and if enabled
+      // Telegram notification — for can_attend employees/admins, if enabled
       const [{data: empRow}, {data: ns}] = await Promise.all([
-        sb.from('employees').select('name, role').eq('auth_user_id', session.user.id).maybeSingle(),
+        sb.from('employees').select('name, role, can_attend').eq('auth_user_id', session.user.id).maybeSingle(),
         sb.from('notification_settings').select('boxki_notify_enabled').eq('id',1).maybeSingle(),
       ]);
       // Fetch daily total (all payment methods) and cache in daily_sales
@@ -2192,7 +2196,7 @@ function BoxkiMatcher() {
         }
       } catch(e){}
 
-      if (empRow && empRow.role !== 'admin' && ns?.boxki_notify_enabled !== false) {
+      if (empRow?.can_attend && ns?.boxki_notify_enabled !== false) {
         const empName = empRow.name || 'موظف';
         const fmtAmt = n => n.toLocaleString('ar-IQ');
         const icon = matched ? '✅' : '⚠️';
@@ -2582,6 +2586,8 @@ function AdminDashboard({employees,settings,me,onRefresh}) {
   const [todaySales,setTodaySales]=useState(undefined);
   const [lastWeekSales,setLastWeekSales]=useState(undefined);
   const empOnly = employees.filter(e => e.role !== 'admin');
+  const attendableEmps = employees.filter(e => e.can_attend);
+  const attendableIds = new Set(attendableEmps.map(e => e.id));
 
   useEffect(()=>{
     const n=iraqNow();
@@ -2612,7 +2618,7 @@ function AdminDashboard({employees,settings,me,onRefresh}) {
   },[]);
 
   const pool   = settings?.monthly_pool_amount||525000;
-  const allPts = recs.filter(r=>empOnlyIds.has(r.employee_id)).reduce((s,r)=>s+pts(r),0);
+  const allPts = recs.filter(r=>attendableIds.has(r.employee_id)).reduce((s,r)=>s+pts(r),0);
 
   const exportExcel = () => {
     const wb = XLSX.utils.book_new();
@@ -2731,14 +2737,14 @@ function AdminDashboard({employees,settings,me,onRefresh}) {
       {allPts>0 && (
         <div className="rounded-2xl p-5 shadow-sm" style={{background:C.card}}>
           <div className="text-xs font-semibold mb-3" style={{color:C.txt,opacity:.5}}>النقاط مقارنةً</div>
-          <BarChart data={empOnly.map(emp=>{
+          <BarChart data={attendableEmps.map(emp=>{
             const ep=recs.filter(r=>r.employee_id===emp.id).reduce((s,r)=>s+pts(r),0);
             return {label:emp.name.split(' ')[0], value:ep, color:emp.color_hex};
           })}/>
         </div>
       )}
 
-      {empOnly.map(emp=>{
+      {attendableEmps.map(emp=>{
         const er=recs.filter(r=>r.employee_id===emp.id);
         const ep=er.reduce((s,r)=>s+pts(r),0);
         const ed=er.reduce((s,r)=>s+days(r),0);
@@ -2958,7 +2964,7 @@ function DeliveryStats() {
 // ── PAYSLIPS (ADMIN) ──────────────────────────────────────────────────────────
 function PayslipsView({employees,settings}) {
   const now=iraqNow();
-  const empOnly = employees.filter(e => e.role !== 'admin');
+  const empOnly = employees.filter(e => e.can_attend);
   const empOnlyIds = new Set(empOnly.map(e => e.id));
   const [empId,setEmpId]=useState(()=>empOnly[0]?.id||'');
   const [month,setMonth]=useState(()=>{
@@ -3842,7 +3848,7 @@ function EmployeesView({employees, settings, onRefresh}) {
     {hex:'#8B5E0A',name:'كهرماني',newUntil:'2026-09-07'},
   ];
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({name:'',username:'',password:'',color_hex:'#A8825B',role:'employee',loyverse_pos_name:''});
+  const [form, setForm] = useState({name:'',username:'',password:'',color_hex:'#A8825B',role:'employee',loyverse_pos_name:'',can_attend:false});
   const [resetTarget, setResetTarget] = useState(null);
   const [newPass, setNewPass] = useState('');
   const [editTarget, setEditTarget] = useState(null);
@@ -3883,7 +3889,7 @@ function EmployeesView({employees, settings, onRefresh}) {
     setBusy(false);
     if(res.error){ flash(res.error, false); return; }
     flash('تم إضافة الموظف بنجاح');
-    setForm({name:'',username:'',password:'',color_hex:'#A8825B',role:'employee',loyverse_pos_name:''});
+    setForm({name:'',username:'',password:'',color_hex:'#A8825B',role:'employee',loyverse_pos_name:'',can_attend:false});
     setShowAdd(false);
     onRefresh();
   };
@@ -3910,7 +3916,7 @@ function EmployeesView({employees, settings, onRefresh}) {
 
   const openEdit = emp => {
     setEditTarget(emp);
-    setEditForm({name: emp.name, username: emp.username||'', color_hex: emp.color_hex, role: emp.role, loyverse_pos_name: emp.loyverse_pos_name||'', avatar_id: emp.avatar_id??null});
+    setEditForm({name: emp.name, username: emp.username||'', color_hex: emp.color_hex, role: emp.role, loyverse_pos_name: emp.loyverse_pos_name||'', can_attend: emp.can_attend??false, avatar_id: emp.avatar_id??null});
   };
 
   const saveEdit = async () => {
@@ -3956,9 +3962,9 @@ function EmployeesView({employees, settings, onRefresh}) {
                   </span>
                 )}
               </div>
-              <div className="text-xs" style={{color:C.txt,opacity:.45}}>
-                {emp.username ? `@${emp.username}` : ''} · {emp.role==='admin'?'مدير':'موظف'}
-                {emp.loyverse_pos_name ? ` · POS: ${emp.loyverse_pos_name}` : ''}
+              <div className="text-xs flex items-center flex-wrap gap-1" style={{color:C.txt,opacity:.45}}>
+                <span>{emp.username ? `@${emp.username}` : ''} · {emp.role==='admin'?'مدير':'موظف'}{emp.loyverse_pos_name ? ` · POS: ${emp.loyverse_pos_name}` : ''}</span>
+                {emp.can_attend&&<span className="text-xs font-bold px-1.5 py-0.5 rounded-full" style={{background:'var(--ok-bg)',color:C.ok,opacity:1}}>حضور فعال</span>}
               </div>
             </div>
           </div>
@@ -4048,6 +4054,18 @@ function EmployeesView({employees, settings, onRefresh}) {
                 </button>
               ))}
             </div>
+          </div>
+          <div className="flex items-center justify-between p-3 rounded-xl" style={{background:C.soft}}>
+            <div>
+              <div className="text-sm font-semibold" style={{color:C.txt}}>فعال للحضور</div>
+              <div className="text-xs" style={{color:C.txt,opacity:.5}}>يظهر في سجل الحضور والراتب</div>
+            </div>
+            <button onClick={()=>setForm(p=>({...p,can_attend:!p.can_attend}))}
+              className="w-12 h-6 rounded-full transition-colors relative"
+              style={{background:form.can_attend?C.ok:'#ccc'}}>
+              <div className="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all"
+                style={{left:form.can_attend?'calc(100% - 1.375rem)':'0.125rem'}}/>
+            </button>
           </div>
           <button onClick={addEmployee} disabled={busy}
             className="w-full py-3 rounded-xl font-bold text-white"
@@ -4190,6 +4208,18 @@ function EmployeesView({employees, settings, onRefresh}) {
                   </button>
                 ))}
               </div>
+            </div>
+            <div className="flex items-center justify-between p-3 rounded-xl" style={{background:C.soft}}>
+              <div>
+                <div className="text-sm font-semibold" style={{color:C.txt}}>فعال للحضور</div>
+                <div className="text-xs" style={{color:C.txt,opacity:.5}}>يظهر في سجل الحضور والراتب</div>
+              </div>
+              <button onClick={()=>setEditForm(p=>({...p,can_attend:!p.can_attend}))}
+                className="w-12 h-6 rounded-full transition-colors relative"
+                style={{background:editForm.can_attend?C.ok:'#ccc'}}>
+                <div className="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all"
+                  style={{left:editForm.can_attend?'calc(100% - 1.375rem)':'0.125rem'}}/>
+              </button>
             </div>
             <div className="text-xs px-1" style={{color:C.txt,opacity:.5}}>
               تغيير اسم المستخدم سيستلزم تسجيل الدخول مجدداً باسم المستخدم الجديد.
@@ -6197,7 +6227,7 @@ function App() {
     const WN_KEY='stacks_wn_v3';
     if(!localStorage.getItem(WN_KEY)) setShowWhatsNew(true);
     // Check attendance reminder
-    if(myEmp && myEmp.role!=='admin') {
+    if(myEmp && myEmp.can_attend) {
       const today=todayStr();
       const {data:todayRec}=await sb.from('attendance_records').select('id').eq('employee_id',myEmp.id).eq('date',today).maybeSingle();
       const h=iraqNow().getUTCHours();
