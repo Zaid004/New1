@@ -296,6 +296,7 @@ const PATHS = {
   chart:'M18 20V10M12 20V4M6 20v-6',
   'chevron-up':'M18 15l-6-6-6 6',
   'chevron-down':'M6 9l6 6 6-6',
+  box:'M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16zM3.27 6.96 12 12.01l8.73-5.05M12 22.08V12',
 };
 const Ic = ({n,s=20,c='currentColor'}) => (
   <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -5869,6 +5870,9 @@ function StatsView() {
   const [customFrom,setCustomFrom]=useState('');
   const [customTo,setCustomTo]=useState('');
   const [error,setError]=useState(null);
+  const [invValue,setInvValue]=useState(null);
+  const [invUnits,setInvUnits]=useState(null);
+  const [invLoading,setInvLoading]=useState(false);
 
   const getRange=()=>{
     const n=iraqNow();
@@ -5909,6 +5913,23 @@ function StatsView() {
   };
 
   useEffect(()=>{if(range!=='custom')load();},[range]);
+
+  useEffect(()=>{
+    (async()=>{
+      setInvLoading(true);
+      try{
+        const {data:{session}}=await sb.auth.getSession();
+        const res=await fetch(`${SUPA_URL}/functions/v1/get-loyverse-sales`,{
+          method:'POST',
+          headers:{'Content-Type':'application/json','Authorization':`Bearer ${session.access_token}`},
+          body:JSON.stringify({mode:'inventory_value'}),
+        });
+        const d=await res.json();
+        if(!d.error){setInvValue(d.inventory_value);setInvUnits(d.inventory_units);}
+      }catch(e){}
+      finally{setInvLoading(false);}
+    })();
+  },[]);
 
   const RANGES=[
     {id:'today',label:'اليوم'},
@@ -5998,6 +6019,28 @@ function StatsView() {
   return (
     <div>
       <h2 className="text-lg font-black mb-4" style={{color:C.txt}}>الإحصائيات</h2>
+
+      {/* Inventory value card */}
+      <div className="rounded-2xl p-4 mb-4 flex items-center gap-4" style={{background:C.card,border:`1px solid ${C.border}`}}>
+        <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{background:C.soft}}>
+          <Ic n="box" s={20} c={C.primary}/>
+        </div>
+        <div className="flex-1">
+          <div className="text-xs font-semibold mb-0.5" style={{color:C.txt,opacity:.5}}>قيمة البضاعة المتوفرة</div>
+          {invLoading?(
+            <div className="h-5 w-32 rounded animate-pulse" style={{background:C.soft}}/>
+          ):(
+            <div className="font-black text-base" style={{color:C.primary}}>
+              {invValue!=null?`${fmt(invValue)} د.ع`:'—'}
+            </div>
+          )}
+        </div>
+        {invUnits!=null&&!invLoading&&(
+          <div className="text-xs font-bold px-2.5 py-1 rounded-xl flex-shrink-0" style={{background:C.soft,color:C.txt,opacity:.7}}>
+            {fmt(invUnits)} وحدة
+          </div>
+        )}
+      </div>
 
       {/* Range selector */}
       <div className="flex gap-2 mb-4" style={{overflowX:'auto',scrollbarWidth:'none'}}>

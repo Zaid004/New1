@@ -396,6 +396,65 @@ Deno.serve(async (req) => {
     }
   }
 
+  // ── MODE: inventory value (current stock × selling price) ─────────────────
+  if (mode === 'inventory_value') {
+    try {
+      // 1. Fetch all items (name + variant prices)
+      type Variant = { id: string; default_price: number };
+      type Item = { id: string; item_name: string; variants: Variant[] };
+      const itemPriceMap: Record<string, number> = {};
+      let iCursor: string | null = null;
+      do {
+        const params = new URLSearchParams({ limit: '250' });
+        if (iCursor) params.set('cursor', iCursor);
+        const res = await fetch(`https://api.loyverse.com/v1.0/items?${params}`, {
+          headers: { Authorization: `Bearer ${loyToken}` },
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          return json({ error: (err as { errors?: { message: string }[] })?.errors?.[0]?.message ?? `Loyverse items ${res.status}` }, 502);
+        }
+        const data = await res.json() as { items: Item[]; cursor?: string };
+        for (const item of data.items ?? []) {
+          for (const v of item.variants ?? []) {
+            itemPriceMap[v.id] = v.default_price ?? 0;
+          }
+        }
+        iCursor = data.cursor ?? null;
+      } while (iCursor);
+
+      // 2. Fetch all inventory levels
+      type InvLevel = { variant_id: string; in_stock: number };
+      let totalValue = 0;
+      let totalUnits = 0;
+      let vCursor: string | null = null;
+      do {
+        const params = new URLSearchParams({ limit: '250' });
+        if (vCursor) params.set('cursor', vCursor);
+        const res = await fetch(`https://api.loyverse.com/v1.0/inventory?${params}`, {
+          headers: { Authorization: `Bearer ${loyToken}` },
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          return json({ error: (err as { errors?: { message: string }[] })?.errors?.[0]?.message ?? `Loyverse inventory ${res.status}` }, 502);
+        }
+        const data = await res.json() as { inventory_levels: InvLevel[]; cursor?: string };
+        for (const lv of data.inventory_levels ?? []) {
+          const qty = lv.in_stock ?? 0;
+          if (qty <= 0) continue;
+          const price = itemPriceMap[lv.variant_id] ?? 0;
+          totalValue += qty * price;
+          totalUnits += qty;
+        }
+        vCursor = data.cursor ?? null;
+      } while (vCursor);
+
+      return json({ inventory_value: Math.round(totalValue), inventory_units: totalUnits });
+    } catch (e) {
+      return json({ error: (e as Error).message }, 500);
+    }
+  }
+
   // ── MODE: daily total (single day, all payment methods) ───────────────────
   if (mode === 'daily_total') {
     const { date } = body as { date: string };
