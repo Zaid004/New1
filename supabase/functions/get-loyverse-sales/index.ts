@@ -398,12 +398,17 @@ Deno.serve(async (req) => {
 
   // ── MODE: inventory value (current stock × selling price) ─────────────────
   if (mode === 'inventory_value') {
+    const { debug } = body as { debug?: boolean };
     try {
       // 1. Fetch all items (name + variant prices)
-      type Variant = { id: string; default_price: number };
+      type Variant = { id: string; default_price: number; cost: number; sku?: string };
       type Item = { id: string; item_name: string; variants: Variant[] };
       const itemPriceMap: Record<string, number> = {};
       let iCursor: string | null = null;
+      let totalItems = 0;
+      let totalVariants = 0;
+      let variantsWithPrice = 0;
+      const sampleVariants: { id: string; price: number; name: string }[] = [];
       do {
         const params = new URLSearchParams({ limit: '250' });
         if (iCursor) params.set('cursor', iCursor);
@@ -415,19 +420,28 @@ Deno.serve(async (req) => {
           return json({ error: (err as { errors?: { message: string }[] })?.errors?.[0]?.message ?? `Loyverse items ${res.status}` }, 502);
         }
         const data = await res.json() as { items: Item[]; cursor?: string };
+        totalItems += (data.items ?? []).length;
         for (const item of data.items ?? []) {
           for (const v of item.variants ?? []) {
-            itemPriceMap[v.id] = v.default_price ?? 0;
+            totalVariants++;
+            const price = v.default_price ?? 0;
+            itemPriceMap[v.id] = price;
+            if (price > 0) variantsWithPrice++;
+            if (sampleVariants.length < 5) sampleVariants.push({ id: v.id, price, name: item.item_name });
           }
         }
         iCursor = data.cursor ?? null;
       } while (iCursor);
 
       // 2. Fetch all inventory levels
-      type InvLevel = { variant_id: string; in_stock: number };
+      type InvLevel = { variant_id: string; in_stock: number; store_id: string };
       let totalValue = 0;
       let totalUnits = 0;
       let vCursor: string | null = null;
+      let totalInvLevels = 0;
+      let levelsWithStock = 0;
+      let levelsWithMatchedPrice = 0;
+      const sampleLevels: { variant_id: string; in_stock: number; price: number }[] = [];
       do {
         const params = new URLSearchParams({ limit: '250' });
         if (vCursor) params.set('cursor', vCursor);
@@ -439,15 +453,37 @@ Deno.serve(async (req) => {
           return json({ error: (err as { errors?: { message: string }[] })?.errors?.[0]?.message ?? `Loyverse inventory ${res.status}` }, 502);
         }
         const data = await res.json() as { inventory_levels: InvLevel[]; cursor?: string };
+        totalInvLevels += (data.inventory_levels ?? []).length;
         for (const lv of data.inventory_levels ?? []) {
           const qty = lv.in_stock ?? 0;
-          if (qty <= 0) continue;
-          const price = itemPriceMap[lv.variant_id] ?? 0;
-          totalValue += qty * price;
-          totalUnits += qty;
+          if (qty > 0) {
+            levelsWithStock++;
+            const price = itemPriceMap[lv.variant_id] ?? 0;
+            if (price > 0) levelsWithMatchedPrice++;
+            if (sampleLevels.length < 5) sampleLevels.push({ variant_id: lv.variant_id, in_stock: qty, price });
+            totalValue += qty * price;
+            totalUnits += qty;
+          }
         }
         vCursor = data.cursor ?? null;
       } while (vCursor);
+
+      if (debug) {
+        return json({
+          inventory_value: Math.round(totalValue),
+          inventory_units: totalUnits,
+          debug: {
+            total_items: totalItems,
+            total_variants: totalVariants,
+            variants_with_price: variantsWithPrice,
+            total_inv_levels: totalInvLevels,
+            levels_with_stock: levelsWithStock,
+            levels_with_matched_price: levelsWithMatchedPrice,
+            sample_variants: sampleVariants,
+            sample_levels: sampleLevels,
+          },
+        });
+      }
 
       return json({ inventory_value: Math.round(totalValue), inventory_units: totalUnits });
     } catch (e) {
